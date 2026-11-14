@@ -86,7 +86,7 @@ final class UsageStatisticsSession {
         let count = UsageWordTracker.count(replacement)
         // A boundary chip may replace a predecessor already counted at Space. Do not
         // count that predecessor again. Never subtract more than our own session credit.
-        let alreadyCompleted = boundaryOriginal.map {
+        let alreadyCompleted: UInt64 = boundaryOriginal.map {
             let total = UsageWordTracker.count($0)
             return total > 0 && words.hasWord ? total - 1 : total
         } ?? 0
