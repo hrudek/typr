@@ -500,7 +500,7 @@ final class DictationLogControllerTests: XCTestCase {
             if cancelled { f.controller.cancelCurrentJob() }
             else {
                 await f.asr.fail(); f.controller.finishRecording()
-                try await f.waitUntil("Expected failed ASR") { f.controller.phase == .failed }
+                try await f.waitUntil("Expected failed ASR") { if case .failed = f.controller.phase { true } else { false } }
             }
             XCTAssertTrue(try store.snapshot().days.isEmpty)
             try await f.dispose()
