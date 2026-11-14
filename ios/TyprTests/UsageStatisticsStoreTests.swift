@@ -44,18 +44,42 @@ final class UsageStatisticsStoreTests: XCTestCase {
         XCTAssertTrue(fresh.days.isEmpty)
         XCTAssertEqual(try store.snapshot().generation, fresh.generation)
     }
-    func testOversizedDataAndSymlinksRejectedAndResetCanRepairSize() throws {
-        _ = try store.snapshot()
+    func testOversizedDataRejectedAndResetCanRepairSize() throws {
+        let initial = try store.snapshot()
         try Data(repeating: 0, count: UsageStatisticsStore.maximumBytes + 1).write(to: file)
-        XCTAssertThrowsError(try store.snapshot())
-        _ = try store.reset()
-        let target = root.appendingPathComponent("target")
-        try Data("private".utf8).write(to: target)
+        XCTAssertThrowsError(try store.snapshot()) { XCTAssertEqual($0 as? UsageStatisticsStore.Failure, .corrupt) }
+        let fresh = try store.reset()
+        XCTAssertNotEqual(fresh.generation, initial.generation)
+        XCTAssertEqual(try store.snapshot().generation, fresh.generation)
+        XCTAssertLessThanOrEqual(try Data(contentsOf: file).count, UsageStatisticsStore.maximumBytes)
+    }
+    func testSymlinkRejectedAndResetReplacesLinkWithoutTouchingTarget() throws {
+        _ = try store.snapshot()
+        // Keep the target outside the store directory and use a future-schema payload:
+        // reset must neither follow it to read a header nor overwrite it.
+        let target = root.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: target) }
+        let bytes = Data("{\"schemaVersion\":2}".utf8)
+        try bytes.write(to: target)
         try FileManager.default.removeItem(at: file)
         try FileManager.default.createSymbolicLink(at: file, withDestinationURL: target)
-        XCTAssertThrowsError(try store.snapshot())
-        _ = try store.reset()
-        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "private")
+        XCTAssertThrowsError(try store.snapshot()) { XCTAssertEqual($0 as? UsageStatisticsStore.Failure, .corrupt) }
+        let fresh = try store.reset()
+        XCTAssertEqual(try Data(contentsOf: target), bytes)
+        XCTAssertEqual(try store.snapshot().generation, fresh.generation)
+        let info = try file.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
+        XCTAssertEqual(info.isSymbolicLink, false)
+        XCTAssertEqual(info.isRegularFile, true)
+    }
+    func testDanglingSymlinkRejectedAndResetDoesNotCreateTarget() throws {
+        _ = try store.snapshot()
+        let target = root.appendingPathComponent("missing-target")
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: target)
+        XCTAssertThrowsError(try store.snapshot()) { XCTAssertEqual($0 as? UsageStatisticsStore.Failure, .corrupt) }
+        let fresh = try store.reset()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: target.path))
+        XCTAssertEqual(try store.snapshot().generation, fresh.generation)
     }
     func testFutureSchemaCannotBeOverwrittenEvenByReset() throws {
         _ = try store.snapshot()

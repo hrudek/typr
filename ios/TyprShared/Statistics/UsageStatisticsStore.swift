@@ -47,7 +47,17 @@ final class UsageStatisticsStore {
             // An explicit reset repairs corrupt data, but must not downgrade a future schema.
             let resetData: Data?
             do { resetData = try readData(root) }
-            catch Failure.corrupt { resetData = nil }
+            catch Failure.corrupt {
+                resetData = nil
+                // Foundation's atomic write does not reliably replace a symbolic link.
+                // Remove only the link itself, never its target, while holding the lock.
+                let url = root.appendingPathComponent("statistics-v1.json")
+                var info = stat()
+                guard lstat(url.path, &info) == 0 else { throw Failure.unavailable }
+                if (info.st_mode & S_IFMT) == S_IFLNK {
+                    guard unlink(url.path) == 0 else { throw Failure.unavailable }
+                }
+            }
             if let data = resetData {
                 if let header = try? JSONDecoder().decode(Header.self, from: data), header.schemaVersion > 1 {
                     throw Failure.newerSchema
