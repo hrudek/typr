@@ -101,6 +101,50 @@ final class TapStatisticsTests: XCTestCase {
         XCTAssertEqual(mixed.onTarget, mixed.keys.first { $0.letter == "s" }?.onTarget)
     }
 
+    func testSummarySkipsUnknownAndEmptyKeysButKeepsSparseKeys() {
+        let signature = KeyboardLayoutSignature(KeyboardLayout(width: 392))
+        let entries: [PersonalTypingModel.KeySummary] = [
+            .init(letter: "unknown", n: 64, offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2),
+            .init(letter: "a", n: 0, offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2),
+            .init(letter: "s", n: 19, offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2)
+        ]
+        let model = PersonalTypingModel.LayoutSummary(signature: signature, lastUpdated: Date(), keys: entries)
+        let taps = TapStatistics(signature: signature, model: model, heat: nil)
+        XCTAssertEqual(taps.keys.map(\.letter), ["s"])
+        XCTAssertEqual(taps.effectiveSamples, 19)
+        XCTAssertNil(taps.keys.first?.onTarget)
+        XCTAssertTrue(taps.keys.first?.neighbors.isEmpty == true)
+    }
+
+    func testNeighborsAndCommonDeviationsKeepOrderingAndLimit() throws {
+        let signature = KeyboardLayoutSignature(KeyboardLayout(width: 392))
+        let entries = ["a", "s", "d", "f", "g"].map { letter in
+            PersonalTypingModel.KeySummary(letter: letter, n: 64, offsetX: 0.3, offsetY: 0,
+                                           sigmaX: 0.4, sigmaY: 0.4)
+        }
+        let model = PersonalTypingModel.LayoutSummary(signature: signature, lastUpdated: Date(), keys: entries)
+        let taps = TapStatistics(signature: signature, model: model, heat: nil)
+        var expected: [(from: String, to: String, share: Double)] = []
+        for key in taps.keys {
+            XCTAssertFalse(key.neighbors.contains { $0.letter == key.letter })
+            for (left, right) in zip(key.neighbors, key.neighbors.dropFirst()) {
+                XCTAssertTrue(left.share > right.share || (left.share == right.share && left.letter < right.letter))
+            }
+            let neighbor = try XCTUnwrap(key.neighbors.first)
+            if neighbor.share >= 0.01 {
+                expected.append((from: key.letter, to: neighbor.letter, share: neighbor.share))
+            }
+        }
+        expected.sort { lhs, rhs in
+            if lhs.share == rhs.share { return lhs.from < rhs.from }
+            return lhs.share > rhs.share
+        }
+        XCTAssertEqual(taps.commonDeviations.count, 3)
+        XCTAssertEqual(taps.commonDeviations.map(\.from), expected.prefix(3).map(\.from))
+        XCTAssertEqual(taps.commonDeviations.map(\.to), expected.prefix(3).map(\.to))
+        XCTAssertEqual(taps.commonDeviations.map(\.share), expected.prefix(3).map(\.share))
+    }
+
     @MainActor
     func testPhysicalSummaryDoesNotInvertClampedDecoderSpread() throws {
         let signature = KeyboardLayoutSignature(KeyboardLayout(width: 392))
