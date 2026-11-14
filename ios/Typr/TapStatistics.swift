@@ -25,22 +25,35 @@ nonisolated struct TapStatistics {
         let board = Self.board(signature)
         layout = board
         self.heat = heat.flatMap { $0.isValid && $0.layout == signature ? $0 : nil }
-        keys = (model?.signature == signature ? model?.keys : nil)?.compactMap { summary in
-            guard let key = board.key(.character(summary.letter)), summary.n > 0 else { return nil }
-            let px = Double(key.frame.width + board.metrics.gap)
-            let py = Double(key.frame.height + board.metrics.rowGap)
-            let dx = summary.offsetX * px, dy = summary.offsetY * py
-            let center = CGPoint(x: Double(key.frame.midX) + dx, y: Double(key.frame.midY) + dy)
-            let xx = pow(summary.sigmaX * px, 2), yy = pow(summary.sigmaY * py, 2)
-            let xy = summary.covarianceXY * px * py
-            let shares = Self.landing(center: center, xx: xx, xy: xy, yy: yy, layout: board)
-            return Key(letter: summary.letter, samples: summary.n, center: center, xx: xx, xy: xy, yy: yy,
-                       drift: hypot(dx, dy), onTarget: summary.n >= 20 ? shares[summary.letter, default: 0] : nil,
-                       neighbors: summary.n >= 20 ? shares.filter { $0.key != summary.letter }
-                        .map { (letter: $0.key, share: $0.value) }.sorted {
-                            $0.share == $1.share ? $0.letter < $1.letter : $0.share > $1.share
-                        } : [])
-        } ?? []
+        let summaries: [PersonalTypingModel.KeySummary] = model?.signature == signature ? model?.keys ?? [] : []
+        keys = summaries.compactMap { Self.statistics(for: $0, on: board) }
+    }
+
+    private static func statistics(for summary: PersonalTypingModel.KeySummary, on board: KeyboardLayout) -> Key? {
+        guard let key = board.key(.character(summary.letter)), summary.n > 0 else { return nil }
+        let px = Double(key.frame.width + board.metrics.gap)
+        let py = Double(key.frame.height + board.metrics.rowGap)
+        let dx = summary.offsetX * px, dy = summary.offsetY * py
+        let center = CGPoint(x: Double(key.frame.midX) + dx, y: Double(key.frame.midY) + dy)
+        let xx = pow(summary.sigmaX * px, 2), yy = pow(summary.sigmaY * py, 2)
+        let xy = summary.covarianceXY * px * py
+        let shares = landing(center: center, xx: xx, xy: xy, yy: yy, layout: board)
+        var neighbors: [(letter: String, share: Double)] = []
+        let onTarget: Double?
+        if summary.n >= 20 {
+            onTarget = shares[summary.letter, default: 0]
+            for (letter, share) in shares where letter != summary.letter {
+                neighbors.append((letter: letter, share: share))
+            }
+            neighbors.sort { lhs, rhs in
+                if lhs.share == rhs.share { return lhs.letter < rhs.letter }
+                return lhs.share > rhs.share
+            }
+        } else {
+            onTarget = nil
+        }
+        return Key(letter: summary.letter, samples: summary.n, center: center, xx: xx, xy: xy, yy: yy,
+                   drift: hypot(dx, dy), onTarget: onTarget, neighbors: neighbors)
     }
 
     static func board(_ signature: KeyboardLayoutSignature) -> KeyboardLayout {
@@ -71,11 +84,16 @@ nonisolated struct TapStatistics {
         value.map { String(format: "%.0f%%", $0 * 100) } ?? "—"
     }
     var commonDeviations: [(from: String, to: String, share: Double)] {
-        keys.compactMap { key in
-            key.neighbors.first.map { (from: key.letter, to: $0.letter, share: $0.share) }
-        }.filter { $0.share >= 0.01 }.sorted {
-            $0.share == $1.share ? $0.from < $1.from : $0.share > $1.share
-        }.prefix(3).map { $0 }
+        var deviations: [(from: String, to: String, share: Double)] = []
+        for key in keys {
+            guard let neighbor = key.neighbors.first, neighbor.share >= 0.01 else { continue }
+            deviations.append((from: key.letter, to: neighbor.letter, share: neighbor.share))
+        }
+        deviations.sort { lhs, rhs in
+            if lhs.share == rhs.share { return lhs.from < rhs.from }
+            return lhs.share > rhs.share
+        }
+        return Array(deviations.prefix(3))
     }
 
     // Gaussian lattice integration adapted from iikb Aim.swift (MIT); see notices.
