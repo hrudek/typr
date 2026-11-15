@@ -8,7 +8,9 @@ private final class VocabularySession: CleanupSession {
     var result = "Grüße an Rudek und Mayer"
     private(set) var vocabularies: [[String]] = []
     private(set) var inputs: [String] = []
-    func prewarm() async {}
+    /// Prewarm has returned; the coordinator releases its reservation in the same main-actor job.
+    private(set) var prewarms = 0
+    func prewarm() async { prewarms += 1 }
     func clean(_ text: String, style: DictationStyle) async throws -> String {
         try await clean(text, style: style, vocabulary: [])
     }
@@ -64,10 +66,6 @@ private actor VocabularyASR: LocalTranscribing {
 
 @MainActor
 final class TyprCleanupVocabularyTests: XCTestCase {
-    private func settle() async throws {
-        for _ in 0..<8 { try await Task.sleep(for: .milliseconds(25)) }
-    }
-
     func testPromptListsSpellingsOnlyWhenThereAreTerms() throws {
         let plain = try CleanupPrompt.transcript("Hallo Rudeck", style: .polished)
         XCTAssertFalse(plain.contains("Spellings"))
@@ -149,10 +147,18 @@ final class TyprCleanupVocabularyTests: XCTestCase {
             let asr = VocabularyASR()
             let controller = DictationController(audio: VocabularyAudio(), keyboardBridge: KeyboardBridge(defaults: defaults),
                 transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false, customVocabularySettings: vocabulary, cleanup: deps)
-            controller.prepareModel(); try await settle()
+            controller.prepareModel()
+            try await waitForState("model ready") { controller.phase == .ready }
             controller.startRecording(keyboardJobID: "job", styleOverride: .polished, copyToPasteboard: false)
-            try await settle()
-            controller.finishRecording(); try await settle()
+            try await waitForState("recording") { controller.phase == .recording }
+            if typrOn {
+                // Cleanup is admitted only after the capture's prewarm released its reservation.
+                try await waitForState("cleanup prewarm returned") { session.prewarms == 1 }
+            }
+            controller.finishRecording()
+            try await waitForState("transcript delivered and transcription unwound") {
+                controller.phase == .ready && controller.isIdleForTest
+            }
 
             if typrOn {
                 XCTAssertEqual(session.vocabularies, [["Rudek", "Mayer"]])
@@ -161,7 +167,8 @@ final class TyprCleanupVocabularyTests: XCTestCase {
                 XCTAssertEqual(session.vocabularies, [])
                 XCTAssertEqual(controller.transcript, "Grüße an Rudeck und Meier.")
             }
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            controller.cancelCurrentJob(); clock.fire()
+            try await waitForState("dictation work drained before defaults teardown") { controller.isIdleForTest }
         }
     }
 }
