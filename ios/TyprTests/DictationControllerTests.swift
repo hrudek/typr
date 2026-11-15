@@ -27,6 +27,7 @@ private final class FakeAudioCapture: ActiveAudioCapture {
 @MainActor
 private final class FakeAudioManager: AudioManaging {
     var isKeepaliveRunning = false
+    var isOtherAudioPlaying = false
     var permissionGranted = true
     var keepaliveShouldThrow = false
     /// False models Typr in the background: iOS refuses to start microphone input there,
@@ -61,6 +62,8 @@ private final class FakeAudioManager: AudioManaging {
             throw CocoaError(.coderInvalidValue)
         }
         isKeepaliveRunning = true
+        // Activating input interrupts media, so subsequent queries no longer see it.
+        isOtherAudioPlaying = false
     }
 
     func stopKeepalive() {
@@ -439,6 +442,114 @@ final class DictationControllerTests: XCTestCase {
 
         XCTAssertEqual(audio.startKeepaliveCount, startsWhileForeground, "no input restart in the background")
         XCTAssertEqual(audio.deactivateCount, 0)
+    }
+
+    func testMediaPreventsWarmOnlyActivationButAllowsColdKeyboardDictation() async throws {
+        let now = 9_100.0
+        let audio = FakeAudioManager()
+        audio.isOtherAudioPlaying = true
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        let controller = DictationController(
+            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+            transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+        )
+        controller.prepareModel()
+        try await settle()
+        controller.selectWarmDuration(.fifteenMinutes)
+        try await settle()
+        XCTAssertFalse(controller.keyboardSessionEnabled)
+        XCTAssertFalse(audio.isKeepaliveRunning)
+        XCTAssertEqual(audio.startKeepaliveCount, 0)
+        XCTAssertTrue(audio.isOtherAudioPlaying, "warming must not interrupt media")
+        XCTAssertEqual(bridge.snapshot().state, .offline)
+
+        await transcriber.armSuspension()
+        controller.handleKeyboardLaunch(
+            .startRecording(jobID: "media", requestedAt: now, style: .polished, host: nil)
+        )
+        try await settle()
+        XCTAssertEqual(controller.phase, .recording)
+        XCTAssertFalse(audio.isOtherAudioPlaying, "the activation now interrupted playback")
+        XCTAssertTrue(audio.isKeepaliveRunning)
+        let releasesBeforeFinish = audio.deactivateCount
+        controller.finishRecording()
+        XCTAssertEqual(controller.phase, .transcribing)
+        XCTAssertEqual(audio.deactivateCount, releasesBeforeFinish + 1)
+        XCTAssertFalse(controller.keyboardSessionEnabled)
+        XCTAssertFalse(audio.isKeepaliveRunning)
+        try await settle()
+        XCTAssertEqual(audio.startKeepaliveCount, 1, "warm loop must not restart input during ASR")
+        await transcriber.resumeSuspended(with: "ship the build")
+        try await settle()
+        XCTAssertEqual(controller.phase, .ready)
+        XCTAssertTrue(bridge.snapshot().hasDeliverableResult(at: now + 1))
+        XCTAssertFalse(audio.isKeepaliveRunning)
+
+        // Nothing is playing on the next activation: ordinary warm behavior returns.
+        controller.selectWarmDuration(.fifteenMinutes)
+        try await settle()
+        XCTAssertTrue(controller.keyboardSessionEnabled)
+        XCTAssertTrue(audio.isKeepaliveRunning)
+        controller.endWarmSession()
+    }
+
+    func testMediaCaptureReleasesOnCancelShortCaptureFailureAndUnexpectedEnd() async throws {
+        for outcome in ["cancel", "short", "failure", "unexpected-success", "unexpected-failure"] {
+            let audio = FakeAudioManager()
+            audio.isOtherAudioPlaying = true
+            audio.nextCaptureDuration = outcome == "short" ? 0.1 : 1.4
+            audio.captureShouldThrow = outcome == "failure"
+            let transcriber = ControlledTranscriber()
+            let controller = DictationController(
+                audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
+                transcriberFactory: { transcriber }, autoPrepareOnInit: false
+            )
+            controller.prepareModel()
+            try await settle()
+            controller.setWarmDuration(.fifteenMinutes)
+            controller.startRecording()
+            try await settle()
+            if outcome != "failure" {
+                XCTAssertEqual(controller.phase, .recording, outcome)
+                if outcome == "cancel" {
+                    controller.cancelCurrentJob()
+                } else if outcome.hasPrefix("unexpected") {
+                    let capture = try XCTUnwrap(audio.createdCaptures.last)
+                    capture.isRecording = false
+                    audio.onUnexpectedCaptureEnd?(capture.url, outcome == "unexpected-success")
+                } else {
+                    controller.finishRecording()
+                }
+            }
+            try await settle()
+            XCTAssertFalse(audio.isKeepaliveRunning, outcome)
+            XCTAssertFalse(controller.keyboardSessionEnabled, outcome)
+            XCTAssertGreaterThan(audio.deactivateCount, 0, outcome)
+            XCTAssertEqual(audio.startKeepaliveCount, 1, outcome)
+        }
+    }
+
+    func testMediaStartingDuringWarmSessionLeavesInputColdAfterInterruption() async throws {
+        let audio = FakeAudioManager()
+        let transcriber = ControlledTranscriber()
+        let controller = DictationController(
+            audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
+            transcriberFactory: { transcriber }, autoPrepareOnInit: false
+        )
+        controller.prepareModel()
+        try await settle()
+        controller.selectWarmDuration(.fifteenMinutes)
+        try await settle()
+        XCTAssertTrue(audio.isKeepaliveRunning)
+        audio.isOtherAudioPlaying = true
+        controller.handleAudioSystemEvent(.interruptionBegan)
+        XCTAssertFalse(audio.isKeepaliveRunning)
+        XCTAssertFalse(controller.keyboardSessionEnabled)
+        controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
+        try await settle()
+        XCTAssertEqual(audio.startKeepaliveCount, 1, "do not interrupt media to restore idle input")
+        XCTAssertTrue(audio.isOtherAudioPlaying)
     }
 
     func testRecordedWAVFixtureIsValidSilentTestInput() throws {
