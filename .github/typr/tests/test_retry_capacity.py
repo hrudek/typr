@@ -60,6 +60,17 @@ class CapacityTests(unittest.TestCase):
                 self.assertEqual(api.call_args.args, (REPO, 'actions/jobs/9/rerun'))
                 self.assertEqual(api.call_args.kwargs, {'method': 'POST'})
 
+    def test_test_only_retry_does_not_rerun_skipped_release_jobs(self):
+        skipped = [dict(self.job, id=10, name='Unsigned archive', conclusion='skipped'),
+                   dict(self.job, id=11, name='Sign ()', conclusion='skipped')]
+        with patch.object(capacity, 'api', side_effect=[self.run, self.run, None]) as api, \
+                patch.object(capacity, 'pages', side_effect=[skipped + [self.job], [], [], self.annotations]), \
+                patch.object(capacity, 'current_source', return_value=True), \
+                patch.object(capacity.time, 'sleep'), patch.object(capacity, 'report'):
+            capacity.retry(REPO, '42')
+            self.assertEqual(api.call_args.args, (REPO, 'actions/jobs/9/rerun'))
+            self.assertEqual(api.call_args.kwargs, {'method': 'POST'})
+
     def test_rejects_real_test_failures_without_wait_or_retry(self):
         job = {**self.job, 'runner_id': 1, 'steps': [{'name': 'Tests'}], 'conclusion': 'failure'}
         with patch.object(capacity, 'api', return_value=self.run) as api, \
