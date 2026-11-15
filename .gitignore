@@ -5,3 +5,7 @@ __pycache__/
 *.py[cod]
 /.venv
 .DS_Store
+
+# Agent working files belong outside the repository
+/TASKS.md
+/reports/

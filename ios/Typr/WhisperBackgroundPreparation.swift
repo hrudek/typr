@@ -68,7 +68,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         // Deliberate deviation for this personal app: Apple's guidance is to request continued
         // tasks only after an explicit tap. Typr also requests one when opening the app starts
-        // preparation, so leaving Typr does not pause it. See WhisperBackgroundPreparation.md.
+        // preparation, so leaving Typr does not pause it. Revisit before any App Store submission.
         submitContinued(for: token, attempt: 1)
     }
 

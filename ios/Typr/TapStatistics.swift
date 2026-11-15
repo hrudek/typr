@@ -2,6 +2,9 @@ import Foundation
 import CoreGraphics
 
 /// Presentation math only. No inferred labels, text, or reconstructed individual taps.
+/// The board is rebuilt at the signature's 8-pt width-bucket midpoint (up to 4 pt off the
+/// original), so this describes the saved Gaussian model, not exact historical landings.
+/// Model counts are capped per key; they are not lifetime taps.
 nonisolated struct TapStatistics {
     struct Key: Identifiable {
         let letter: String

@@ -57,7 +57,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           base=${BASE:-$(git rev-parse origin/main)}
-          # The PR's labels now, not the event's: a re-run after adding "infra" must see it.
+          # The PR's labels now, not the event's: a re-run after adding "infra"/"docs" must see it.
           LABELS=''
           if [[ -n "$PR" ]]; then
             LABELS=$(gh api "repos/$GH_REPO/pulls/$PR" --jq '[.labels[].name] | join(",")')

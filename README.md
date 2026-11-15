@@ -37,9 +37,9 @@ maintenance can also prepare it while charging. iOS may decline, pause or stop
 this work; there is no immediate post-update guarantee. Reopen Typr to retry.
 Preparation never starts the microphone or audio keepalive.
 
-See [Whisper background preparation](ios/WhisperBackgroundPreparation.md) for
-progress, cancellation, hardware restrictions and the required iOS 27 Background
-Inference provisioning capability.
+Background Neural Engine access on iOS 27+ requires the Background Inference
+capability (`com.apple.developer.background-tasks.continued-processing.inference`)
+in the app's provisioning profiles; signing fails closed if it is missing.
 
 ## Build and test
 

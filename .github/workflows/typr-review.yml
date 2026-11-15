@@ -108,6 +108,7 @@ jobs:
             - bugs, crashes, races, data loss, wrong behaviour versus the PR description;
             - security or privacy problems (secrets, signing, untrusted input, workflow injection);
             - violations of AGENTS.md's rules (changes under .github/ without the infra label,
+              new Markdown files without the docs label,
               Typr switch rules, committed app identity (identity.py validates dev.rudek.typr
               identifiers), missing simulator tests for new behaviour);
             - conflict markers, broken builds you can see from the code, tests that were weakened.
