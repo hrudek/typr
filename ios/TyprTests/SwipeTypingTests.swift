@@ -12,8 +12,17 @@ final class SwipeTypingTests: XCTestCase {
     private var now: TimeInterval = 100
     private var suiteName: String!
     private var defaults: UserDefaults!
-    private var results: [SwipeSearch.Candidate] = []
-    private var requests = 0
+    /// The scripted recognizer's answers; a main-actor box so the `@Sendable` decoder need not capture the test.
+    @MainActor private final class Script {
+        var results: [SwipeSearch.Candidate] = []
+        var requests = 0
+    }
+    private var script = Script()
+    private var results: [SwipeSearch.Candidate] {
+        get { script.results }
+        set { script.results = newValue }
+    }
+    private var requests: Int { script.requests }
 
     private static let lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon] = {
         var lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
@@ -44,10 +53,11 @@ final class SwipeTypingTests: XCTestCase {
         target.keyboardType = keyboardType
         let ac = AutocorrectEngine(learning: KeyboardLearningSession(defaults: defaults),
                                    spatialDecoder: SpatialWordDecoder(lexicons: Self.lexicons))
-        let scripted: SwipeDecoding = { [weak self] _ in
+        let script = script
+        let scripted: SwipeDecoding = { _ in
             await MainActor.run {
-                self?.requests += 1
-                return self?.results ?? []
+                script.requests += 1
+                return script.results
             }
         }
         engine = FullKeyboardEngine(target: target, autocorrect: ac, swipeDecoder: decoder ?? scripted)
