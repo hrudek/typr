@@ -112,7 +112,7 @@ struct TextProcessingSettingsCard: View {
                 .disabled(!AnthropicKeyStore.canSave(keyDraft))
                 .accessibilityIdentifier("save-anthropic-key")
             }
-            Text("Dictations are sent to Anthropic for cleanup. Requires internet; plain transcript if unavailable.")
+            Text("Dictations, nearby text used as cleanup context and your vocabulary are sent to Anthropic. Requires internet; plain transcript if unavailable.")
                 .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
