@@ -268,10 +268,6 @@ final class KeyboardSuggestionEvaluationTests: XCTestCase {
         let result = try await ranked(request, worker: KeyboardSuggestionWorker())
         guard case .result(let actual)? = result.outcome else { return XCTFail("Expected decode") }
         XCTAssertEqual(actual, synchronous, "Worker and boundary must preserve full covariance scores, alignments and search bounds")
-        XCTAssertEqual(actual.suggestions.map(\.word), synchronous?.suggestions.map(\.word))
-        XCTAssertEqual(actual.complete, synchronous?.complete)
-        XCTAssertEqual(actual.visits, synchronous?.visits)
-        XCTAssertEqual(actual.generated, synchronous?.generated)
         let stringBytes = words.reduce(0) { $0 + $1.utf8.count }
         print("EVAL P1_personal words=2000 wordUTF8Bytes=\(stringBytes) workerMs=\(format(result.seconds * 1000)) equivalent=true")
     }

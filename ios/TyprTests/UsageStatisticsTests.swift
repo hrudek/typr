@@ -80,17 +80,6 @@ final class UsageStatisticsTests: XCTestCase {
         session.direct(" ")
         XCTAssertEqual(try totals().completedWords, 0)
     }
-    func testSpeedUsesSumsAndThresholdsRatherThanMeanOfDays() throws {
-        var first = UsageTotals(); first.directGraphemes = 100; first.timedGraphemes = 100; first.typingSeconds = 60
-        first.dictatedWords = 120; first.recordingSeconds = 60
-        var second = UsageTotals(); second.directGraphemes = 100; second.timedGraphemes = 100; second.typingSeconds = 120
-        second.dictatedWords = 120; second.recordingSeconds = 120
-        first.add(second)
-        XCTAssertEqual(first.typingWPM!, 200 * 12 / 180, accuracy: 0.00001)
-        XCTAssertEqual(first.dictationWPM!, 80)
-        var tooShort = UsageTotals(); tooShort.typingSeconds = 59.99; tooShort.recordingSeconds = 59.99
-        XCTAssertNil(tooShort.typingWPM); XCTAssertNil(tooShort.dictationWPM)
-    }
     func testMidnightIntervalBelongsToEndDayAndFixedTimeZoneSurvivesDST() throws {
         wall = ISO8601DateFormatter().date(from: "2026-03-28T22:59:59Z")!
         session.direct("a")
@@ -164,6 +153,22 @@ final class UsageStatisticsTests: XCTestCase {
         XCTAssertEqual(session.recentLabels.count, 1)
         session.endSession()
         XCTAssertTrue(session.recentLabels.isEmpty)
+    }
+}
+
+/// Pure totals checks need neither a statistics store nor a typing session.
+@MainActor
+final class UsageTotalsTests: XCTestCase {
+    func testSpeedUsesSumsAndThresholdsRatherThanMeanOfDays() throws {
+        var first = UsageTotals(); first.directGraphemes = 100; first.timedGraphemes = 100; first.typingSeconds = 60
+        first.dictatedWords = 120; first.recordingSeconds = 60
+        var second = UsageTotals(); second.directGraphemes = 100; second.timedGraphemes = 100; second.typingSeconds = 120
+        second.dictatedWords = 120; second.recordingSeconds = 120
+        first.add(second)
+        XCTAssertEqual(first.typingWPM!, 200 * 12 / 180, accuracy: 0.00001)
+        XCTAssertEqual(first.dictationWPM!, 80)
+        var tooShort = UsageTotals(); tooShort.typingSeconds = 59.99; tooShort.recordingSeconds = 59.99
+        XCTAssertNil(tooShort.typingWPM); XCTAssertNil(tooShort.dictationWPM)
     }
     func testSaturationDoesNotOverflow() {
         var value = UsageTotals(); value.directGraphemes = UsageTotals.ceiling

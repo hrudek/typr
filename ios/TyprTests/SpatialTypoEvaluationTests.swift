@@ -164,19 +164,23 @@ final class SpatialTypoEvaluationTests: XCTestCase {
             let failed = known.incomplete + unknown.incomplete + known.unavailable + unknown.unavailable
             XCTAssertLessThanOrEqual(Double(failed) / Double(controls.count), 0.05, "control evidence/search availability")
         }
-        // Per-keystroke-like calls on every prefix of the 256 fixed DE/EN words.
-        // Full-word evidence uses the same generator; no edits or private input.
-        for edits in [false, true] {
-            var prefixes = Metrics()
-            for (index, word) in controls.prefix(256).enumerated() {
-                let full = try evidence(word, ordinal: 90_000 + index, seed: seed, sigma: sigma)
-                for length in 3...full.samples.count {
-                    let prefix = KeyboardTouchWord(layout: grid, samples: Array(full.samples.prefix(length)))
-                    observe(prefix, intended: String(word.prefix(length)), decoder: decoder,
-                            edits: edits, metrics: &prefixes)
+        // Keep real noisy-touch decoder prefix sentinels from four fixed control words, with both
+        // edit modes and both seeds/sigmas. Lexical SpatialPrefixSearch is a different path.
+        // These replace the diagnostic-only all-prefix sweep, not a prefix-quality gate.
+        for (index, word) in controls.enumerated().filter({ $0.element.count >= 6 }).prefix(4) {
+            let full = try evidence(word, ordinal: 90_000 + index, seed: seed, sigma: sigma)
+            for length in [3, word.count - 1] {
+                let prefix = KeyboardTouchWord(layout: grid, samples: Array(full.samples.prefix(length)))
+                for edits in [false, true] {
+                    let result = try XCTUnwrap(decoder.decode(prefix, languages: [.german, .english],
+                                                             allowsEdits: edits),
+                                              "\(word), prefix length \(length), edits=\(edits)")
+                    XCTAssertEqual(prefix.text, String(word.prefix(length)))
+                    XCTAssertGreaterThan(result.visits, 0)
+                    XCTAssertLessThanOrEqual(result.visits, Decoder.searchBudget)
+                    XCTAssertLessThanOrEqual(result.generated, Decoder.maxGenerated)
                 }
             }
-            lines.append("TYPR-EVAL prefixes \(edits ? "B" : "A") \(prefixes.row)")
         }
         let table = lines.joined(separator: "\n")
         print(table)

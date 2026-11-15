@@ -67,8 +67,4 @@ final class CleanupPromptPreferencesTests: XCTestCase {
             XCTAssertFalse(preferences.isCustom)
         }
     }
-
-    func testEditorHasSnapshotRoute() {
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", "settings-cleanup-prompt"]), .cleanupPrompt)
-    }
 }

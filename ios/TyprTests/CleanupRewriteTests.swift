@@ -460,8 +460,40 @@ final class CleanupRewriteTests: XCTestCase {
     }
 
     /// Integration with #74: glossary fixes and Custom vocabulary reach the same model call as
-    /// the frozen language/context. Hints, logging, hyphen cleanup and history keep both features.
+    /// the frozen language/context. Keep Automatic admission and context/history without a log
+    /// store too: logging takes different observer and feedback-readiness branches.
     func testGlossaryAndUserSpellingsIntegrateWithLanguageContextAndLog() async throws {
+        // Automatic admission must be explicit and isolated from App Group preferences.
+        do {
+            let suite = "cleanup.glossary.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let settings = TyprSettings(defaults: defaults)
+            settings.dictationLanguage = .automatic
+            let vocabulary = CustomVocabularySettings(defaults: defaults)
+            vocabulary.isEnabled = true
+            vocabulary.terms = ["Rudek"]
+
+            let session = ContextSession(), bg = CleanupTestBackground(), clock = CleanupTestSleeper()
+            session.result = "Erstelle einen Pull Request für Rudek"
+            let deps = TranscriptCleanupDependencies(cleaner: ContextCleaner(session: session), language: CleanupTestLanguage(),
+                background: bg, isEnabled: { true }, sleep: clock.sleep)
+            let asr = ContextASR(output: "Erstelle einen Pulrigquest für Rudek")
+            let controller = DictationController(audio: ContextAudio(), keyboardBridge: KeyboardBridge(defaults: defaults),
+                transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
+                customVocabularySettings: vocabulary, cleanup: deps, dictationLog: nil, languageSettings: settings)
+            XCTAssertEqual(controller.dictationLanguage, .automatic)
+            controller.prepareModel(); try await settle()
+            controller.startRecording(keyboardJobID: "job", styleOverride: .polished, copyToPasteboard: false)
+            try await settle()
+            controller.finishRecording(); try await settle()
+
+            XCTAssertEqual(session.inputs, ["Erstelle einen Pull Request für Rudek"])
+            XCTAssertEqual(session.vocabularies, [["Rudek", "Pull Request"]])
+            XCTAssertEqual(controller.transcript, "Erstelle einen Pull Request für Rudek.")
+            controller.cancelCurrentJob(); clock.fire(); try await settle()
+        }
+
         for customEnabled in [false, true] {
             let env = LogTestEnvironment()
             try await LogTestEnvironment.waitUntilLoaded(env.store)
@@ -527,42 +559,42 @@ final class CleanupRewriteTests: XCTestCase {
             controller.cancelCurrentJob(); clock.fire(); try await settle()
             await env.dispose()
         }
-    }
 
-    /// The keyboard's text before the cursor reaches the model; the next in-app dictation falls back
-    /// to the previous result. The chosen language reaches the model too.
-    func testControllerPassesKeyboardContextThenPreviousDictationAndLanguage() async throws {
-        let suite = "cleanup.context.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = TyprSettings(defaults: defaults)
-        settings.dictationLanguage = .german
-        let session = ContextSession(), bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-        let deps = TranscriptCleanupDependencies(cleaner: ContextCleaner(session: session), language: CleanupTestLanguage(allowed: false),
-            background: bg, isEnabled: { true }, sleep: clock.sleep)
-        let asr = ContextASR()
-        let bridge = KeyboardBridge(defaults: defaults)
-        let controller = DictationController(audio: ContextAudio(), keyboardBridge: bridge,
-            transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
-            customVocabularySettings: CustomVocabularySettings(defaults: defaults), cleanup: deps,
-            languageSettings: settings)
-        XCTAssertEqual(controller.dictationLanguage, .german)
-        controller.prepareModel(); try await settle()
+        // No log observer: keyboard context reaches the model and the next in-app
+        // dictation falls back to history. Explicit German bypasses a rejecting detector.
+        do {
+            let suite = "cleanup.context.\(UUID().uuidString)"
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let settings = TyprSettings(defaults: defaults)
+            settings.dictationLanguage = .german
+            let session = ContextSession(), bg = CleanupTestBackground(), clock = CleanupTestSleeper()
+            let deps = TranscriptCleanupDependencies(cleaner: ContextCleaner(session: session), language: CleanupTestLanguage(allowed: false),
+                background: bg, isEnabled: { true }, sleep: clock.sleep)
+            let asr = ContextASR()
+            let bridge = KeyboardBridge(defaults: defaults)
+            let controller = DictationController(audio: ContextAudio(), keyboardBridge: bridge,
+                transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
+                customVocabularySettings: CustomVocabularySettings(defaults: defaults), cleanup: deps,
+                dictationLog: nil, languageSettings: settings)
+            XCTAssertEqual(controller.dictationLanguage, .german)
+            controller.prepareModel(); try await settle()
 
-        bridge.send(.start, jobID: "job", style: .polished, context: "Wir reden über den Branch und Git")
-        controller.processPendingKeyboardCommandForTesting(); try await settle()
-        controller.finishRecording(); try await settle()
-        XCTAssertEqual(session.contexts.first?.source, .keyboard)
-        XCTAssertEqual(session.contexts.first?.preceding, "Wir reden über den Branch und Git")
-        XCTAssertEqual(session.contexts.first?.language, .german)
-        XCTAssertEqual(controller.transcript, "Erstelle einen Pull Request für den Feature Flag.")
-        clock.fire(); try await settle()
+            bridge.send(.start, jobID: "job", style: .polished, context: "Wir reden über den Branch und Git")
+            controller.processPendingKeyboardCommandForTesting(); try await settle()
+            controller.finishRecording(); try await settle()
+            XCTAssertEqual(session.contexts.first?.source, .keyboard)
+            XCTAssertEqual(session.contexts.first?.preceding, "Wir reden über den Branch und Git")
+            XCTAssertEqual(session.contexts.first?.language, .german)
+            XCTAssertEqual(controller.transcript, "Erstelle einen Pull Request für den Feature Flag.")
+            clock.fire(); try await settle()
 
-        controller.startRecording(styleOverride: .polished); try await settle()
-        controller.finishRecording(); try await settle()
-        XCTAssertEqual(session.contexts.count, 2)
-        XCTAssertEqual(session.contexts.last?.source, .previousDictations)
-        XCTAssertEqual(session.contexts.last?.preceding, "Erstelle einen Pull Request für den Feature Flag.")
-        controller.cancelCurrentJob(); clock.fire(); try await settle()
+            controller.startRecording(styleOverride: .polished); try await settle()
+            controller.finishRecording(); try await settle()
+            XCTAssertEqual(session.contexts.count, 2)
+            XCTAssertEqual(session.contexts.last?.source, .previousDictations)
+            XCTAssertEqual(session.contexts.last?.preceding, "Erstelle einen Pull Request für den Feature Flag.")
+            controller.cancelCurrentJob(); clock.fire(); try await settle()
+        }
     }
 }

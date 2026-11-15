@@ -90,14 +90,28 @@ final class UsageStatisticsStoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: file), bytes)
     }
     func testInvalidDecodedCountsAndDatesRejected() throws {
-        let initial = try store.snapshot()
-        let data = try JSONEncoder().encode(initial)
-        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        var invalid = UsageTotals(); invalid.directGraphemes = 1; invalid.timedGraphemes = 2
-        let day = UsageDay(id: "2026-99-99", totals: invalid)
-        json["days"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode([day]))
-        try JSONSerialization.data(withJSONObject: json).write(to: file)
-        XCTAssertThrowsError(try store.snapshot())
+        var baseline = try store.snapshot()
+        var validCounts = UsageTotals(); validCounts.directGraphemes = 1; validCounts.timedGraphemes = 1
+        let validID = baseline.dayID(clock)
+        baseline.days = [.init(id: validID, totals: validCounts)]
+        XCTAssertTrue(baseline.isValid)
+        let data = try JSONEncoder().encode(baseline)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        try data.write(to: file)
+        XCTAssertEqual(try store.snapshot().days, baseline.days)
+        var invalidCounts = validCounts; invalidCounts.timedGraphemes = 2
+        let cases: [(String, UsageDay)] = [
+            ("date only", .init(id: "2026-99-99", totals: validCounts)),
+            ("counts only", .init(id: validID, totals: invalidCounts)),
+        ]
+        for (reason, day) in cases {
+            var invalidJSON = json // Each defect starts from the same unmodified valid object.
+            invalidJSON["days"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode([day]))
+            try JSONSerialization.data(withJSONObject: invalidJSON).write(to: file)
+            XCTAssertThrowsError(try store.snapshot(), reason) {
+                XCTAssertEqual($0 as? UsageStatisticsStore.Failure, .corrupt, reason)
+            }
+        }
     }
     func testSequentialKeyboardSessionsKeepCollectingBeyondWriterCapacity() throws {
         let layout = KeyboardLayout(width: 393)

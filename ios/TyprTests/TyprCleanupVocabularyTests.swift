@@ -164,35 +164,4 @@ final class TyprCleanupVocabularyTests: XCTestCase {
             controller.cancelCurrentJob(); clock.fire(); try await settle()
         }
     }
-
-    /// The built-in tech glossary fixes the recognized text before cleanup, and cleanup gets the
-    /// user's terms followed by the glossary terms found in this dictation.
-    func testGlossaryFixesReachCleanupWithTheirTerms() async throws {
-        let suite = "cleanup.glossary.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let vocabulary = CustomVocabularySettings(defaults: defaults)
-        vocabulary.isEnabled = true
-        vocabulary.terms = ["Rudek"]
-
-        let session = VocabularySession()
-        session.result = "Erstelle einen Pull Request für Rudek"
-        let bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-        let deps = TranscriptCleanupDependencies(cleaner: VocabularyCleaner(session: session), language: CleanupTestLanguage(),
-            background: bg, isEnabled: { true }, sleep: clock.sleep)
-        let asr = VocabularyASR(output: "Erstelle einen Pulrigquest für Rudek")
-        let controller = DictationController(audio: VocabularyAudio(), keyboardBridge: KeyboardBridge(defaults: defaults),
-            transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
-            customVocabularySettings: vocabulary,
-            cleanup: deps)
-        controller.prepareModel(); try await settle()
-        controller.startRecording(keyboardJobID: "job", styleOverride: .polished, copyToPasteboard: false)
-        try await settle()
-        controller.finishRecording(); try await settle()
-
-        XCTAssertEqual(session.inputs, ["Erstelle einen Pull Request für Rudek"])
-        XCTAssertEqual(session.vocabularies, [["Rudek", "Pull Request"]])
-        XCTAssertEqual(controller.transcript, "Erstelle einen Pull Request für Rudek.")
-        controller.cancelCurrentJob(); clock.fire(); try await settle()
-    }
 }

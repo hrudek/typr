@@ -332,12 +332,10 @@ final class KeyboardKeyMapTests: XCTestCase {
         ]
         for (name, languages, words) in modes {
             var taps = 0, staticErrors = 0, adaptiveErrors = 0, wrong = 0, changed = 0
-            var static1 = 0, static3 = 0, adaptive1 = 0, adaptive3 = 0
             var times: [Double] = []
             for (ordinal, intended) in words.enumerated() {
                 let (engine, target, _) = keyboard(sources, languages: languages)
                 let letters = Array(intended)
-                var staticSamples: [KeyboardTouchWord.Sample] = []
                 for (i, letter) in letters.enumerated() {
                     let k = key(letter)
                     let candidate = gap(letter)
@@ -348,7 +346,6 @@ final class KeyboardKeyMapTests: XCTestCase {
                     let p = noisy ? candidate : center(k)
                     let geometric = grid.hitTest(p)!
                     let hitText = geometric.character!
-                    staticSamples.append(.init(text: hitText, point: p, key: geometric))
                     let start = ProcessInfo.processInfo.systemUptime
                     tap(p, engine)
                     times.append((ProcessInfo.processInfo.systemUptime - start) * 1_000)
@@ -358,26 +355,13 @@ final class KeyboardKeyMapTests: XCTestCase {
                     if actual != letter { adaptiveErrors += 1 }
                     if actual != hitText.first! { changed += 1; if actual != letter { wrong += 1 } }
                 }
-                let baseline = KeyboardTouchWord(layout: grid, samples: staticSamples)
-                let adaptive = try XCTUnwrap(engine.autocorrect.touchInput.evidence(beforeInput: target.text))
-                let decoder = engine.autocorrect.spatialDecoder!
-                let frozen = engine.autocorrect.learning.calibration(for: grid)
-                func candidates(_ word: KeyboardTouchWord) -> [String] {
-                    let result = decoder.decodeDetailed(word, languages: languages, calibration: frozen)
-                    guard case .result(let found) = result else { return [word.text] }
-                    let main: [String] = found.candidates.map(\.word)
-                    let edits: [String] = found.editSuggestions.map(\.word)
-                    return Array((main + [word.text] + edits).prefix(3))
-                }
-                let before = candidates(baseline), after = candidates(adaptive)
-                if before.first == intended { static1 += 1 }; if before.contains(intended) { static3 += 1 }
-                if after.first == intended { adaptive1 += 1 }; if after.contains(intended) { adaptive3 += 1 }
+                _ = try XCTUnwrap(engine.autocorrect.touchInput.evidence(beforeInput: target.text))
             }
             XCTAssertLessThan(adaptiveErrors, staticErrors)
             XCTAssertEqual(wrong, 0, "fixed synthetic noisy-tap fixtures, not all intended novel spellings")
             times.sort()
             let p95 = times[Int(Double(times.count - 1) * 0.95)]
-            print("EVAL P8_hits_\(name) words=\(words.count) taps=\(taps) static_errors=\(staticErrors) adaptive_errors=\(adaptiveErrors) reattributed=\(changed) wrong=\(wrong) static_recall1=\(static1)/\(words.count) static_recall3=\(static3)/\(words.count) adaptive_recall1=\(adaptive1)/\(words.count) adaptive_recall3=\(adaptive3)/\(words.count) insertion_p95_ms=\(p95) insertion_max_ms=\(times.last!)")
+            print("EVAL P8_hits_\(name) words=\(words.count) taps=\(taps) static_errors=\(staticErrors) adaptive_errors=\(adaptiveErrors) reattributed=\(changed) wrong=\(wrong) insertion_p95_ms=\(p95) insertion_max_ms=\(times.last!)")
         }
     }
 
@@ -498,23 +482,8 @@ final class KeyboardKeyMapTests: XCTestCase {
         }
         let (trained, _, _) = keyboard(sources)
         let frozen = try XCTUnwrap(trained.autocorrect.learning.calibration(for: grid))
-        let policies: [(String, KeyboardKeyMap.Policy)] = [
-            ("P8", .init(boundaryFraction: 0.10, novelFloor: 0.50, minimumPrefix: 2,
-                         densityMargin: log(2), posteriorMargin: log(4), requiresConsistency: false)),
-            ("prefix4", .init(boundaryFraction: 0.10, novelFloor: 0.50, minimumPrefix: 4,
-                              densityMargin: log(2), posteriorMargin: log(4), requiresConsistency: false)),
-            ("conservative", .conservative),
-            ("R2_short", .init(boundaryFraction: 0.015, novelFloor: 0.90, minimumPrefix: 2,
-                               densityMargin: log(4), posteriorMargin: log(16), requiresConsistency: true)),
-            ("R2_edges", .init(boundaryFraction: 0.10, novelFloor: 0.90, minimumPrefix: 4,
-                               densityMargin: log(4), posteriorMargin: log(16), requiresConsistency: true,
-                               includesKeyEdges: true)),
-            ("R2_wider", .init(boundaryFraction: 0.10, novelFloor: 0.90, minimumPrefix: 2,
-                               densityMargin: log(4), posteriorMargin: log(16), requiresConsistency: true,
-                               includesKeyEdges: true)),
-            ("narrow", .init(boundaryFraction: 0.005, novelFloor: 0.95, minimumPrefix: 4,
-                             densityMargin: log(8), posteriorMargin: log(32), requiresConsistency: true))
-        ]
+        // Evaluate the shipped policy across the full matrix, not historical diagnostics.
+        let policies: [(String, KeyboardKeyMap.Policy)] = [("conservative", .conservative)]
         struct Counts {
             var words = 0, taps = 0, correctTaps = 0, harmTaps = 0, harmWords = 0
             var staticErrors = 0, adaptiveErrors = 0, fixed = 0
@@ -620,7 +589,7 @@ final class KeyboardKeyMapTests: XCTestCase {
                         print("EVAL P8b_profile mode=\(mode) noise=\(profileName) oov_words=\(novel.words) correct_taps=\(novel.correctTaps) harm_taps=\(novel.harmTaps) harm_words=\(novel.harmWords) known_static_errors=\(vocabulary.staticErrors) known_adaptive_errors=\(vocabulary.adaptiveErrors) known_fixed=\(vocabulary.fixed)")
                     }
                 }
-                if policyName == "conservative" || policyName.hasPrefix("R2_") {
+                if policyName == "conservative" {
                     print("EVAL R2_7_compounds policy=\(policyName) mode=\(mode) runs=\(compounds.words) correct_taps=\(compounds.correctTaps) harm_taps=\(compounds.harmTaps) harm_words=\(compounds.harmWords)")
                 }
                 let tapRate = Double(allOOV.harmTaps) / Double(allOOV.correctTaps)
@@ -682,29 +651,28 @@ final class KeyboardKeyMapTests: XCTestCase {
             ("DE", [.german]), ("EN", [.english]), ("mixed", [.german, .english])
         ]
         for (mode, languages) in modes {
-            var harms = [0, 0]
+            var harms = 0
             var runs = 0
             for word in controls {
                 for gapIndex in word.indices {
                     runs += 1
-                    for variant in 0..<2 {
-                        let (engine, target, _) = keyboard(sources, languages: languages)
-                        if variant == 1 { engine.autocorrect.loadProtectedLexicon(imported) }
-                        target.insertText("das ist ")
-                        engine.refreshSuggestions()
-                        for index in word.indices {
-                            let k = key(word[index])
-                            let point = index == gapIndex
-                                ? CGPoint(x: k.hitFrame.minX + 0.1, y: k.frame.midY) : center(k)
-                            XCTAssertEqual(grid.hitTest(point)?.character, String(word[index]))
-                            tap(point, engine)
-                        }
-                        if target.text != "das ist " + word { harms[variant] += 1 }
+                    let (engine, target, _) = keyboard(sources, languages: languages)
+                    engine.autocorrect.loadProtectedLexicon(imported)
+                    target.insertText("das ist ")
+                    engine.refreshSuggestions()
+                    for index in word.indices {
+                        let k = key(word[index])
+                        let point = index == gapIndex
+                            ? CGPoint(x: k.hitFrame.minX + 0.1, y: k.frame.midY) : center(k)
+                        XCTAssertEqual(grid.hitTest(point)?.character, String(word[index]))
+                        tap(point, engine)
                     }
+                    XCTAssertEqual(target.text, "das ist " + word, "\(mode), gap at \(gapIndex)")
+                    if target.text != "das ist " + word { harms += 1 }
                 }
             }
-            XCTAssertEqual(harms[1], 0)
-            print("EVAL R2_1_attribution mode=\(mode) controls=\(controls.count) gap_runs=\(runs) before_false=\(harms[0]) after_false=\(harms[1]) profile=one_geometrically_correct_gap_per_position NOT-iPhone")
+            XCTAssertEqual(harms, 0)
+            print("EVAL R2_1_attribution mode=\(mode) controls=\(controls.count) gap_runs=\(runs) protected_false=\(harms) profile=one_geometrically_correct_gap_per_position NOT-iPhone")
         }
     }
 
@@ -834,8 +802,8 @@ final class KeyboardKeyMapTests: XCTestCase {
     func testAttributedFeedbackCurveRemainsNoUpdateAfterFailedWideningGate() throws {
         let sources = try resources()
         var curve: [Int] = []
-        for index in 0..<16 {
-            // Fresh sessions use independent calibration, never attributed pseudo-labels.
+        for undo in [true, false] {
+            // One fresh session per path; no cumulative learning between trials.
             let (engine, target, _) = keyboard(sources)
             let session = engine.autocorrect.learning
             let trustedLabels = session.diagnostics.acceptedLabels
@@ -843,7 +811,7 @@ final class KeyboardKeyMapTests: XCTestCase {
             type("wher", engine)
             tap(gap("e"), engine)
             XCTAssertEqual(target.text, "where")
-            if index % 2 == 0 {
+            if undo {
                 engine.deleteBackward()
                 tap(gap("e"), engine)
                 XCTAssertEqual(target.text, "wherr", "backspace/retype must stay geometric")
@@ -854,23 +822,24 @@ final class KeyboardKeyMapTests: XCTestCase {
             curve.append(session.diagnostics.acceptedLabels - trustedLabels)
             XCTAssertNil(session.model.lexicon.counts["where"])
         }
-        XCTAssertEqual(curve, [Int](repeating: 0, count: 16))
-        print("EVAL R2_7_feedback trials=16 not_undone=8 backspace_undo=8 attributed_label_curve=\(curve) attributed_word_counts=0 soft_labels_shipped=0")
+        XCTAssertEqual(curve, [0, 0])
+        print("EVAL R2_7_feedback trials=2 not_undone=1 backspace_undo=1 attributed_label_curve=\(curve) attributed_word_counts=0 soft_labels_shipped=0")
     }
 
     func testMapWorkPayloadAndLatencyEvaluation() throws {
         let sources = try resources()
         let start = ProcessInfo.processInfo.systemUptime
         var bytes = 0
-        for i in 0..<500 {
-            let m = try map(sources, prefix: i % 2 == 0 ? "wher" : "hall", languages: [.german, .english])
+        let prefixes = ["wher", "hall"]
+        for prefix in prefixes {
+            let m = try map(sources, prefix: prefix, languages: [.german, .english])
             bytes = max(bytes, m.payloadBytes)
             XCTAssertLessThanOrEqual(m.entries.count, 26)
             for k in grid.keys {
                 XCTAssertEqual(m.attributedKey(at: center(k), geometric: k, layout: grid, prefix: m.prefix), k)
             }
         }
-        let ms = (ProcessInfo.processInfo.systemUptime - start) * 1_000 / 500
+        let ms = (ProcessInfo.processInfo.systemUptime - start) * 1_000 / Double(prefixes.count)
         let resourceBytes = sources.values.reduce(0) { $0 + $1.continuationPayloadBytes }
         XCTAssertLessThanOrEqual(bytes, 16 * 1_024)
         XCTAssertLessThanOrEqual(MemoryLayout<KeyboardKeyMap.Policy>.stride, 64)

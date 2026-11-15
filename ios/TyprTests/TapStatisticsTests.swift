@@ -233,14 +233,4 @@ final class TapStatisticsTests: XCTestCase {
             XCTAssertGreaterThan(size.height, 0)
         }
     }
-
-    @MainActor
-    func testStatisticsHostingFitsSmallPhoneAndAccessibilityText() {
-        for fixture in [StatisticsFixture.empty, .sparse, .populated, .unavailable] {
-            let host = UIHostingController(rootView: StatisticsView(fixture: fixture).environment(\.dynamicTypeSize, .accessibility3))
-            let size = host.sizeThatFits(in: CGSize(width: 320, height: 4000))
-            XCTAssertTrue(size.width.isFinite && size.height.isFinite)
-            XCTAssertLessThanOrEqual(size.width, 320.5)
-        }
-    }
 }

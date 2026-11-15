@@ -40,7 +40,7 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
                                       showsGlobe: false, showsStrip: true)
 
     func testRepeatedExplicitAcceptanceStrengthensCompletionBoundedly() throws {
-        let (session, _) = session()
+        let (session, defaults) = session()
         let checker = Checker(valid: ["he"], completions: ["he": ["help", "hello"]])
         let ac = AutocorrectEngine(checker: checker, learning: session, spatialDecoder: nil)
         let before = alternatives(ac, "he")
@@ -51,9 +51,34 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
         XCTAssertEqual(after.first, "hello")
         XCTAssertEqual(session.model.lexicon.counts["hello"], 8)
         XCTAssertEqual(session.diagnostics.acceptedLabels, 0)
-        for _ in 0..<10_010 { ac.recordSuggestionFeedback(pick, literal: "he", evidence: nil) }
-        XCTAssertEqual(session.model.lexicon.counts["hello"], 10_000)
-        XCTAssertEqual(session.model.lexicon.bonus(for: "hello"), 1)
+        // The eight real acceptances above test integration; seed only the long saturation tail.
+        var boundary = session.model.state
+        boundary.counts["hello"] = .init(count: 9_999, lastUpdated: Date(timeIntervalSince1970: 1))
+        let validated = try XCTUnwrap(boundary.validated())
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = KeyboardLearningStore(directory: directory, defaults: defaults)
+        var diagnostics = session.diagnostics
+        XCTAssertTrue(store.save(model: validated, diagnostics: &diagnostics))
+        let capped = KeyboardLearningSession(store: store, defaults: defaults)
+        XCTAssertEqual(capped.model.state, validated, "The boundary fixture must load, not fall back to empty state")
+        capped.stopPersistence() // Boundary feedback needs no delayed writes after the fixture load.
+        XCTAssertEqual(capped.model.lexicon.counts["hello"], 9_999)
+        let cappedEngine = AutocorrectEngine(checker: checker, learning: capped, spatialDecoder: nil)
+        var previousUpdate = try XCTUnwrap(capped.model.state.counts["hello"]).lastUpdated
+        for _ in 0..<2 {
+            let eventStart = Date()
+            cappedEngine.recordSuggestionFeedback(pick, literal: "he", evidence: nil)
+            let value = try XCTUnwrap(capped.model.state.counts["hello"])
+            XCTAssertEqual(value.count, 10_000)
+            XCTAssertGreaterThanOrEqual(value.lastUpdated, eventStart, "Each acceptance refreshes recency, including at the cap")
+            XCTAssertGreaterThanOrEqual(value.lastUpdated, previousUpdate)
+            XCTAssertEqual(capped.model.lexicon.counts["hello"], 10_000)
+            XCTAssertEqual(capped.model.lexicon.bonus(for: "hello"), 1)
+            XCTAssertEqual(capped.diagnostics.acceptedLabels, 0)
+            XCTAssertNotNil(capped.model.state.validated())
+            previousUpdate = value.lastUpdated
+        }
         print("EVAL R2_3_acceptance accepts=8 rank_before=2 rank_after=1 touch_labels=0 count_cap=10000 bonus_cap=1.0 automatic_output_training=0")
     }
 
@@ -157,14 +182,15 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
         var state: UInt64 = 0x5459_5052_5f50_3262
         func next() -> UInt64 { state = state &* 6364136223846793005 &+ 1442695040888963407; return state >> 33 }
         let letters = Array("aeinrstuäöß")
-        while counts.count + kept.count < 2_000 {
+        while Set(counts.keys).union(kept).count < 2_000 {
             let length = 3 + Int(next() % 6)
             let word = String((0..<length).map { _ in letters[Int(next() % UInt64(letters.count))] })
             if next() % 9 == 0 { kept.insert(word) } else { counts[word] = 2 + Int(next() % 12) }
         }
         let snapshot = PersonalLexiconSnapshot(kept: kept, counts: counts, rejected: [])
         let index = snapshot.scan.completions
-        XCTAssertEqual(index.entries.count, Set(counts.keys).union(kept).count)
+        XCTAssertEqual(Set(counts.keys).union(kept).count, 2_000, "Overlapping keeps/counts must not shrink the full-cap fixture")
+        XCTAssertEqual(index.entries.count, 2_000)
         XCTAssertLessThanOrEqual(index.entries.count, PersonalCompletionIndex.capacity)
         var prefixes = 0, nonEmpty = 0
         for a in letters { for b in letters {
@@ -447,60 +473,55 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
             n += 1
         }
         let counts = Dictionary(uniqueKeysWithValues: words.enumerated().map { ($0.element, 2 + $0.offset % 50) })
-        var builds: [Double] = []
-        var snapshot = PersonalLexiconSnapshot.empty
-        for _ in 0..<5 {
-            let start = ContinuousClock.now
-            snapshot = PersonalLexiconSnapshot(kept: [], counts: counts, rejected: [])
-            builds.append(milliseconds(start.duration(to: .now)))
-        }
+        let snapshotStart = ContinuousClock.now
+        let snapshot = PersonalLexiconSnapshot(kept: [], counts: counts, rejected: [])
+        let builds = [milliseconds(snapshotStart.duration(to: .now))]
         let index = snapshot.scan.completions
         XCTAssertEqual(index.entries.count, 2_000)
-        var indexBuilds: [Double] = []
         let sortedWords = snapshot.scan.entries.map(\.word)
-        for _ in 0..<5 {
-            let start = ContinuousClock.now
-            _ = PersonalCompletionIndex(sortedWords: sortedWords, kept: [], counts: counts)
-            indexBuilds.append(milliseconds(start.duration(to: .now)))
-        }
+        let indexStart = ContinuousClock.now
+        let rebuiltIndex = PersonalCompletionIndex(sortedWords: sortedWords, kept: [], counts: counts)
+        let indexBuilds = [milliseconds(indexStart.duration(to: .now))]
+        XCTAssertEqual(rebuiltIndex.entries.map(\.word), index.entries.map(\.word))
+        XCTAssertEqual(rebuiltIndex.entries.map(\.count), index.entries.map(\.count))
+        XCTAssertEqual(rebuiltIndex.payloadBytes, index.payloadBytes)
         let prefixes = ["ta", "st", "he", "mü", "taa", "stb", "hec", "müd", "tab", "zz", "Ta", "MÜ"]
         var lookups: [Double] = []
-        for _ in 0..<50 {
-            for prefix in prefixes {
-                let start = ContinuousClock.now
-                let result = index.completions(for: prefix)
-                lookups.append(milliseconds(start.duration(to: .now)))
-                XCTAssertLessThanOrEqual(result.count, PersonalCompletionIndex.resultLimit)
-            }
+        for prefix in prefixes {
+            let start = ContinuousClock.now
+            let result = index.completions(for: prefix)
+            lookups.append(milliseconds(start.duration(to: .now)))
+            XCTAssertLessThanOrEqual(result.count, PersonalCompletionIndex.resultLimit)
         }
         // End-to-end strip assembly with the same full snapshot in a real session.
         let (learning, defaults) = session()
         seed(learning, counts: counts.mapValues { min($0, 3) }) // Bounded seeding work; same 2,000 words.
         XCTAssertEqual(learning.model.lexicon.scan.completions.entries.count, 2_000)
+        XCTAssertNotNil(learning.model.state.validated())
         let systemList = (0..<40).map { "ta" + String(repeating: "x", count: $0 % 6) + "\($0)" }
         let ac = AutocorrectEngine(checker: Checker(completions: ["ta": systemList, "st": systemList]),
                                    learning: learning, spatialDecoder: nil)
         ac.german = GermanAutocorrect(checker: Checker())
         func measure() -> [Double] {
             var times: [Double] = []
-            for _ in 0..<30 {
-                for prefix in prefixes {
-                    let start = ContinuousClock.now
-                    _ = strip(ac, prefix)
-                    times.append(milliseconds(start.duration(to: .now)))
-                }
+            for prefix in prefixes {
+                let start = ContinuousClock.now
+                _ = strip(ac, prefix)
+                times.append(milliseconds(start.duration(to: .now)))
             }
             return times
         }
-        _ = measure() // Warm the snapshot cache once, as the worker's preparation would.
+        let coldTimes = measure() // First pass warms the snapshot cache, as worker preparation would.
         let onTimes = measure()
         defaults.set(false, forKey: "keyboard.personalLearning")
         learning.refresh()
         let offTimes = measure()
         // Lookup result caps above and index bytes below are deterministic regression gates.
         // Wall-clock measurements remain in EVAL output, never a shared-runner pass/fail ratio.
-        XCTAssertEqual(lookups.count, 50 * prefixes.count)
-        XCTAssertEqual(onTimes.count, 30 * prefixes.count)
+        XCTAssertEqual(prefixes.count, 12)
+        XCTAssertEqual(lookups.count, prefixes.count)
+        XCTAssertEqual(coldTimes.count, prefixes.count)
+        XCTAssertEqual(onTimes.count, prefixes.count)
         XCTAssertEqual(offTimes.count, onTimes.count)
         XCTAssertLessThan(index.payloadBytes, 192 * 1024)
         func mean(_ v: [Double]) -> Double { v.reduce(0, +) / Double(max(1, v.count)) }

@@ -87,40 +87,6 @@ final class WhisperTranscriberTests: XCTestCase {
 
     // MARK: - Decoding plan (de / en / automatic)
 
-    func testEveryLanguageTranscribesAndNeverTranslates() {
-        for language in DictationLanguage.allCases {
-            let plan = WhisperDecodingPlan(language: language)
-            XCTAssertFalse(plan.translates, "\(language)")
-            XCTAssertTrue(plan.usePrefillPrompt, "\(language)")
-            XCTAssertTrue(plan.skipSpecialTokens, "\(language)")
-            XCTAssertTrue(plan.withoutTimestamps, "\(language)")
-            XCTAssertFalse(plan.wordTimestamps, "\(language)")
-            XCTAssertTrue(plan.chunksByVoiceActivity, "\(language)")
-            XCTAssertFalse(plan.usesPromptTokens, "vocabulary is never a Whisper prompt (\(language))")
-        }
-    }
-
-    func testExplicitLanguagesAreForcedAndAutomaticDetects() {
-        let german = WhisperDecodingPlan(language: .german)
-        XCTAssertEqual(german.languageCode, "de")
-        XCTAssertFalse(german.detectLanguage)
-
-        let english = WhisperDecodingPlan(language: .english)
-        XCTAssertEqual(english.languageCode, "en")
-        XCTAssertFalse(english.detectLanguage)
-
-        // WhisperKit's default detectLanguage (!usePrefillPrompt == false) would silently force English.
-        let automatic = WhisperDecodingPlan(language: .automatic)
-        XCTAssertNil(automatic.languageCode)
-        XCTAssertTrue(automatic.detectLanguage)
-
-        XCTAssertNil(DictationLanguage.automatic.whisperLanguageCode)
-        XCTAssertEqual(DictationLanguage.german.whisperLanguageCode, "de")
-        XCTAssertEqual(DictationLanguage.english.whisperLanguageCode, "en")
-        XCTAssertNotEqual(german, english)
-        XCTAssertEqual(german, WhisperDecodingPlan(language: .german))
-    }
-
     func testWhisperKitOptionsMatchThePlanForEveryLanguage() {
         for language in DictationLanguage.allCases {
             let options = WhisperDecodingPlan(language: language).decodingOptions
@@ -128,7 +94,17 @@ final class WhisperTranscriberTests: XCTestCase {
             case .transcribe: break
             case .translate: XCTFail("Whisper must never translate (\(language))")
             }
-            XCTAssertEqual(options.language, language.whisperLanguageCode)
+            // Independent expectations: comparing only to the production getter could hide a
+            // wrong code in both the getter and the options. Automatic must really detect;
+            // WhisperKit's default with a prefill prompt would silently force English.
+            let expectedCode: String?
+            switch language {
+            case .automatic: expectedCode = nil
+            case .german: expectedCode = "de"
+            case .english: expectedCode = "en"
+            }
+            XCTAssertEqual(language.whisperLanguageCode, expectedCode)
+            XCTAssertEqual(options.language, expectedCode)
             XCTAssertEqual(options.detectLanguage, language == .automatic)
             XCTAssertTrue(options.usePrefillPrompt)
             XCTAssertTrue(options.skipSpecialTokens)
