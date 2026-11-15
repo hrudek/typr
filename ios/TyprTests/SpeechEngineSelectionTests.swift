@@ -1586,6 +1586,63 @@ extension SpeechEngineSelectionTests {
         XCTAssertFalse(f.audio.isKeepaliveRunning)
     }
 
+    func testResourceFailureCanRetryInForegroundWithoutRelaunchOrEngineChange() async throws {
+        let background = FakeWhisperBackground()
+        let failed = EngineASR(.whisperLargeV3Turbo)
+        await failed.setPrepareFailure(WhisperTranscriber.TranscriberError.preparationFailed("Resources unavailable"))
+        let provider = FakeEngineProvider()
+        provider.queued[.whisperLargeV3Turbo] = [failed]
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        f.controller.prepareInstalledWhisperIfNeeded()
+        try await f.waitUntil { f.controller.phase.isFailure }
+        let staleExpiration = try XCTUnwrap(background.expirations.first)
+        XCTAssertEqual(background.finishes.last, false)
+        XCTAssertTrue(provider.isInstalled(.whisperLargeV3Turbo))
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { f.controller.phase == .ready }
+        staleExpiration()
+        XCTAssertEqual(f.controller.phase, .ready)
+        XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo)
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+        XCTAssertEqual(provider.explicitCalls, [.whisperLargeV3Turbo, .whisperLargeV3Turbo])
+        XCTAssertTrue(provider.automaticCalls.isEmpty)
+        XCTAssertEqual(background.finishes.filter { $0 }.count, 1)
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+        XCTAssertTrue(f.audio.captures.isEmpty)
+    }
+
+    func testContinuedTaskCountsCompletedMilestonesRatherThanStayingIndeterminate() {
+        let progress = Progress(totalUnitCount: -1)
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: nil)
+        XCTAssertEqual(progress.totalUnitCount, 5)
+        XCTAssertEqual(progress.completedUnitCount, 0)
+        for component in WhisperPreparationComponent.allCases {
+            let update = component.progress(optimizing: true)
+            XCTAssertNil(update.fractionCompleted, "the app must not invent a measured percent")
+            WhisperBackgroundPreparation.updateTaskProgress(progress, from: update)
+            XCTAssertEqual(progress.completedUnitCount, update.stageProgress?.completed)
+        }
+        for completed: Int64 in [3, 4] {
+            WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+                fractionCompleted: nil, detail: "Next real stage", stageProgress: (completed, 5)))
+            XCTAssertEqual(progress.completedUnitCount, completed)
+        }
+        // Late/indeterminate updates cannot regress the system's progress. Only finish(success:)
+        // is allowed to mark the task complete, never a queued readiness callback.
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.melSpectrogram.progress(optimizing: true))
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+            fractionCompleted: nil, detail: "No measured progress"))
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+            fractionCompleted: 1, detail: "Ready", stageProgress: (5, 5)))
+        XCTAssertEqual(progress.completedUnitCount, 4)
+        XCTAssertFalse(progress.isFinished)
+        // Attaching a delayed continued task uses the latest completed milestone.
+        let attached = Progress(totalUnitCount: 0)
+        WhisperBackgroundPreparation.updateTaskProgress(attached, from: ModelPreparationProgress(
+            fractionCompleted: nil, detail: "Loading", stageProgress: (3, 5)))
+        XCTAssertEqual(attached.completedUnitCount, 3)
+    }
+
     func testSwitchingAwayInvalidatesWhisperExpirationAndMaintenance() async throws {
         let background = FakeWhisperBackground()
         let whisper = EngineASR(.whisperLargeV3Turbo)

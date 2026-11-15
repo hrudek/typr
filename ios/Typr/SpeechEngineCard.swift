@@ -1,15 +1,20 @@
 import SwiftUI
 
-/// Unknown Core ML progress must animate without implying a measured percentage.
+/// Unknown Core ML progress animates only while visible, without implying a percentage.
 struct ModelPreparationIndicator: View {
+    @Environment(\.scenePhase) private var scenePhase
     let progress: ModelPreparationProgress
 
     var body: some View {
         Group {
             if let fraction = progress.fractionCompleted {
                 ProgressView(value: fraction)
-            } else {
+            } else if scenePhase == .active {
                 ProgressView()
+            } else {
+                // A continued processing assertion keeps the process alive, not permission
+                // to render Metal frames. Remove the spinner while inactive/backgrounded.
+                Image(systemName: "hourglass")
             }
         }
         .accessibilityLabel(progress.detail)
@@ -261,9 +266,9 @@ struct SpeechEngineCard: View {
             if let progress = state.progress {
                 ProgressView(value: progress).tint(TyprTheme.textBase)
             } else if state.isIndeterminate {
-                ProgressView()
+                ModelPreparationIndicator(progress: ModelPreparationProgress(
+                    fractionCompleted: nil, detail: state.status))
                     .tint(TyprTheme.textBase)
-                    .accessibilityLabel(state.status)
             }
             if let warning = state.warning {
                 Text(warning)

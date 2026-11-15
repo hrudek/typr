@@ -5,6 +5,8 @@ struct ModelPreparationProgress: Sendable {
     /// Nil when the underlying operation cannot report measured progress.
     let fractionCompleted: Double?
     let detail: String
+    /// Discrete completed work, not a measured fraction of elapsed time or Core ML work.
+    var stageProgress: (completed: Int64, total: Int64)? = nil
 }
 
 protocol LocalTranscribing: Actor {

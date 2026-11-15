@@ -489,6 +489,10 @@ final class WhisperTranscriberTests: XCTestCase {
             XCTAssertTrue(loading.detail.hasPrefix("Loading Whisper "))
             XCTAssertTrue(optimizing.detail.hasSuffix("Step \(index + 1) of 3"))
             XCTAssertFalse(optimizing.detail.contains("%"))
+            XCTAssertEqual(optimizing.stageProgress?.completed, Int64(index))
+            XCTAssertEqual(loading.stageProgress?.completed, Int64(index))
+            XCTAssertEqual(optimizing.stageProgress?.total, 5)
+            XCTAssertEqual(loading.stageProgress?.total, 5)
         }
         XCTAssertEqual(components.map(\.computeUnits),
                        [WhisperModelSpec.melComputeUnits, WhisperModelSpec.textDecoderComputeUnits,

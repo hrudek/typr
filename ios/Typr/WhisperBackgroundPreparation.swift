@@ -1,4 +1,5 @@
 import BackgroundTasks
+import OSLog
 import UIKit
 
 /// Only the app's existing preparation uses this runtime; it never owns or creates a model.
@@ -16,6 +17,8 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     static let maintenanceIdentifier = "dev.rudek.typr.whisper-maintenance"
     static let continuedPrefix = "dev.rudek.typr.whisper-prepare"
 
+    private static let logger = Logger(subsystem: "dev.rudek.typr", category: "WhisperPreparation")
+    private var latestProgress: ModelPreparationProgress?
     private var registered = false
     private var maintenanceRegistered = false
     private var operation: UUID?
@@ -64,8 +67,11 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
                     Task { @MainActor in self?.expire(token) }
                 }
                 if let task = task as? BGContinuedProcessingTask {
-                    // Core ML exposes stages, not a measured fraction or time estimate.
-                    task.progress.totalUnitCount = -1
+                    Self.updateTaskProgress(task.progress, from: self.latestProgress)
+                    if let progress = self.latestProgress {
+                        task.updateTitle("Prepare Whisper", subtitle: progress.detail)
+                    }
+                    Self.logger.notice("Continued preparation task started")
                 }
                 self.endGrace()
             }
@@ -75,34 +81,46 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
             identifier: identifier, title: "Prepare Whisper", subtitle: "Preparing the installed model"
         )
         request.strategy = .fail // Never queue a second, stale preparation.
-        request.requiredResources = [] // CPU; no GPU entitlement or GPU-capable compute units.
+        // Default is zero, not "all supported resources". ANE access uses the separate
+        // Background Inference entitlement; the only additional resource bit is GPU.
+        request.requiredResources = []
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {
             // Foreground work still runs; UIKit grace is all that is available in background.
+            let error = error as NSError
+            Self.logger.error("Continued preparation submission failed: domain=\(error.domain, privacy: .public) code=\(error.code)")
         }
     }
 
+    /// Report only finished milestones, never synthetic timer-based progress. Core ML's
+    /// duration remains unknown; the system's units count stages rather than time/percent.
+    static func updateTaskProgress(_ progress: Progress, from update: ModelPreparationProgress?) {
+        let total = WhisperPreparationComponent.totalPreparationStages
+        progress.totalUnitCount = total
+        guard let stage = update?.stageProgress, stage.total == total else { return }
+        // Success is committed only by finish(), not a possibly queued "ready" callback.
+        progress.completedUnitCount = max(progress.completedUnitCount, min(max(0, stage.completed), total - 1))
+    }
+
     func update(_ progress: ModelPreparationProgress) {
+        latestProgress = progress
         if #available(iOS 26.0, *), let task = continued as? BGContinuedProcessingTask {
             task.updateTitle("Prepare Whisper", subtitle: progress.detail)
-            if progress.fractionCompleted == 1 {
-                task.progress.totalUnitCount = 1
-                task.progress.completedUnitCount = 1
-            }
+            Self.updateTaskProgress(task.progress, from: progress)
         }
     }
 
     func finish(success: Bool) {
         operation = nil
         expiration = nil
+        latestProgress = nil
         let tasks = [continued, maintenance].compactMap { $0 }
         continued = nil
         maintenance = nil
         for task in tasks {
             if #available(iOS 26.0, *), success, let task = task as? BGContinuedProcessingTask {
-                task.progress.totalUnitCount = 1
-                task.progress.completedUnitCount = 1
+                task.progress.completedUnitCount = task.progress.totalUnitCount
             }
             task.expirationHandler = nil
             task.setTaskCompleted(success: success)
@@ -157,6 +175,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
 
     private func expire(_ token: UUID) {
         guard operation == token else { return }
+        Self.logger.notice("Preparation runtime expired; cancelling current generation")
         let cancel = expiration
         finish(success: false)
         cancel?()
