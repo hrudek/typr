@@ -240,17 +240,20 @@ private final class TapCaptureAdapter: ActiveAudioCapture {
     private let writer: TapFileWriter
     private let router: TapRouter
     private let onFinish: @MainActor (URL, Bool) -> Void
+    private let onStop: @MainActor () -> Void
     private var stopped = false
 
     init(
         url: URL,
         writer: TapFileWriter,
         router: TapRouter,
+        onStop: @escaping @MainActor () -> Void,
         onFinish: @escaping @MainActor (URL, Bool) -> Void
     ) {
         self.url = url
         self.writer = writer
         self.router = router
+        self.onStop = onStop
         self.onFinish = onFinish
     }
 
@@ -275,12 +278,14 @@ private final class TapCaptureAdapter: ActiveAudioCapture {
         stopped = true
         router.detach(writer)
         writer.close()
+        onStop()
     }
 
     func writerEnded(succeeded: Bool) {
         guard !stopped else { return }
         stopped = true
         router.detach(writer)
+        onStop()
         onFinish(url, succeeded)
     }
 }
@@ -288,6 +293,7 @@ private final class TapCaptureAdapter: ActiveAudioCapture {
 @MainActor
 final class SystemAudioManager: AudioManaging {
     private var inputGraph = TyprAudioInput()
+    private let audioSession = DictationAudioSession()
     private var keepaliveAllowsBluetooth: Bool?
     private let tapRouter = TapRouter()
     nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
@@ -319,7 +325,7 @@ final class SystemAudioManager: AudioManaging {
 
     func startKeepalive(allowBluetooth: Bool) throws {
         stopKeepalive()
-        try configureAudioSession(allowBluetooth: allowBluetooth)
+        try audioSession.activate(allowBluetooth: allowBluetooth)
 
         try inputGraph.start(bufferHandler: Self.tapBlock(routingTo: tapRouter))
         keepaliveAllowsBluetooth = allowBluetooth
@@ -327,6 +333,9 @@ final class SystemAudioManager: AudioManaging {
 
     func ensureKeepalive(allowBluetooth: Bool) throws {
         if inputGraph.isRunning, keepaliveAllowsBluetooth == allowBluetooth {
+            // Also retry a failed return to mixing, without restarting the input.
+            // A category refusal must not tear down an otherwise healthy warm input.
+            try? audioSession.refresh(allowBluetooth: allowBluetooth)
             return
         }
         try startKeepalive(allowBluetooth: allowBluetooth)
@@ -339,10 +348,7 @@ final class SystemAudioManager: AudioManaging {
 
     func deactivateSession() {
         stopKeepalive()
-        try? AVAudioSession.sharedInstance().setActive(
-            false,
-            options: .notifyOthersOnDeactivation
-        )
+        audioSession.deactivate()
     }
 
     func beginCapture(
@@ -356,7 +362,12 @@ final class SystemAudioManager: AudioManaging {
         try ensureKeepalive(allowBluetooth: allowBluetooth)
 
         let writer = try TapFileWriter(url: url, maxDuration: maxDuration)
-        let capture = TapCaptureAdapter(url: url, writer: writer, router: tapRouter) { [weak self] finishedURL, ok in
+        try audioSession.beginCapture(allowBluetooth: allowBluetooth)
+        let capture = TapCaptureAdapter(url: url, writer: writer, router: tapRouter, onStop: { [weak self] in
+            // Stop writing before releasing the interruption, including cancellation and
+            // automatic writer completion. Keep the input alive for the next dictation.
+            try? self?.audioSession.endCapture(allowBluetooth: allowBluetooth)
+        }) { [weak self] finishedURL, ok in
             self?.onUnexpectedCaptureEnd?(finishedURL, ok)
         }
         writer.onEnd = { [weak capture] succeeded in
@@ -366,14 +377,6 @@ final class SystemAudioManager: AudioManaging {
         }
         tapRouter.attach(writer)
         return capture
-    }
-
-    private func configureAudioSession(allowBluetooth: Bool) throws {
-        let session = AVAudioSession.sharedInstance()
-        let options: AVAudioSession.CategoryOptions = allowBluetooth ? [.allowBluetoothHFP] : []
-        try session.setCategory(.record, mode: .measurement, options: options)
-        try session.setPreferredSampleRate(16_000)
-        try session.setActive(true)
     }
 
     /// Built outside the main actor so the tap thread never runs a main-actor closure.
