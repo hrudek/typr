@@ -214,6 +214,28 @@ final class DotScopeTests: XCTestCase {
         XCTAssertGreaterThan(host.debugElapsedTime, tBefore + 0.14)
     }
 
+    /// Device logs showed ~60 rejected GPU command buffers per second from a backgrounded app
+    /// ("Insufficient Permission to submit GPU work from background"). The scope must stop.
+    func testHostViewPausesDisplayLinkWhileSceneIsBackgrounded() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 200))
+        let host = DotScopeHostView(tuning: .hud)
+        host.frame = CGRect(x: 0, y: 0, width: 200, height: 120)
+        window.addSubview(host)
+        window.isHidden = false
+        host.phase = .processing
+        XCTAssertFalse(host.debugIsPaused, "an active processing scope animates")
+
+        host.setSceneBackgrounded(true)
+        XCTAssertTrue(host.debugIsPaused)
+        host.phase = .failed
+        host.phase = .recording
+        XCTAssertTrue(host.debugIsPaused, "phase changes in the background do not restart frames")
+
+        host.setSceneBackgrounded(false)
+        XCTAssertFalse(host.debugIsPaused)
+        window.isHidden = true
+    }
+
     func testHomeSwipeCueKeepsGlidingWhileCoolingOutInsteadOfFreezingMidFade() {
         let cue = DotSwipeCueHostView(frame: CGRect(x: 0, y: 0, width: 402, height: 21))
         cue.isActive = true

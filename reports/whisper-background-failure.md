@@ -89,3 +89,31 @@ succeeded, including archive, signing and upload. This proves upload acceptance,
 not Apple processing or tester installation. No fixed build installed or exercised
 on iPhone. Need a signed release retest and, if failure persists, a scoped capture
 during a fresh attempt including the new technical preparation/scheduler diagnostics.
+
+## Real-device retest of build 293.1 (2026-11-15)
+
+Scoped, read-only Tailscale log collection; raw logs stay off Git. Sanitized findings:
+
+1. **Stall expiration.** The continued task started, reported stage 1 of 5 and then
+   no progress change while one Core ML specialization ran. About 46 seconds after the
+   last update, the scheduler logged that the task "has not reported progress within
+   expected cadence" and marked it stalled. Typr logged the runtime expiration and
+   cancelled the generation. This was not a Typr crash, jetsam, or Core ML error.
+   The Dynamic Island showed the failure.
+2. **Silent rejection on return.** Tapping the Island reopened Typr. It resubmitted
+   ~20 ms after becoming active; the scheduler rejected the request because the app
+   was not yet in its foreground list. No error reached Typr, so nothing was logged.
+   Preparation then finished in the foreground. The ANE compile cache made it fast.
+3. **Background GPU work.** Builds 291.1 and 293.1 both logged rejected GPU command
+   buffers ("Insufficient Permission … from background") at ~60 Hz while backgrounded.
+   The #162 spinner change did not stop it; the Metal dot scope had no scene gating.
+4. The maintenance request was cancelled and resubmitted twice on return, pushing its
+   earliest begin date out each time.
+
+Owner decision: allow a liveness heartbeat, which supersedes "no timer heartbeat"
+above. Fixes: the heartbeat advances sub-units inside the running stage every 5 s,
+never reaching the next milestone or completion. Typr confirms the continued task
+started and retries submission up to 3 times while active, and re-requests the task on
+activation during a running preparation. The dot scope pauses and encodes no frames
+while its scene is backgrounded. Maintenance submission is idempotent. All of this is
+unverified on device until a signed build is retested.

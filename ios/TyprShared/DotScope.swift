@@ -1186,6 +1186,20 @@ final class DotScopeHostView: UIView {
     private var visibilityObservations: [NSKeyValueObservation] = []
     private var visibilityRefreshScheduled = false
 
+    /// iOS rejects GPU command buffers from a backgrounded app ("Insufficient Permission to
+    /// submit GPU work from background"). While the hosting scene is in the background the
+    /// display link stays paused and no frame is encoded; the last frame is kept on screen.
+    private(set) var isSceneBackgrounded = false
+
+    func setSceneBackgrounded(_ backgrounded: Bool) {
+        guard backgrounded != isSceneBackgrounded else { return }
+        isSceneBackgrounded = backgrounded
+        updateAnimatingState()
+        if !backgrounded, displayLink?.isPaused != false {
+            renderCurrentFrame()
+        }
+    }
+
     var phase: DotScopePhase = .hidden {
         didSet {
             guard phase != oldValue else { return }
@@ -1252,6 +1266,28 @@ final class DotScopeHostView: UIView {
         proxy.tickHandler = { [weak self] link in
             self?.stepAndRender(timestamp: link.timestamp, targetTimestamp: link.targetTimestamp)
         }
+        observeSceneActivation()
+    }
+
+    /// Selector-based observers are removed automatically when the view is deallocated.
+    private func observeSceneActivation() {
+        let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(sceneDidEnterBackground(_:)),
+                           name: UIScene.didEnterBackgroundNotification, object: nil)
+        center.addObserver(self, selector: #selector(sceneWillEnterForeground(_:)),
+                           name: UIScene.willEnterForegroundNotification, object: nil)
+        center.addObserver(self, selector: #selector(sceneWillEnterForeground(_:)),
+                           name: UIScene.didActivateNotification, object: nil)
+    }
+
+    @objc private func sceneDidEnterBackground(_ note: Notification) {
+        guard let scene = note.object as? UIScene, scene === window?.windowScene else { return }
+        setSceneBackgrounded(true)
+    }
+
+    @objc private func sceneWillEnterForeground(_ note: Notification) {
+        guard let scene = note.object as? UIScene, scene === window?.windowScene else { return }
+        setSceneBackgrounded(false)
     }
 
     /// Releases the display link and shrinks Metal drawables so keyboard extensions reclaim IOSurfaces.
@@ -1340,6 +1376,7 @@ final class DotScopeHostView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window != nil {
+            isSceneBackgrounded = window?.windowScene?.activationState == .background
             observeVisibility()
             ensureDisplayLink()
             updateAnimatingState()
@@ -1449,7 +1486,7 @@ final class DotScopeHostView: UIView {
     }
 
     private func updateAnimatingState() {
-        let visible = isEffectivelyVisible
+        let visible = isEffectivelyVisible && !isSceneBackgrounded
         let wantsFrames: Bool
         if !visible {
             wantsFrames = false
@@ -1516,7 +1553,7 @@ final class DotScopeHostView: UIView {
     }
 
     private func renderCurrentFrame(withTransaction: Bool = false) {
-        guard bounds.width > 1, bounds.height > 1,
+        guard !isSceneBackgrounded, bounds.width > 1, bounds.height > 1,
               let gpu = DotScopeMetalPipeline.shared,
               let dotBuffer else {
             return

@@ -1470,8 +1470,10 @@ private final class FakeWhisperBackground: WhisperPreparationScheduling {
     var finishes: [Bool] = []
     var updates: [ModelPreparationProgress] = []
     var maintenance: [Bool] = []
+    var activations = 0
     func begin(expiration: @escaping @MainActor () -> Void) { expirations.append(expiration) }
     func update(_ progress: ModelPreparationProgress) { updates.append(progress) }
+    func sceneDidBecomeActive() { activations += 1 }
     func finish(success: Bool) { finishes.append(success) }
     func scheduleMaintenance(needed: Bool) { maintenance.append(needed) }
 }
@@ -1636,20 +1638,21 @@ extension SpeechEngineSelectionTests {
     }
 
     func testContinuedTaskCountsCompletedMilestonesRatherThanStayingIndeterminate() {
+        let unit = WhisperBackgroundPreparation.unitsPerStage
         let progress = Progress(totalUnitCount: -1)
         WhisperBackgroundPreparation.updateTaskProgress(progress, from: nil)
-        XCTAssertEqual(progress.totalUnitCount, 5)
+        XCTAssertEqual(progress.totalUnitCount, 5 * unit)
         XCTAssertEqual(progress.completedUnitCount, 0)
         for component in WhisperPreparationComponent.allCases {
             let update = component.progress(optimizing: true)
             XCTAssertNil(update.fractionCompleted, "the app must not invent a measured percent")
             WhisperBackgroundPreparation.updateTaskProgress(progress, from: update)
-            XCTAssertEqual(progress.completedUnitCount, update.stageProgress?.completed)
+            XCTAssertEqual(progress.completedUnitCount, (update.stageProgress?.completed ?? -1) * unit)
         }
         for completed: Int64 in [3, 4] {
             WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
                 fractionCompleted: nil, detail: "Next real stage", stageProgress: (completed, 5)))
-            XCTAssertEqual(progress.completedUnitCount, completed)
+            XCTAssertEqual(progress.completedUnitCount, completed * unit)
         }
         // Late/indeterminate updates cannot regress the system's progress. Only finish(success:)
         // is allowed to mark the task complete, never a queued readiness callback.
@@ -1658,13 +1661,59 @@ extension SpeechEngineSelectionTests {
             fractionCompleted: nil, detail: "No measured progress"))
         WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
             fractionCompleted: 1, detail: "Ready", stageProgress: (5, 5)))
-        XCTAssertEqual(progress.completedUnitCount, 4)
+        XCTAssertEqual(progress.completedUnitCount, 4 * unit)
         XCTAssertFalse(progress.isFinished)
         // Attaching a delayed continued task uses the latest completed milestone.
         let attached = Progress(totalUnitCount: 0)
         WhisperBackgroundPreparation.updateTaskProgress(attached, from: ModelPreparationProgress(
             fractionCompleted: nil, detail: "Loading", stageProgress: (3, 5)))
-        XCTAssertEqual(attached.completedUnitCount, 3)
+        XCTAssertEqual(attached.completedUnitCount, 3 * unit)
+    }
+
+    /// Device logs showed the scheduler expiring a continued task ~46 s after its last progress
+    /// change while one Core ML specialization was still running. Heartbeats keep progress moving
+    /// inside the running stage without ever claiming the stage or the preparation is done.
+    func testHeartbeatAdvancesWithinRunningStageWithoutReachingMilestoneOrCompletion() {
+        let unit = WhisperBackgroundPreparation.unitsPerStage
+        let progress = Progress(totalUnitCount: -1)
+        XCTAssertFalse(WhisperBackgroundPreparation.advanceHeartbeat(progress),
+                       "no heartbeat before the stage layout is known")
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.textDecoder.progress(optimizing: true))
+        XCTAssertEqual(progress.completedUnitCount, unit)
+        XCTAssertTrue(WhisperBackgroundPreparation.advanceHeartbeat(progress))
+        XCTAssertEqual(progress.completedUnitCount, unit + 1)
+        for _ in 0..<(2 * unit) { WhisperBackgroundPreparation.advanceHeartbeat(progress) }
+        XCTAssertEqual(progress.completedUnitCount, 2 * unit - 1, "a heartbeat never reaches the next milestone")
+        XCTAssertFalse(WhisperBackgroundPreparation.advanceHeartbeat(progress))
+        // The real milestone still jumps to its boundary, and heartbeats then fill the next stage.
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.audioEncoder.progress(optimizing: true))
+        XCTAssertEqual(progress.completedUnitCount, 2 * unit)
+        WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+            fractionCompleted: nil, detail: "Checking", stageProgress: (4, 5)))
+        for _ in 0..<(2 * unit) { WhisperBackgroundPreparation.advanceHeartbeat(progress) }
+        XCTAssertEqual(progress.completedUnitCount, 5 * unit - 1)
+        XCTAssertFalse(progress.isFinished, "only finish(success:) completes the system task")
+        XCTAssertLessThan(WhisperBackgroundPreparation.heartbeatInterval, .seconds(30))
+    }
+
+    func testBecomingActiveAsksForContinuedTaskWithoutRestartingPreparation() async throws {
+        let background = FakeWhisperBackground()
+        let whisper = EngineASR(.whisperLargeV3Turbo)
+        await whisper.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.queued[.whisperLargeV3Turbo] = [whisper]
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { provider.created.count == 1 }
+        XCTAssertEqual(background.expirations.count, 1)
+        // Returning while the same preparation runs re-requests runtime, not a second load.
+        f.controller.noteSceneDidBecomeActive()
+        XCTAssertEqual(background.activations, 2)
+        XCTAssertEqual(background.expirations.count, 1)
+        XCTAssertEqual(provider.created.count, 1)
+        XCTAssertEqual(provider.explicitCalls, [.whisperLargeV3Turbo])
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+        await whisper.releasePrepare()
     }
 
     func testSwitchingAwayInvalidatesWhisperExpirationAndMaintenance() async throws {

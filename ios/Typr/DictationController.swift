@@ -577,6 +577,8 @@ final class DictationController {
             prepareLaunchModel()
         }
         prepareInstalledWhisperIfNeeded()
+        // A preparation that lost or never got its continued task asks again while active.
+        whisperBackground?.sceneDidBecomeActive()
         scheduleWhisperMaintenance()
     }
 

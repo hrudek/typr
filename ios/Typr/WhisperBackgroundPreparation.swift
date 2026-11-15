@@ -7,6 +7,7 @@ import UIKit
 protocol WhisperPreparationScheduling: AnyObject {
     func begin(expiration: @escaping @MainActor () -> Void)
     func update(_ progress: ModelPreparationProgress)
+    func sceneDidBecomeActive()
     func finish(success: Bool)
     func scheduleMaintenance(needed: Bool)
 }
@@ -21,11 +22,21 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     private var latestProgress: ModelPreparationProgress?
     private var registered = false
     private var maintenanceRegistered = false
+    private var maintenanceSubmitted = false
     private var operation: UUID?
     private var expiration: (@MainActor () -> Void)?
     private var continued: BGTask?
     private var maintenance: BGTask?
     private var grace: UIBackgroundTaskIdentifier = .invalid
+    private var heartbeat: Task<Void, Never>?
+    private var pendingSubmission: Task<Void, Never>?
+
+    /// Sub-units per milestone stage, filled only by heartbeats while that stage runs.
+    static let unitsPerStage: Int64 = 1000
+    /// Well inside the observed stall window; 999 ticks cover more than 80 minutes per stage.
+    static let heartbeatInterval: Duration = .seconds(5)
+    static let startConfirmationDelay: Duration = .seconds(1)
+    static let maxSubmissionAttempts = 3
 
     /// Called by the app delegate before didFinishLaunching returns. Continued-task handlers
     /// are registered for unique concrete identifiers immediately before foreground submission
@@ -54,26 +65,30 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
             // returning; enqueueing a Task here could outlive the expiration deadline.
             MainActor.assumeIsolated { self?.expire(token) }
         }
-        guard #available(iOS 26.0, *), UIApplication.shared.applicationState == .active else { return }
-        let identifier = "\(Self.continuedPrefix).\(token.uuidString)"
+        submitContinued(for: token, attempt: 1)
+    }
+
+    /// A preparation that is still running without a continued task (a rejected or expired
+    /// request) asks again whenever the app becomes active. Submission requires foreground.
+    func sceneDidBecomeActive() {
+        guard let token = operation, continued == nil, pendingSubmission == nil else { return }
+        submitContinued(for: token, attempt: 1)
+    }
+
+    private func submitContinued(for token: UUID, attempt: Int) {
+        guard #available(iOS 26.0, *), operation == token, continued == nil,
+              UIApplication.shared.applicationState == .active else { return }
+        pendingSubmission?.cancel()
+        pendingSubmission = nil
+        let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
         let accepted = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: .main) { [weak self] task in
             MainActor.assumeIsolated {
-                guard let self, self.operation == token else {
+                // A late handler from an earlier attempt must not replace the attached task.
+                guard let self, self.operation == token, self.continued == nil else {
                     task.setTaskCompleted(success: false)
                     return
                 }
-                self.continued = task
-                task.expirationHandler = { [weak self] in
-                    Task { @MainActor in self?.expire(token) }
-                }
-                if let task = task as? BGContinuedProcessingTask {
-                    Self.updateTaskProgress(task.progress, from: self.latestProgress)
-                    if let progress = self.latestProgress {
-                        task.updateTitle("Prepare Whisper", subtitle: progress.detail)
-                    }
-                    Self.logger.notice("Continued preparation task started")
-                }
-                self.endGrace()
+                self.attach(task, token: token)
             }
         }
         guard accepted else { return }
@@ -90,17 +105,77 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
             // Foreground work still runs; UIKit grace is all that is available in background.
             let error = error as NSError
             Self.logger.error("Continued preparation submission failed: domain=\(error.domain, privacy: .public) code=\(error.code)")
+            return
+        }
+        // The scheduler can reject a foreground submission without throwing; observed on device
+        // when the app had become active ~20 ms earlier and was not yet in the scheduler's
+        // foreground list. The launch handler then never runs. Confirm the start and retry.
+        pendingSubmission = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.startConfirmationDelay)
+            guard !Task.isCancelled, let self, self.operation == token, self.continued == nil else { return }
+            self.pendingSubmission = nil
+            Self.logger.notice("Continued preparation was not started by the system: attempt=\(attempt)")
+            guard attempt < Self.maxSubmissionAttempts else { return }
+            self.submitContinued(for: token, attempt: attempt + 1)
         }
     }
 
-    /// Report only finished milestones, never synthetic timer-based progress. Core ML's
-    /// duration remains unknown; the system's units count stages rather than time/percent.
+    private func attach(_ task: BGTask, token: UUID) {
+        pendingSubmission?.cancel()
+        pendingSubmission = nil
+        continued = task
+        task.expirationHandler = { [weak self] in
+            Task { @MainActor in self?.expire(token) }
+        }
+        if #available(iOS 26.0, *), let task = task as? BGContinuedProcessingTask {
+            Self.updateTaskProgress(task.progress, from: latestProgress)
+            if let progress = latestProgress {
+                task.updateTitle("Prepare Whisper", subtitle: progress.detail)
+            }
+            startHeartbeat(for: task, token: token)
+            Self.logger.notice("Continued preparation task started")
+        }
+        endGrace()
+    }
+
+    /// The scheduler marks a continued task stalled and expires it when NSProgress does not
+    /// change within its expected cadence (observed: ~46 s without an update). A single Core ML
+    /// specialization can run for minutes without any callback, so milestones alone are too
+    /// sparse. While the task is attached, each tick advances one sub-unit inside the running
+    /// stage. It never reaches that stage's milestone and never completes the task.
+    @available(iOS 26.0, *)
+    private func startHeartbeat(for task: BGContinuedProcessingTask, token: UUID) {
+        heartbeat?.cancel()
+        heartbeat = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.heartbeatInterval)
+                guard !Task.isCancelled, let self, self.operation == token, self.continued === task else { return }
+                Self.advanceHeartbeat(task.progress)
+            }
+        }
+    }
+
+    /// System progress counts stages. Each finished milestone jumps to its stage boundary;
+    /// heartbeats fill sub-units inside the current stage only. No percent is shown in the app.
     static func updateTaskProgress(_ progress: Progress, from update: ModelPreparationProgress?) {
-        let total = WhisperPreparationComponent.totalPreparationStages
-        progress.totalUnitCount = total
-        guard let stage = update?.stageProgress, stage.total == total else { return }
+        let stages = WhisperPreparationComponent.totalPreparationStages
+        progress.totalUnitCount = stages * unitsPerStage
+        guard let stage = update?.stageProgress, stage.total == stages else { return }
         // Success is committed only by finish(), not a possibly queued "ready" callback.
-        progress.completedUnitCount = max(progress.completedUnitCount, min(max(0, stage.completed), total - 1))
+        let milestone = min(max(0, stage.completed), stages - 1) * unitsPerStage
+        progress.completedUnitCount = max(progress.completedUnitCount, milestone)
+    }
+
+    /// Advances one sub-unit, stopping one unit short of the next milestone (and of completion).
+    @discardableResult
+    static func advanceHeartbeat(_ progress: Progress) -> Bool {
+        let total = WhisperPreparationComponent.totalPreparationStages * unitsPerStage
+        guard progress.totalUnitCount == total else { return false }
+        let completed = progress.completedUnitCount
+        let ceiling = min((completed / unitsPerStage + 1) * unitsPerStage - 1, total - 1)
+        guard completed < ceiling else { return false }
+        progress.completedUnitCount = completed + 1
+        return true
     }
 
     func update(_ progress: ModelPreparationProgress) {
@@ -115,6 +190,10 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         operation = nil
         expiration = nil
         latestProgress = nil
+        heartbeat?.cancel()
+        heartbeat = nil
+        pendingSubmission?.cancel()
+        pendingSubmission = nil
         let tasks = [continued, maintenance].compactMap { $0 }
         continued = nil
         maintenance = nil
@@ -128,19 +207,29 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         endGrace()
     }
 
+    /// Idempotent within a process: resubmitting would cancel the pending request and push its
+    /// earliest begin date out again on every activation or background transition.
     func scheduleMaintenance(needed: Bool) {
-        guard maintenanceRegistered else { return }
+        guard maintenanceRegistered, needed != maintenanceSubmitted else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.maintenanceIdentifier)
+        maintenanceSubmitted = false
         guard needed else { return }
         let request = BGProcessingTaskRequest(identifier: Self.maintenanceIdentifier)
         request.requiresNetworkConnectivity = false
         request.requiresExternalPower = true
         // Discretionary, not an immediate launch or a post-update execution guarantee.
         request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(request)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            maintenanceSubmitted = true
+        } catch {
+            let error = error as NSError
+            Self.logger.error("Maintenance submission failed: domain=\(error.domain, privacy: .public) code=\(error.code)")
+        }
     }
 
     private func handleMaintenance(_ task: BGTask) {
+        maintenanceSubmitted = false // The system consumed the request.
         guard task is BGProcessingTask else {
             task.setTaskCompleted(success: false)
             return
