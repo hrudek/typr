@@ -69,8 +69,8 @@ final class DictationLogStoreTests: XCTestCase {
         XCTAssertEqual(wordField.wordCount, 1_000) // Computed before the cap.
     }
 
-    private func settle(_ store: DictationLogStore) async throws {
-        try await LogTestEnvironment.waitUntilLoaded(store)
+    private func settle(_ store: DictationLogStore, file: StaticString = #filePath, line: UInt = #line) async throws {
+        try await LogTestEnvironment.waitUntilLoaded(store, file: file, line: line)
     }
     func testArchiveRetainsMoreThanTwentyAndStartupDoesNotOverwriteNewCapture() async throws {
         let env = LogTestEnvironment()
