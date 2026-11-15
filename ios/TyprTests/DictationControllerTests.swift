@@ -112,6 +112,10 @@ private actor ControlledTranscriber: LocalTranscribing {
         cannedOutput = text
     }
 
+    /// True once a transcription waits on the gate. Deliberately ignores task cancellation:
+    /// a stale job's late result must reach the controller's generation fence.
+    func isWaiting() -> Bool { gate != nil }
+
     func resumeSuspended(with text: String) {
         if let continuation = gate {
             gate = nil
@@ -150,6 +154,7 @@ private actor ControlledTranscriber: LocalTranscribing {
 final class DictationControllerTests: XCTestCase {
     private var suiteName = ""
     private var defaults: UserDefaults!
+    private var controllers: [DictationController] = []
 
     override func setUp() async throws {
         suiteName = "typr.tests.\(UUID().uuidString)"
@@ -157,6 +162,16 @@ final class DictationControllerTests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // End the warm loop and any resume retry, cancel the job and wait for its unwind.
+        for controller in controllers {
+            controller.endWarmSession()
+            controller.cancelCurrentJob()
+        }
+        let controllers = controllers
+        self.controllers = []
+        try await waitForState("controllers idle before defaults removal") {
+            controllers.allSatisfy { $0.isIdleForTest }
+        }
         defaults.removePersistentDomain(forName: suiteName)
     }
 
@@ -174,33 +189,33 @@ final class DictationControllerTests: XCTestCase {
             now: { now },
             autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
         XCTAssertEqual(controller.phase, .ready)
 
         // Start Job A and suspend its transcription in-flight.
         await transcriber.armSuspension()
         controller.toggleWarmSession()
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(controller.keyboardSessionEnabled)
 
         bridge.send(.start, jobID: "job-a", style: .polished, sentAt: now)
         controller.processPendingKeyboardCommandForTesting()
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
         let firstCaptureURL = try XCTUnwrap(audio.createdCaptures.first?.url)
         XCTAssertTrue(FileManager.default.fileExists(atPath: firstCaptureURL.path))
 
         controller.finishRecording()
         XCTAssertEqual(controller.phase, .transcribing)
-        try await settle()
+        try await asrSuspended(transcriber)
 
         // Expire / end the warm session while Job A is still transcribing, then start a new capture Job B!
         controller.endWarmSession()
         XCTAssertFalse(controller.keyboardSessionEnabled)
 
         controller.startRecording(keyboardJobID: "job-b")
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
         let secondCaptureURL = try XCTUnwrap(audio.createdCaptures.last?.url)
         XCTAssertNotEqual(firstCaptureURL, secondCaptureURL)
@@ -208,7 +223,10 @@ final class DictationControllerTests: XCTestCase {
 
         // Complete stale Job A: it must clean up ONLY firstCaptureURL and leave Job B recording untouched!
         await transcriber.resumeSuspended(with: "stale transcript")
-        try await settle()
+        // The stale task removes its own capture in its final `defer`, after the generation fence.
+        try await waitForState("stale job A unwound") {
+            !FileManager.default.fileExists(atPath: firstCaptureURL.path)
+        }
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: firstCaptureURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: secondCaptureURL.path))
@@ -235,15 +253,15 @@ final class DictationControllerTests: XCTestCase {
             autoPrepareOnInit: false,
             hostReturner: HostReturner(openByBundleID: { _ in false }, openURL: { _ in false })
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         controller.setWarmDuration(.off)
         // Very casual preserves this regression's lowercase output after the Casual style split.
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "one-shot-job", requestedAt: now, style: .veryCasual, host: nil)
         )
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
 
         // Finishing capture in one-shot mode immediately releases the mic while transcription completes.
@@ -251,10 +269,10 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertEqual(controller.phase, .transcribing)
         XCTAssertFalse(controller.keyboardSessionEnabled)
         XCTAssertGreaterThan(audio.deactivateCount, 0)
-        try await settle()
+        try await asrSuspended(transcriber)
 
         await transcriber.resumeSuspended(with: "Um, Ship It Tonight.")
-        try await settle()
+        try await transcribed(controller)
 
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertEqual(controller.transcript, "ship it tonight")
@@ -289,14 +307,14 @@ final class DictationControllerTests: XCTestCase {
                 }
             )
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         // 1. Expired (>10s) handoff warms session without surprise-recording or returning.
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "expired-job", requestedAt: now - 11.5, style: .polished, host: "com.openai.chat")
         )
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertNotNil(controller.handoffNotice)
@@ -308,7 +326,9 @@ final class DictationControllerTests: XCTestCase {
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "fresh-job", requestedAt: now - 0.4, style: .polished, host: "com.openai.chat")
         )
-        try await settle()
+        try await activationSettled(controller)
+        // The capture sets `.attempting`, then the return task opens the host off the main actor.
+        try await waitForState("host opened by bundle ID") { openedBundleIDs.count == 1 }
         XCTAssertEqual(controller.phase, .recording)
         XCTAssertEqual(openedBundleIDs, ["com.openai.chat"])
         XCTAssertTrue(openedURLs.isEmpty)
@@ -322,7 +342,8 @@ final class DictationControllerTests: XCTestCase {
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "scheme-job", requestedAt: now - 0.2, style: .polished, host: "com.apple.MobileSMS")
         )
-        try await settle()
+        try await activationSettled(controller)
+        try await waitForState("bundle ID refused, then the scheme URL opened") { openedURLs.count == 1 }
         XCTAssertEqual(openedBundleIDs.last, "com.apple.MobileSMS")
         XCTAssertEqual(openedURLs.map(\.absoluteString), ["ichat://"])
         XCTAssertEqual(controller.autoReturnState, .attempting)
@@ -333,7 +354,9 @@ final class DictationControllerTests: XCTestCase {
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "unknown-job", requestedAt: now - 0.2, style: .polished, host: "com.example.noscheme")
         )
-        try await settle()
+        try await activationSettled(controller)
+        // The launch reset the state to `.idle`; only this job's failed open sets the fallback.
+        try await waitForState("return attempt fell back") { controller.autoReturnState == .swipeFallback }
         XCTAssertEqual(openedBundleIDs.last, "com.example.noscheme")
         XCTAssertEqual(openedURLs.count, 1)
         XCTAssertEqual(controller.autoReturnState, .swipeFallback)
@@ -345,7 +368,7 @@ final class DictationControllerTests: XCTestCase {
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "nameless-job", requestedAt: now - 0.2, style: .polished, host: nil)
         )
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(openedBundleIDs.count, opensBefore)
         XCTAssertEqual(controller.autoReturnState, .swipeFallback)
 
@@ -355,7 +378,7 @@ final class DictationControllerTests: XCTestCase {
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "self-job", requestedAt: now - 0.2, style: .polished, host: HostReturnCatalog.typrBundleID)
         )
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(openedBundleIDs.count, opensBefore)
         XCTAssertEqual(controller.autoReturnState, .idle)
         controller.cancelCurrentJob()
@@ -376,19 +399,19 @@ final class DictationControllerTests: XCTestCase {
             now: { now },
             autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
         controller.toggleWarmSession()
-        try await settle()
+        try await activationSettled(controller)
 
         // Long capture (>= 0.3s) interrupted by phone call saves and transcribes spoken words!
         audio.nextCaptureDuration = 2.1
         controller.startRecording(keyboardJobID: "call-job")
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
 
         controller.handleAudioSystemEvent(.interruptionBegan)
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertEqual(controller.transcript, "Saved before call.")
         XCTAssertNotEqual(bridge.snapshot().state, .recording)
@@ -396,7 +419,7 @@ final class DictationControllerTests: XCTestCase {
         // Short capture (< 0.3s) interrupted cancels cleanly out of recording.
         audio.nextCaptureDuration = 0.1
         controller.startRecording(keyboardJobID: "short-call-job")
-        try await settle()
+        try await activationSettled(controller)
         controller.handleAudioSystemEvent(.interruptionBegan)
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertNotEqual(bridge.snapshot().state, .recording)
@@ -416,10 +439,10 @@ final class DictationControllerTests: XCTestCase {
             now: { now },
             autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(controller.keyboardSessionEnabled)
         let startsWhileForeground = audio.startKeepaliveCount
 
@@ -429,11 +452,11 @@ final class DictationControllerTests: XCTestCase {
         for job in ["first", "second", "third"] {
             bridge.send(.start, jobID: job, style: .polished, sentAt: now)
             controller.processPendingKeyboardCommandForTesting()
-            try await settle()
+            try await activationSettled(controller)
             XCTAssertEqual(controller.phase, .recording, "\(job) dictation should record from the keyboard")
 
             controller.finishRecording()
-            try await settle()
+            try await transcribed(controller)
             XCTAssertEqual(controller.phase, .ready)
             XCTAssertTrue(controller.keyboardSessionEnabled, "\(job) dictation must not end the warm session")
             XCTAssertTrue(audio.isKeepaliveRunning)
@@ -454,10 +477,10 @@ final class DictationControllerTests: XCTestCase {
             audio: audio, keyboardBridge: bridge, transcriber: transcriber,
             transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
+        // Synchronous: with media playing a warm-only request ends the session without activating.
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
         XCTAssertFalse(controller.keyboardSessionEnabled)
         XCTAssertFalse(audio.isKeepaliveRunning)
         XCTAssertEqual(audio.startKeepaliveCount, 0)
@@ -468,7 +491,7 @@ final class DictationControllerTests: XCTestCase {
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "media", requestedAt: now, style: .polished, host: nil)
         )
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
         XCTAssertFalse(audio.isOtherAudioPlaying, "the activation now interrupted playback")
         XCTAssertTrue(audio.isKeepaliveRunning)
@@ -478,17 +501,19 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertEqual(audio.deactivateCount, releasesBeforeFinish + 1)
         XCTAssertFalse(controller.keyboardSessionEnabled)
         XCTAssertFalse(audio.isKeepaliveRunning)
-        try await settle()
+        try await asrSuspended(transcriber)
+        // Negative check over real time: a warm loop that survived would restart input within a tick.
+        try await Task.sleep(for: Self.sessionLoopTick * 2)
         XCTAssertEqual(audio.startKeepaliveCount, 1, "warm loop must not restart input during ASR")
         await transcriber.resumeSuspended(with: "ship the build")
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertTrue(bridge.snapshot().hasDeliverableResult(at: now + 1))
         XCTAssertFalse(audio.isKeepaliveRunning)
 
         // Nothing is playing on the next activation: ordinary warm behavior returns.
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertTrue(audio.isKeepaliveRunning)
         controller.endWarmSession()
@@ -506,11 +531,11 @@ final class DictationControllerTests: XCTestCase {
                 transcriberFactory: { transcriber }, autoPrepareOnInit: false,
                 audioActivationRetryDelays: []
             )
-            controller.prepareModel()
-            try await settle()
+            drainAtTeardown(controller)
+            try await ready(controller)
             controller.setWarmDuration(.fifteenMinutes)
             controller.startRecording()
-            try await settle()
+            try await activationSettled(controller)
             if outcome != "failure" {
                 XCTAssertEqual(controller.phase, .recording, outcome)
                 if outcome == "cancel" {
@@ -523,7 +548,9 @@ final class DictationControllerTests: XCTestCase {
                     controller.finishRecording()
                 }
             }
-            try await settle()
+            // Every outcome releases audio synchronously; this drains the transcription that the
+            // finished and unexpected-success captures start before the next controller.
+            try await transcribed(controller)
             XCTAssertFalse(audio.isKeepaliveRunning, outcome)
             XCTAssertFalse(controller.keyboardSessionEnabled, outcome)
             XCTAssertGreaterThan(audio.deactivateCount, 0, outcome)
@@ -538,17 +565,17 @@ final class DictationControllerTests: XCTestCase {
             audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
             transcriberFactory: { transcriber }, autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(audio.isKeepaliveRunning)
         audio.isOtherAudioPlaying = true
         controller.handleAudioSystemEvent(.interruptionBegan)
         XCTAssertFalse(audio.isKeepaliveRunning)
         XCTAssertFalse(controller.keyboardSessionEnabled)
+        // Synchronous: the media-ended session has no suspended input to resume.
         controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
-        try await settle()
         XCTAssertEqual(audio.startKeepaliveCount, 1, "do not interrupt media to restore idle input")
         XCTAssertTrue(audio.isOtherAudioPlaying)
     }
@@ -578,14 +605,14 @@ final class DictationControllerTests: XCTestCase {
             now: { now },
             autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         controller.setWarmDuration(.off)
         XCTAssertFalse(controller.keyboardSessionEnabled)
 
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertTrue(audio.isKeepaliveRunning)
         XCTAssertEqual(controller.warmDuration, .fifteenMinutes)
@@ -617,21 +644,22 @@ final class DictationControllerTests: XCTestCase {
             now: { now },
             autoPrepareOnInit: false
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
         controller.startRecording(keyboardJobID: "meter-recovery")
-        try await settle()
+        try await activationSettled(controller)
         let capture = try XCTUnwrap(audio.createdCaptures.last)
         defer { controller.cancelCurrentJob() }
 
         // No completion/interruption callback: the same capture becomes available again.
         capture.isRecording = false
-        try await settle()
+        // Real meter cycles: let samples see the paused capture (nothing observable changes).
+        try await Task.sleep(for: Self.meterCycle * 3)
         capture.power = 0.9
         capture.currentTime = 2.4
         capture.isRecording = true
         now += 1
-        try await settle()
+        try await waitForState("meter read the recovered capture") { controller.recordingDuration == 2.4 }
 
         let db = capture.averagePowerDB()
         XCTAssertEqual(controller.phase, .recording)
@@ -645,12 +673,12 @@ final class DictationControllerTests: XCTestCase {
         // A level-only change must still get through the keyboard publication throttle.
         capture.power = 0.2
         now += 1
-        try await settle()
+        try await waitForState("meter read the new level") { controller.loudnessDB == capture.averagePowerDB() }
         XCTAssertEqual(controller.loudnessDB, capture.averagePowerDB(), accuracy: 0.001)
         XCTAssertEqual(bridge.snapshot().effectiveLoudnessDB, capture.averagePowerDB(), accuracy: 0.001)
 
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.transcript, "Ship the build.")
         XCTAssertEqual(controller.audioLevel, 0)
         XCTAssertEqual(bridge.snapshot().audioLevel, 0)
@@ -673,26 +701,26 @@ final class DictationControllerTests: XCTestCase {
             autoPrepareOnInit: false,
             customVocabularySettings: settings
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         // Off: the transcript is formatted exactly as before.
         settings.isEnabled = false
         controller.startRecording(keyboardJobID: "vocabulary-off", styleOverride: .verbatim)
-        try await settle()
+        try await activationSettled(controller)
         settings.isEnabled = true // A mid-capture toggle must not affect this session.
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.transcript, "i use open code")
 
         // On: the setting is captured at start, before formatting.
         controller.clearTranscript()
         settings.isEnabled = true
         controller.startRecording(keyboardJobID: "vocabulary-on", styleOverride: .verbatim)
-        try await settle()
+        try await activationSettled(controller)
         settings.isEnabled = false
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.transcript, "i use OpenCode")
 
     }
@@ -714,23 +742,23 @@ final class DictationControllerTests: XCTestCase {
             autoPrepareOnInit: false,
             customVocabularySettings: settings
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         settings.isEnabled = false
         controller.startRecording(keyboardJobID: "vocabulary-hint-off")
-        try await settle()
+        try await activationSettled(controller)
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         // The built-in tech glossary always gives Apple Speech its hints; user terms come first.
         var arguments = await transcriber.vocabularyArguments
         XCTAssertEqual(arguments, [TechGlossary.listedTerms])
 
         settings.isEnabled = true
         controller.startRecording(keyboardJobID: "vocabulary-hint-on")
-        try await settle()
+        try await activationSettled(controller)
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         arguments = await transcriber.vocabularyArguments
         XCTAssertEqual(arguments, [TechGlossary.listedTerms, ["OpenCode"] + TechGlossary.listedTerms])
     }
@@ -753,15 +781,15 @@ final class DictationControllerTests: XCTestCase {
             autoPrepareOnInit: false,
             customVocabularySettings: settings
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         // Very casual lowercases the whole sentence, so the second spelling pass has to
         // restore the listed term.
         controller.startRecording(keyboardJobID: "vocabulary-casual", styleOverride: .veryCasual)
-        try await settle()
+        try await activationSettled(controller)
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.transcript, "iPhone 17 broke")
     }
 
@@ -783,15 +811,15 @@ final class DictationControllerTests: XCTestCase {
             autoPrepareOnInit: false,
             customVocabularySettings: settings
         )
-        controller.prepareModel()
-        try await settle()
+        drainAtTeardown(controller)
+        try await ready(controller)
 
         // Polished capitalizes the sentence start ("IPhone"), so the second pass
         // has to restore the listed term.
         controller.startRecording(keyboardJobID: "vocabulary-polished", styleOverride: .polished)
-        try await settle()
+        try await activationSettled(controller)
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.transcript, "iPhone 17 broke.")
     }
 
@@ -805,7 +833,7 @@ final class DictationControllerTests: XCTestCase {
         onPrepare: @escaping () -> Void = {}
     ) -> DictationController {
         let transcriber = ControlledTranscriber()
-        return DictationController(
+        let controller = DictationController(
             audio: audio,
             keyboardBridge: bridge,
             transcriber: transcriber,
@@ -818,6 +846,8 @@ final class DictationControllerTests: XCTestCase {
             hostReturner: HostReturner(openByBundleID: { _ in false }, openURL: { _ in false }),
             audioActivationRetryDelays: retryDelays
         )
+        drainAtTeardown(controller)
+        return controller
     }
 
     func testActivationRetriesWhileAnotherAppStillHoldsAudio() async throws {
@@ -825,12 +855,11 @@ final class DictationControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 20_000,
                                                 retryDelays: [.milliseconds(1), .milliseconds(1)])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
 
         audio.busyActivationsRemaining = 2
         controller.startRecording(keyboardJobID: "after-voice-message")
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording, "a brief refusal must not fail the dictation")
         XCTAssertEqual(audio.startKeepaliveCount, 3)
         controller.cancelCurrentJob()
@@ -841,12 +870,11 @@ final class DictationControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 21_000,
                                                 retryDelays: [.milliseconds(1)])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
 
         audio.busyActivationsRemaining = 5
         controller.startRecording(keyboardJobID: "busy")
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .failed(DictationController.audioBusyMessage))
         XCTAssertEqual(audio.startKeepaliveCount, 2)
     }
@@ -858,20 +886,19 @@ final class DictationControllerTests: XCTestCase {
         var prepares = 0
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: now,
                                                 retryDelays: [], onPrepare: { prepares += 1 })
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
         XCTAssertEqual(prepares, 1)
 
         audio.captureShouldThrow = true
         controller.startRecording(keyboardJobID: "fails")
-        try await settle()
+        try await activationSettled(controller)
         guard case .failed = controller.phase else { return XCTFail("expected failure, got \(controller.phase)") }
 
         audio.captureShouldThrow = false
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "next", requestedAt: now, style: .polished, host: nil)
         )
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
         XCTAssertEqual(prepares, 1, "a microphone failure must not reload the speech model")
         controller.cancelCurrentJob()
@@ -882,23 +909,22 @@ final class DictationControllerTests: XCTestCase {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: now, retryDelays: [])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertTrue(audio.isKeepaliveRunning)
 
         audio.captureShouldThrow = true
         bridge.send(.start, jobID: "fails", style: .polished, sentAt: now)
         controller.processPendingKeyboardCommandForTesting()
-        try await settle()
+        try await activationSettled(controller)
         guard case .failed = controller.phase else { return XCTFail("expected failure, got \(controller.phase)") }
         XCTAssertTrue(audio.isKeepaliveRunning)
 
         audio.captureShouldThrow = false
         bridge.send(.start, jobID: "retry", style: .polished, sentAt: now)
         controller.processPendingKeyboardCommandForTesting()
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording, "the warm keyboard start must not be ignored after a failure")
         controller.cancelCurrentJob()
     }
@@ -908,23 +934,25 @@ final class DictationControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 24_000,
                                                 retryDelays: [.milliseconds(1), .milliseconds(1)])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
 
         controller.handleAudioSystemEvent(.interruptionBegan)
         XCTAssertFalse(audio.isKeepaliveRunning)
         audio.busyActivationsRemaining = 2
+        var starts = audio.startKeepaliveCount
         controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
-        try await settle()
+        try await waitForState("resume made all three activation attempts") { audio.startKeepaliveCount == starts + 3 }
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertTrue(audio.isKeepaliveRunning)
 
         controller.handleAudioSystemEvent(.interruptionBegan)
         audio.busyActivationsRemaining = 10
+        starts = audio.startKeepaliveCount
         controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
-        try await settle()
+        // The last refusal ends the session in the same main-actor job.
+        try await waitForState("resume used up its retries") { audio.startKeepaliveCount == starts + 3 }
         XCTAssertFalse(controller.keyboardSessionEnabled, "a lasting refusal still ends the warm session")
     }
 
@@ -934,10 +962,9 @@ final class DictationControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: now,
                                                 retryDelays: [.milliseconds(50), .milliseconds(50)])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
 
         controller.handleAudioSystemEvent(.interruptionBegan)
         audio.busyActivationsRemaining = 2
@@ -945,13 +972,14 @@ final class DictationControllerTests: XCTestCase {
         // Dictate right away, while the resume would still be retrying.
         bridge.send(.start, jobID: "right-after-voice-message", style: .polished, sentAt: now)
         controller.processPendingKeyboardCommandForTesting()
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
         let capture = try XCTUnwrap(audio.createdCaptures.last)
         let startsAfterCapture = audio.startKeepaliveCount
 
-        try await settle()
-        try await settle()
+        // Negative check over real time: outlast the injected 2 × 50 ms resume retries the capture
+        // took over and warm-loop ticks; nothing may restart the input under the capture.
+        try await Task.sleep(for: Self.sessionLoopTick * 4)
         XCTAssertEqual(controller.phase, .recording, "the capture must keep recording")
         XCTAssertTrue(capture.isRecording)
         XCTAssertEqual(audio.startKeepaliveCount, startsAfterCapture, "no input restart under the capture")
@@ -963,22 +991,22 @@ final class DictationControllerTests: XCTestCase {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 26_000, retryDelays: [])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
 
         // A phone call holds audio: every activation fails until it ends.
         controller.handleAudioSystemEvent(.interruptionBegan)
         audio.keepaliveShouldThrow = true
         controller.startRecording(keyboardJobID: "during-call")
-        try await settle()
+        try await activationSettled(controller)
         guard case .failed = controller.phase else { return XCTFail("expected failure, got \(controller.phase)") }
         XCTAssertTrue(controller.keyboardSessionEnabled, "a failed start during the call must not end the session")
 
         audio.keepaliveShouldThrow = false
+        let startsBeforeResume = audio.startKeepaliveCount
         controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
-        try await settle()
+        try await waitForState("resume activated the input") { audio.startKeepaliveCount == startsBeforeResume + 1 }
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertTrue(audio.isKeepaliveRunning, "the end of the call still resumes the warm input")
     }
@@ -987,32 +1015,33 @@ final class DictationControllerTests: XCTestCase {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
         let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 27_000, retryDelays: [])
-        controller.prepareModel()
-        try await settle()
+        try await ready(controller)
         controller.selectWarmDuration(.fifteenMinutes)
-        try await settle()
+        try await activationSettled(controller)
 
         controller.handleAudioSystemEvent(.interruptionBegan)
         XCTAssertFalse(audio.isKeepaliveRunning)
         controller.startRecording(keyboardJobID: "during-voice-playback")
-        try await settle()
+        try await activationSettled(controller)
         XCTAssertEqual(controller.phase, .recording)
         controller.finishRecording()
-        try await settle()
+        try await transcribed(controller)
         XCTAssertEqual(controller.phase, .ready)
         XCTAssertTrue(audio.isKeepaliveRunning)
         let startsAfterDictation = audio.startKeepaliveCount
 
         // A late end of the interruption must not restart the running input or end the session.
+        // Synchronous: the capture already cleared the suspension, so nothing is resumed.
         controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
-        try await settle()
         XCTAssertEqual(audio.startKeepaliveCount, startsAfterDictation)
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertTrue(audio.isKeepaliveRunning)
 
         // The input is no longer treated as suspended: the session loop restarts a dead input.
         audio.stopKeepalive()
-        try await settle()
+        try await waitForState("warm loop restarted the dead input") {
+            audio.startKeepaliveCount == startsAfterDictation + 1
+        }
         XCTAssertTrue(audio.isKeepaliveRunning, "the session loop must not skip a dead input after the suspension")
     }
 
@@ -1025,9 +1054,33 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertFalse(DictationController.transcriptionFailureKeepsModel(WhisperTranscriber.TranscriberError.notPrepared))
     }
 
-    private func settle() async throws {
-        for _ in 0..<8 {
-            try await Task.sleep(for: .milliseconds(25))
-        }
+    /// Real production periods, used only for negative checks where correct code changes nothing.
+    private static let meterCycle = Duration.milliseconds(33)
+    private static let sessionLoopTick = Duration.milliseconds(100)
+
+    private func ready(_ controller: DictationController) async throws {
+        controller.prepareModel()
+        try await waitForState("model ready") { controller.phase == .ready }
+    }
+
+    /// A warm-session activation or a capture start sets `.requestingPermission` synchronously and
+    /// leaves it, with the session, capture or failure in place, in the task's last main-actor job.
+    private func activationSettled(_ controller: DictationController) async throws {
+        try await waitForState("microphone activation finished") { controller.phase != .requestingPermission }
+    }
+
+    /// Covers the unwind as well: `isIdleForTest` waits for the transcription task to be released.
+    private func transcribed(_ controller: DictationController) async throws {
+        try await waitForState("transcription finished") { controller.isIdleForTest }
+    }
+
+    private func asrSuspended(_ transcriber: ControlledTranscriber) async throws {
+        try await waitForState("transcription suspended in ASR") { await transcriber.isWaiting() }
+    }
+
+    /// `tearDown` drains this controller before it removes the defaults domain the bridge writes to,
+    /// also after a failed `guard`.
+    private func drainAtTeardown(_ controller: DictationController) {
+        controllers.append(controller)
     }
 }
