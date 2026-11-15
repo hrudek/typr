@@ -2,7 +2,9 @@
 # Fast lane: PRs run Linux checks only; Typr review is a separate required check.
 # Main app changes build an archive and run simulator tests in parallel.
 # Signing/upload never waits for tests. Manual simulator previews remain available.
-#   push main       → app changed? archive → TestFlight at once; tests in parallel
+#   push main           → app changes: archive → TestFlight; tests in parallel
+#                       → tests/fixtures only: simulator tests, no release
+#                       → docs/offline/pipeline only: no macOS jobs
 #   pull_request        → Linux checks, scope, labels; no macOS allocation
 #   workflow_dispatch   → simulator preview (tests + screenshots, no archive), or a device build
 name: Typr CI
@@ -20,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       distribution:
-        description: simulator previews; unsigned builds; ad-hoc/testflight sign; automatic checks main app changes
+        description: simulator previews; unsigned builds; ad-hoc/testflight sign; automatic routes main app/test changes
         type: choice
         options: [unsigned, ad-hoc, testflight, simulator, automatic]
         default: unsigned
@@ -121,7 +123,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      run: ${{ steps.decide.outputs.run }}
+      test: ${{ steps.decide.outputs.test }}
+      build: ${{ steps.decide.outputs.build }}
       sign: ${{ steps.decide.outputs.sign }}
       config: ${{ steps.config.outputs.config }}
     steps:
@@ -139,7 +142,7 @@ jobs:
       - name: Load Typr identity
         id: config
         run: python3 .github/typr/config.py
-      - name: Did anything the iOS build reads change, and what gets signed?
+      - name: Which iOS lanes changed, and what gets signed?
         id: decide
         env:
           EVENT: ${{ github.event_name }}
@@ -152,7 +155,7 @@ jobs:
         run: |
           set -euo pipefail
           zero=0000000000000000000000000000000000000000
-          base='' head=$AFTER sign='' mode=app
+          base='' head=$AFTER sign=''
           case "$EVENT" in
             push)
               [[ "$BEFORE" != "$zero" ]] && base=$BEFORE
@@ -171,7 +174,7 @@ jobs:
                             sign=testflight ;;
               esac ;;
           esac
-          run=true
+          test=true build=true
           # Bot merges explicitly dispatch this lane (GITHUB_TOKEN pushes do not
           # trigger push workflows). Compare the dispatched main commit to its parent.
           if [[ "$EVENT" == workflow_dispatch && "$DISTRIBUTION" == automatic ]]; then
@@ -184,27 +187,33 @@ jobs:
               base=$(git -C "$RUNNER_TEMP/parent" rev-parse "$head^")
             fi
           fi
-          if [[ "$base" =~ ^[0-9a-f]{40}$ ]]; then
+          # Explicit distributions always run, regardless of any supplied baseline.
+          if [[ "$EVENT" == push || "$DISTRIBUTION" == automatic ]] && [[ "$base" =~ ^[0-9a-f]{40}$ ]]; then
             git init -q "$RUNNER_TEMP/fp"
             if git -C "$RUNNER_TEMP/fp" fetch -q --depth=1 --filter=blob:none "$REPO" "$base" "$head"; then
-              a=$(bash .github/typr/fingerprint.sh "$RUNNER_TEMP/fp" "$base" "$mode")
-              b=$(bash .github/typr/fingerprint.sh "$RUNNER_TEMP/fp" "$head" "$mode")
-              diff <(echo "$a") <(echo "$b") || true
-              [[ "$a" != "$b" ]] || run=false
+              for mode in app test; do
+                a=$(bash .github/typr/fingerprint.sh "$RUNNER_TEMP/fp" "$base" "$mode")
+                b=$(bash .github/typr/fingerprint.sh "$RUNNER_TEMP/fp" "$head" "$mode")
+                changed=true
+                [[ "$a" != "$b" ]] || changed=false
+                case "$mode" in app) build=$changed ;; test) test=$changed ;; esac
+              done
             else
               echo 'Cannot compare app inputs; refusing an automatic build without a baseline.' >&2
               exit 1
             fi
           fi
-          [[ "$run" == true ]] || sign=''
-          echo "run=$run" >> "$GITHUB_OUTPUT"
+          [[ "$build" == true ]] || sign=''
+          echo "test=$test" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "sign=$sign" >> "$GITHUB_OUTPUT"
           {
             echo '### Typr CI'
             echo "| | |"; echo "|---|---|"
             echo "| Commit | \`${head:0:8}\` |"
             echo "| Compared with | \`${base:0:8}\` |"
-            echo "| iOS inputs changed ($mode) | $run |"
+            echo "| Simulator inputs changed | $test |"
+            echo "| Release inputs changed | $build |"
             echo "| Signs | ${sign:-nothing} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -212,7 +221,7 @@ jobs:
     name: Simulator tests
     needs: decide
     # No simulator allocation for PRs; manual branch runs remain available.
-    if: github.event_name != 'pull_request' && (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.decide.outputs.run == 'true' && inputs.only_testing != 'none'
+    if: github.event_name != 'pull_request' && (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.decide.outputs.test == 'true' && inputs.only_testing != 'none'
     concurrency:
       group: typr-ci-test-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && 'main-auto' || format('{0}-{1}', github.ref, inputs.distribution) }}
       cancel-in-progress: ${{ github.event_name == 'push' || inputs.distribution == 'automatic' }}
@@ -294,7 +303,7 @@ jobs:
   build:
     name: Unsigned archive
     needs: decide
-    if: github.event_name != 'pull_request' && needs.decide.outputs.run == 'true' && inputs.distribution != 'simulator'
+    if: github.event_name != 'pull_request' && needs.decide.outputs.build == 'true' && inputs.distribution != 'simulator'
     concurrency:
       group: typr-ci-build-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && 'main-auto' || format('{0}-{1}', github.ref, inputs.distribution) }}
       cancel-in-progress: ${{ github.event_name == 'push' || inputs.distribution == 'automatic' }}

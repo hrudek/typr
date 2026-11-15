@@ -13,14 +13,15 @@ def job(name):
 
 
 def condition(name, event, distribution='', changed='true', only_testing='', draft=False,
-              ref='refs/heads/main'):
+              ref='refs/heads/main', test_changed=None):
     # Evaluate the actual single-line scheduling expression, not a copied policy.
     expression = re.search(r'^    if: (.+)$', job(name), re.M).group(1)
     values = {
         'github.event_name': event,
         'github.ref': ref,
         'inputs.distribution': distribution,
-        'needs.decide.outputs.run': changed,
+        'needs.decide.outputs.build': changed,
+        'needs.decide.outputs.test': changed if test_changed is None else test_changed,
         'inputs.only_testing': only_testing,
         'github.event.pull_request.draft': draft,
     }
@@ -94,8 +95,15 @@ class FastLaneContracts(unittest.TestCase):
         self.assertIn('Automatic distribution only from main', decide)
         self.assertIn('BASE_SHA: ${{ inputs.base_sha }}', decide)
         self.assertIn('base=$BASE_SHA', decide)
-        self.assertIn('mode=app', decide)
+        self.assertIn('for mode in app test', decide)
         self.assertIn('exit 1', decide.split('Cannot compare app inputs;', 1)[1])
+
+    def test_test_only_merges_skip_archive_but_keep_simulator(self):
+        for event, distribution in (('push', ''), ('workflow_dispatch', 'automatic')):
+            self.assertTrue(condition('test', event, distribution, changed='false', test_changed='true'))
+            self.assertFalse(condition('build', event, distribution, changed='false', test_changed='true'))
+            self.assertFalse(condition('test', event, distribution, changed='false',
+                                       test_changed='true', only_testing='none'))
 
     def test_manual_device_distributions_still_build(self):
         for distribution in ('unsigned', 'ad-hoc', 'testflight'):

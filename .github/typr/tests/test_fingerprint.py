@@ -50,13 +50,28 @@ class FingerprintTests(unittest.TestCase):
     def test_source_project_resources_tests_and_identity_do_build(self):
         for path in ('ios/Typr/App.swift', 'ios/project.yml', 'ios/Typr/Info.plist',
                      'ios/TyprKeyboard/Keyboard.swift', 'ios/TyprWidgets/Widget.swift',
-                     'ios/TyprTests/Test.swift', 'ios/TestFixtures/audio.wav',
                      'ios/TyprShared/WordData/words.bin', '.github/typr/app.json'):
             before = self.fingerprint()
             self.change(path, 'new content')
             self.commit()
             with self.subTest(path=path):
                 self.assertNotEqual(before, self.fingerprint())
+
+    def test_tests_and_fixtures_only_change_simulator_and_pipeline(self):
+        for path in ('ios/TyprTests/Test.swift', 'ios/TestFixtures/audio.wav'):
+            for operation in ('add', 'edit', 'rename', 'delete'):
+                before = {mode: self.fingerprint(mode) for mode in ('app', 'test', 'pipeline')}
+                if operation in ('add', 'edit'):
+                    self.change(path, operation)
+                elif operation == 'rename':
+                    self.git('mv', path, path + '.renamed')
+                else:
+                    self.git('rm', path + '.renamed')
+                self.commit()
+                with self.subTest(path=path, operation=operation):
+                    self.assertEqual(before['app'], self.fingerprint('app'))
+                    for mode in ('test', 'pipeline'):
+                        self.assertNotEqual(before[mode], self.fingerprint(mode))
 
     def test_deletion_and_rename_change_fingerprint(self):
         self.git('mv', 'ios/Typr/App.swift', 'ios/Typr/Renamed.swift')

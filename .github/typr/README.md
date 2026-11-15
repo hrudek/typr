@@ -4,8 +4,10 @@
 Typr CI
 ├─ Linux checks: helper + dictation-log tests, actionlint, shell syntax; scope on PRs
 ├─ PRs: Linux checks only (no archive, simulator tests or screenshots)
-├─ main / manual: Decide — did app inputs change? no → no macOS jobs
-├─ main with app changes: archive → TestFlight at once; simulator tests in parallel
+├─ main / automatic: Decide — compare release and simulator inputs separately
+├─ app changes: archive → TestFlight at once; simulator tests in parallel
+├─ tests/fixtures only: simulator tests; no archive, signing or TestFlight
+├─ docs / offline tools / pipeline only: no macOS jobs
 │  └─ red tests → pinned "Typr status" issue → fix/<name> PR
 ├─ manual distribution=simulator: tests + screenshot artifact (7 days)
 └─ manual ad-hoc (owner approval) or testflight
@@ -29,6 +31,24 @@ Typr PR to iPhone: signs an existing manual distribution=unsigned PR archive
 - **Scheduling:** newer automatic main runs cancel older archive/test jobs, never a
   running signing/upload. Markdown, `ios/tools/` and pipeline-only edits start no
   macOS jobs (`fingerprint.sh`); build helper edits take effect on the next app change.
+  Automatic pushes and bot-merge dispatches compare two fingerprints: `app` excludes
+  only `ios/TyprTests/` and `ios/TestFixtures/`, while `test` includes them. Both
+  include project configuration, identity, shared code, resources and unknown iOS
+  paths conservatively. `pipeline` retains the broader explicit-comparison mode.
+  Test/fixture additions, edits, renames and deletions therefore run only simulator
+  tests. A mixed app/test change runs both lanes. Current `ios/project.yml` uses
+  those two folders only for the test target; if production starts consuming them,
+  update the fingerprint policy with that project change.
+- **Manual routing:** explicit `unsigned`, `ad-hoc`, `testflight` and `simulator`
+  distributions always run, even with no input changes or a supplied `base_sha`.
+  Simulator previews never archive; `only_testing=none` skips simulator tests only.
+  `base_sha` applies only to automatic distribution; failed baseline fetches fail
+  Decide rather than silently skipping work.
+- **Status and retries:** status refresh still waits for all lanes, including
+  intentionally skipped archive/sign jobs. The status issue reports failed main
+  test-only runs and retains the last actual TestFlight result across skipped
+  releases. Capacity retries target only the unallocated failed macOS job and its
+  dependents, so retrying simulator tests cannot start an unrelated release.
 - **Runner retry:** `typr-retry.yml` retries a macOS job that never got a
   runner after 5, 10 and 20 minutes (max three attempts, same commit, open PR).
 - **Labels:** adding `infra` re-runs failed CI jobs (`typr-recheck.yml`).
