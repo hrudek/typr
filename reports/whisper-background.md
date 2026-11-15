@@ -119,4 +119,11 @@ Background App Refresh/Lock/Force-quit, echte Ressourcenablehnung und Profile.
   `WhisperTranscriberTests`. Andere Enum-Nutzungen gezielt nachgeprüft.
 - Scope lokal mit `LABELS=infra bash .github/typr/scope.sh origin/main HEAD` grün
   (17 Dateien beim ersten Commit). Linux-CI des PR ebenfalls grün.
+- Commit `0bab8e3b`: Typr review **FIX**, Befund 1: UIKit-Expiration durfte
+  `endBackgroundTask` nicht erst in einem asynchronen MainActor-Task ausführen.
+  Apples `beginBackgroundTask(withName:expirationHandler:)`-DocC direkt geprüft:
+  Handler wird synchron auf dem Main Thread aufgerufen, Task muss vor Rückkehr
+  explizit beendet werden. Korrigiert zu synchronem `MainActor.assumeIsolated`;
+  `expire` → `finish` → `endGrace` läuft jetzt vollständig vor Handler-Rückkehr.
+  Reale UIKit-Expiration wurde hier nicht ausgeführt (Linux).
 - Nächster Review-Lauf folgt automatisch auf den Korrektur-Push.

@@ -4,7 +4,7 @@ Owner approved options 2 + 3: prepare the installed, selected Whisper model auto
 
 - [x] Implement, document, add simulator tests (written, not run on Linux)
 - [x] Run available Linux checks; report macOS/device validation not performed
-- [ ] PR #161 opened; first Typr review finding 1 fixed (exhaustive error classification + assertion), awaiting next verdict
+- [ ] PR #161 opened; review rounds 1 and 2 finding 1 each fixed (exhaustive classification; synchronous UIKit expiration cleanup), awaiting next verdict
 - [ ] Owner integration blocker: confirm/enable iOS 27 Background Inference capability and regenerate app profiles as required; necessary signing whitelist changes included. Do not auto-merge until resolved; this is not a simulator gate.
 
 Worker details/report: reports/whisper-background.md. Worker reply <=10 lines.

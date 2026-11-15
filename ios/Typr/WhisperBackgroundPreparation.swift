@@ -47,7 +47,9 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         // Covers the handoff to the continued task, and is the entire (bounded) fallback on
         // older iOS or rejected requests. No microphone, audio session or network is involved.
         grace = UIApplication.shared.beginBackgroundTask(withName: "Prepare Whisper") { [weak self] in
-            Task { @MainActor in self?.expire(token) }
+            // UIKit invokes this synchronously on the main thread. End the assertion before
+            // returning; enqueueing a Task here could outlive the expiration deadline.
+            MainActor.assumeIsolated { self?.expire(token) }
         }
         guard #available(iOS 26.0, *), UIApplication.shared.applicationState == .active else { return }
         let identifier = "\(Self.continuedPrefix).\(token.uuidString)"
