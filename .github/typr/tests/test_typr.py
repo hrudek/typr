@@ -138,12 +138,16 @@ class IdentityTests(unittest.TestCase):
             path.write_bytes(original)
 
 class ScopeTests(unittest.TestCase):
-    """All paths may change; every .github/ change needs the infra label."""
+    """Every .github/ change needs infra; every new Markdown file needs docs."""
 
-    def run_scope(self, files, labels=''):
+    def run_scope(self, files, labels='', existing=()):
         with tempfile.TemporaryDirectory() as tmp:
             git = ['git', '-C', tmp, '-c', 'user.name=t', '-c', 'user.email=t@t']
             subprocess.run(git[:3] + ['init', '-q'], check=True)
+            for name in existing:
+                Path(tmp, name).parent.mkdir(parents=True, exist_ok=True)
+                Path(tmp, name).write_text('old')
+            subprocess.run(git + ['add', '-A'], check=True)
             subprocess.run(git + ['commit', '-q', '--allow-empty', '-m', 'base'], check=True)
             for name in files:
                 path = Path(tmp, name)
@@ -156,9 +160,18 @@ class ScopeTests(unittest.TestCase):
                                   capture_output=True, text=True).returncode
 
     def test_non_automation_paths_pass(self):
-        for path in ('ios/TyprShared/A.swift', 'TYPR.md', 'README.md', 'src/main.rs'):
+        for path in ('ios/TyprShared/A.swift', 'ios/notes.txt', 'src/main.rs'):
             with self.subTest(path=path):
                 self.assertEqual(self.run_scope([path]), 0)
+
+    def test_new_markdown_needs_docs_label(self):
+        for path in ('TASKS.md', 'reports/task.md', 'ios/Feature.md'):
+            with self.subTest(path=path):
+                self.assertEqual(self.run_scope([path]), 1)
+                self.assertEqual(self.run_scope([path], 'feature,docs'), 0)
+
+    def test_editing_existing_markdown_passes(self):
+        self.assertEqual(self.run_scope(['README.md'], existing=['README.md']), 0)
 
     def test_all_automation_needs_infra_label(self):
         for path in ('.github/typr/x.sh', '.github/workflows/x.yml',

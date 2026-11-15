@@ -17,6 +17,9 @@ nonisolated struct UsageTotals: Codable, Equatable, Sendable {
     var dictatedWords: UInt64 = 0
     var recordingSeconds: Double = 0
 
+    // Speeds need 60 s of their own population and always use summed totals, never an
+    // average of daily speeds. Typing uses 5-grapheme standard words over active intervals
+    // (<= 4 s); dictation uses raw recognized words over stopped capture duration.
     var typingWPM: Double? { typingSeconds >= 60 ? Double(timedGraphemes) * 12 / typingSeconds : nil }
     var dictationWPM: Double? { recordingSeconds >= 60 ? Double(dictatedWords) * 60 / recordingSeconds : nil }
     var isValid: Bool {

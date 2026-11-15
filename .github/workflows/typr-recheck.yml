@@ -1,4 +1,5 @@
-# Typr: the "infra" label approves a PR that changes Typr's own automation.
+# Typr: the "infra" label approves a PR that changes Typr's own automation; "docs"
+# approves new Markdown files.
 # Adding it re-runs that commit's failed Checks jobs, whose Scope step reads the labels
 # live. Checks itself ignores label events, so no other label starts a macOS run.
 # gh only: never checks out or runs PR code, so pull_request_target is safe here.
@@ -19,7 +20,7 @@ concurrency:
 
 jobs:
   recheck:
-    if: github.event.label.name == 'infra'
+    if: github.event.label.name == 'infra' || github.event.label.name == 'docs'
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
@@ -28,6 +29,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      LABEL: ${{ github.event.label.name }}
     steps:
       - name: Re-run this commit's failed Checks jobs if Linux checks failed
         run: |
@@ -50,7 +52,7 @@ jobs:
           linux=$(gh api "repos/$GH_REPO/actions/runs/$id/jobs" --jq '.jobs[] | select(.name == "Linux checks") | .conclusion')
           if [[ "$conclusion" == failure && "$linux" == failure ]]; then
             gh run rerun "$id" --failed
-            echo "Re-running the failed jobs of Checks run $id with the infra label."
+            echo "Re-running the failed jobs of Checks run $id with the $LABEL label."
           else
             echo "Checks run $id: $conclusion, Linux checks: ${linux:-none}; nothing to re-run."
           fi

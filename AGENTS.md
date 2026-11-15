@@ -8,7 +8,10 @@ commands: [.github/typr/README.md](.github/typr/README.md).
 - Branch `feature/<name>` or `fix/<name>` from current `origin/main` (CI reads the
   prefix). Changes under `.github/` need the `infra` label.
 - The PR description is the record the reviewer checks against: goal, agreed
-  behavior, decisions, what was and wasn't tested. Keep it and affected docs current.
+  behavior, decisions, what was and wasn't tested. Keep it and README current.
+- No new Markdown files for features, plans, task state or reports: rationale goes
+  into the PR description or a short code comment. Agent working files (`TASKS.md`,
+  `reports/`) stay outside the repository. A new `.md` needs the `docs` label.
 - After pushing, fix every numbered finding of the latest **Typr review** and wait
   for the next verdict. `⚠️ NO RESULT`: re-run once, then tell the owner.
 - **Prefer fast integration:** open small PRs promptly; do not wait for simulator

@@ -63,7 +63,8 @@ Typr PR to iPhone: signs an existing manual distribution=unsigned PR archive
   App Store Connect accepted the upload, not that Apple finished processing it.
 - **Runner retry:** `typr-retry.yml` retries a macOS job that never got a
   runner after 5, 10 and 20 minutes (max three attempts, same commit, open PR).
-- **Labels:** adding `infra` re-runs failed CI jobs (`typr-recheck.yml`).
+- **Labels:** `infra` approves `.github/` changes, `docs` approves new Markdown
+  files; adding either re-runs failed CI jobs (`typr-recheck.yml`).
 - **Identity** (`app.json`, validated by `identity.py`): `dev.rudek.typr`,
   `.keyboard`, `.widgets`, `.tests`; App Group `group.dev.rudek.typr`; URL scheme
   `typr`; team `2ZNGF24932`; App Store Connect **Typr Keyboard** (`6832515139`),
