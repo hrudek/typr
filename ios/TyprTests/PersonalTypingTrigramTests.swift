@@ -39,6 +39,21 @@ final class PersonalTypingTrigramTests: XCTestCase {
         print("EVAL R2_2_query_work retainedTrigramLookups=1 fallbackLookups=2 noPreviousLookups=0 rowFollowersMax=8 rerankCandidatesMax=32")
     }
 
+    /// Moved from the research-only neural spike file: the exact discounted probability of
+    /// a selected two-word row, purge of the earlier predecessor and reset to corpus.
+    func testTrigramPrecedenceProbabilityPurgeBackoffAndReset() {
+        var profile: PersonalBigramModel = .init()
+        profile.record("morgen", after: "wir", earlier: "sehen")
+        profile.record("morgen", after: "wir", earlier: "sehen")
+        let selected = profile.select(after: "wir", earlier: "sehen")
+        XCTAssertEqual(selected.context, "sehen wir")
+        XCTAssertEqual(profile.probability("morgen", after: selected.context, corpus: 0.1), 0.55, accuracy: 1e-12)
+        profile.purge("sehen")
+        XCTAssertEqual(profile.select(after: "wir", earlier: "sehen").context, "wir")
+        profile = .init()
+        XCTAssertEqual(profile.probability("morgen", after: nil, corpus: 0.1), 0.1)
+    }
+
     func testTrigramNextWordAndRerankWithBigramFallback() throws {
         let model = try XCTUnwrap(KeyboardContextModelTests.model)
         var personal = PersonalBigramModel()
