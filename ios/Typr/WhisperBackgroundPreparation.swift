@@ -93,8 +93,10 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         guard accepted else { return }
         let request = BGContinuedProcessingTaskRequest(
-            identifier: identifier, title: "Prepare Whisper", subtitle: "Preparing the installed model"
+            identifier: identifier, title: "Prepare Whisper", subtitle: ""
         )
+        // Title and progress only: the system Dynamic Island UI should stay small. Stage text
+        // is shown in the app, never pushed to the task.
         request.strategy = .fail // Never queue a second, stale preparation.
         // Default is zero, not "all supported resources". ANE access uses the separate
         // Background Inference entitlement; the only additional resource bit is GPU.
@@ -132,9 +134,6 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         if #available(iOS 26.0, *), let task = task as? BGContinuedProcessingTask {
             Self.updateTaskProgress(task.progress, from: latestProgress)
-            if let progress = latestProgress {
-                task.updateTitle("Prepare Whisper", subtitle: progress.detail)
-            }
             startHeartbeat(for: task, token: token)
             Self.logger.notice("Continued preparation task started")
         }
@@ -192,7 +191,6 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     func update(_ progress: ModelPreparationProgress) {
         latestProgress = progress
         if #available(iOS 26.0, *), let task = continued as? BGContinuedProcessingTask {
-            task.updateTitle("Prepare Whisper", subtitle: progress.detail)
             Self.updateTaskProgress(task.progress, from: progress)
         }
     }

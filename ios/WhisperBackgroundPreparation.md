@@ -15,7 +15,9 @@ estimate is about 4.5 GB beyond the installed files.
 - On iOS 26+, Typr requests a continued processing task while the app is active.
   Opening the app with an installed, explicitly chosen Whisper model, choosing
   that model, or tapping **Prepare/Try again** starts the work. iOS can show a system
-  Live Activity with preparation status and a cancellation control.
+  Live Activity with a progress indicator and a cancellation control. Typr passes
+  only the title “Prepare Whisper” and an empty subtitle, so the Dynamic Island
+  takes less space; stage details appear only in the app.
 - If iOS declines that request, or on iOS 18–25, only UIKit's limited background
   grace time is available. There is no guaranteed number of minutes.
 - iOS controls admission, scheduling, memory limits and termination. Locking the
