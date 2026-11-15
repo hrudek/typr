@@ -4,6 +4,7 @@ import XCTest
 
 @MainActor
 final class DictationAudioSessionTests: XCTestCase {
+    @MainActor
     private final class SessionSpy {
         var categories: [AVAudioSession.Category] = []
         var modes: [AVAudioSession.Mode] = []
