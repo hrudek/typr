@@ -1,42 +1,20 @@
-# Typr CI for the iPhone app.
-# Fast lane: PRs run Linux checks only; Typr review is a separate required check.
-# Main app changes build an archive and run simulator tests in parallel.
-# Signing/upload never waits for tests. Manual simulator previews remain available.
-#   push main           → app changes: archive → TestFlight; tests in parallel
-#                       → tests/fixtures only: simulator tests, no release
-#                       → docs/offline/pipeline only: no macOS jobs
-#   pull_request        → Linux checks, scope, labels; no macOS allocation
-#   workflow_dispatch   → simulator preview (tests + screenshots, no archive), or a device build
-name: Typr CI
-run-name: "Typr CI · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }} · ${{ inputs.distribution || github.event.action || github.event_name }}"
+# Device archives and signing only. Simulator tests run in typr-simulator.yml.
+name: TestFlight
+run-name: "${{ inputs.distribution == 'unsigned' && 'Unsigned build' || inputs.distribution == 'ad-hoc' && 'Ad-hoc build' || 'TestFlight' }} · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }} · ${{ inputs.distribution || github.event.action || github.event_name }}"
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-    # As OpenCode's checks: no label events, so a label never starts a macOS run. Adding
-    # "infra" re-runs the failed jobs instead (typr-recheck.yml); Scope reads labels live.
-    # All PRs, including drafts, get Linux checks only.
-    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
       distribution:
-        description: simulator previews; unsigned builds; ad-hoc/testflight sign; automatic routes main app/test changes
+        description: Unsigned builds; ad-hoc/TestFlight sign; automatic routes main app changes
         type: choice
-        options: [unsigned, ad-hoc, testflight, simulator, automatic]
+        options: [unsigned, ad-hoc, testflight, automatic]
         default: unsigned
         required: true
       base_sha:
         description: "Automatic lane only: compare main against this merge parent (empty: main's first parent)"
-        type: string
-        default: ""
-      only_testing:
-        description: "Comma-separated -only-testing targets (empty: every test, none: skip tests)"
-        type: string
-        default: ""
-      scenes:
-        description: "Extra screenshot scenes, comma-separated (manual simulator mode only)"
         type: string
         default: ""
 
@@ -44,19 +22,19 @@ permissions:
   contents: read
 
 concurrency:
-  # Main runs must not wait for an older run's simulator/signing jobs.
+  # Main runs must not wait for an older run's signing jobs.
   # Cancellable work is grouped per job below; signing is never auto-cancelled.
   group: typr-ci-${{ github.event_name }}-${{ github.ref }}-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && github.run_id || inputs.distribution || '' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   linux:
     name: Linux checks
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read   # Scope reads the PR's current labels
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -74,48 +52,6 @@ jobs:
       - name: Lint Typr workflows
         # SC2016/SC2129: Markdown backticks in single quotes and one-line-per-fact outputs are intended.
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color -ignore SC2016 -ignore SC2129 .github/workflows/typr-*.yml
-      - name: Whitespace
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: git diff --check "$BASE" HEAD
-      - name: Scope (what this change may touch)
-        if: github.event_name == 'pull_request'
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR: ${{ github.event.pull_request.number }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          base=${BASE:-$(git rev-parse origin/main)}
-          # The PR's labels now, not the event's: a re-run after adding "infra" must see it.
-          LABELS=''
-          if [[ -n "$PR" ]]; then
-            LABELS=$(gh api "repos/$GH_REPO/pulls/$PR" --jq '[.labels[].name] | join(",")')
-          fi
-          export LABELS
-          bash .github/typr/scope.sh "$base" "$HEAD"
-
-  labels:
-    name: Label PR
-    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      pull-requests: write
-      issues: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      PR: ${{ github.event.number }}
-      HEAD_REF: ${{ github.head_ref }}
-    steps:
-      - name: Label by branch
-        run: |
-          case "$HEAD_REF" in
-            feature/*) gh pr edit "$PR" --add-label feature ;;
-          esac
 
   decide:
     name: Decide
@@ -152,153 +88,7 @@ jobs:
           DISTRIBUTION: ${{ inputs.distribution }}
           BASE_SHA: ${{ inputs.base_sha }}
           REPO: ${{ github.server_url }}/${{ github.repository }}
-        run: |
-          set -euo pipefail
-          zero=0000000000000000000000000000000000000000
-          base='' head=$AFTER sign=''
-          case "$EVENT" in
-            push)
-              [[ "$BEFORE" != "$zero" ]] && base=$BEFORE
-              sign=testflight
-              ;;   # Linux checks validate pipeline changes; only app changes ship
-            workflow_dispatch)
-              case "$DISTRIBUTION" in
-                automatic) [[ "$REF" == refs/heads/main ]] \
-                             || { echo 'Automatic distribution only from main'; exit 1; }
-                           sign=testflight ;;
-                unsigned|simulator) ;;
-                ad-hoc) [[ "$REF" == refs/heads/main || "$REF" == refs/heads/feature/* ]] \
-                          || { echo 'Ad-hoc signing only from main or feature/*'; exit 1; }
-                        sign=ad-hoc ;;
-                testflight) [[ "$REF" == refs/heads/main ]] || { echo 'TestFlight only from main'; exit 1; }
-                            sign=testflight ;;
-              esac ;;
-          esac
-          test=true build=true
-          # Bot merges explicitly dispatch this lane (GITHUB_TOKEN pushes do not
-          # trigger push workflows). Compare the dispatched main commit to its parent.
-          if [[ "$EVENT" == workflow_dispatch && "$DISTRIBUTION" == automatic ]]; then
-            if [[ -n "$BASE_SHA" ]]; then
-              [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid base SHA'; exit 1; }
-              base=$BASE_SHA
-            else
-              git init -q "$RUNNER_TEMP/parent"
-              git -C "$RUNNER_TEMP/parent" fetch -q --depth=2 --filter=blob:none "$REPO" "$head"
-              base=$(git -C "$RUNNER_TEMP/parent" rev-parse "$head^")
-            fi
-          fi
-          # Explicit distributions always run, regardless of any supplied baseline.
-          if [[ "$EVENT" == push || "$DISTRIBUTION" == automatic ]] && [[ "$base" =~ ^[0-9a-f]{40}$ ]]; then
-            git init -q "$RUNNER_TEMP/fp"
-            if git -C "$RUNNER_TEMP/fp" fetch -q --depth=1 --filter=blob:none "$REPO" "$base" "$head"; then
-              for mode in app test; do
-                a=$(bash .github/typr/fingerprint.sh "$RUNNER_TEMP/fp" "$base" "$mode")
-                b=$(bash .github/typr/fingerprint.sh "$RUNNER_TEMP/fp" "$head" "$mode")
-                changed=true
-                [[ "$a" != "$b" ]] || changed=false
-                case "$mode" in app) build=$changed ;; test) test=$changed ;; esac
-              done
-            else
-              echo 'Cannot compare app inputs; refusing an automatic build without a baseline.' >&2
-              exit 1
-            fi
-          fi
-          [[ "$build" == true ]] || sign=''
-          echo "test=$test" >> "$GITHUB_OUTPUT"
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "sign=$sign" >> "$GITHUB_OUTPUT"
-          {
-            echo '### Typr CI'
-            echo "| | |"; echo "|---|---|"
-            echo "| Commit | \`${head:0:8}\` |"
-            echo "| Compared with | \`${base:0:8}\` |"
-            echo "| Simulator inputs changed | $test |"
-            echo "| Release inputs changed | $build |"
-            echo "| Signs | ${sign:-nothing} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  test:
-    name: Simulator tests
-    needs: decide
-    # No simulator allocation for PRs; manual branch runs remain available.
-    if: github.event_name != 'pull_request' && (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.decide.outputs.test == 'true' && inputs.only_testing != 'none'
-    concurrency:
-      group: typr-ci-test-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && 'main-auto' || format('{0}-{1}', github.ref, inputs.distribution) }}
-      cancel-in-progress: ${{ github.event_name == 'push' || inputs.distribution == 'automatic' }}
-    runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
-    timeout-minutes: 60
-    env:
-      APP_CONFIG: ${{ needs.decide.outputs.config }}
-      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Select and verify Xcode
-        env:
-          XCODE_PATH: ${{ vars.XCODE_PATH }}
-        run: bash .github/typr/select-xcode.sh
-      - name: Cache keys (Xcode, month)
-        id: cache-keys
-        run: |
-          xcode=$(xcodebuild -version | awk 'NR==1{v=$2} NR==2{b=$3} END{print v "-" b}')
-          echo "spm=typr-spm-$xcode-${{ hashFiles('ios/project.yml') }}" >> "$GITHUB_OUTPUT"
-          # A new compilation cache each month, so it never grows without bound.
-          echo "cas=typr-cas-test-${{ runner.arch }}-$xcode-$(date -u +%Y-%m)-" >> "$GITHUB_OUTPUT"
-      - name: Restore Swift package checkouts
-        id: spm-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: ${{ steps.cache-keys.outputs.spm }}
-      - name: Restore compilation cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ${{ runner.temp }}/CompilationCache
-          key: ${{ steps.cache-keys.outputs.cas }}${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ${{ steps.cache-keys.outputs.cas }}
-      - name: Run unit tests on the simulator
-        id: tests
-        env:
-          ONLY_TESTING: ${{ inputs.only_testing }}
-        run: bash .github/typr/test.sh
-      - name: Screenshots of the app's scenes (same build, no second compile)
-        if: github.event_name == 'workflow_dispatch' && inputs.distribution == 'simulator' && !cancelled() && steps.tests.outcome != 'skipped'
-        continue-on-error: true
-        env:
-          SCENES: ${{ inputs.scenes }}
-        run: bash .github/typr/screenshots.sh
-      - name: Upload screenshots
-        if: github.event_name == 'workflow_dispatch' && inputs.distribution == 'simulator' && !cancelled()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: typr-screenshots-${{ github.run_id }}
-          path: ${{ runner.temp }}/screenshots
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Upload test log and result bundle
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: typr-tests-${{ github.run_id }}
-          path: ${{ runner.temp }}/test-output
-          if-no-files-found: ignore
-          retention-days: 7
-      # Saved from pushes, schedules and manual runs only, never from a PR, so a PR
-      # cannot plant anything that a main (TestFlight) build later restores.
-      - name: Save Swift package checkouts
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && github.event_name != 'pull_request' && steps.spm-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ${{ runner.temp }}/SourcePackages
-          key: ${{ steps.cache-keys.outputs.spm }}
-      - name: Save compilation cache
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && github.event_name != 'pull_request' }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ${{ runner.temp }}/CompilationCache
-          key: ${{ steps.cache-keys.outputs.cas }}${{ github.run_id }}-${{ github.run_attempt }}
-
+        run: bash .github/typr/decide-lanes.sh
 
   build:
     name: Unsigned archive
@@ -453,21 +243,3 @@ jobs:
       - name: Remove signing material
         if: always()
         run: bash .github/typr/cleanup-signing.sh
-
-  status:
-    name: Refresh status
-    needs: [linux, decide, test, build, sign]
-    # The status issue reports main; red runs are fixed locally.
-    if: >-
-      always() && !cancelled() && (github.event_name == 'push' || inputs.distribution == 'automatic')
-      && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - name: Refresh the status issue
-        run: gh workflow run typr-status.yml --ref main

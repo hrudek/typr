@@ -5,7 +5,7 @@ run-name: "Typr runner retry · ${{ github.event.workflow_run.head_branch }} · 
 
 on:
   workflow_run:
-    workflows: ["Typr* CI", "Typr* PR to iPhone"]
+    workflows: ["TestFlight", "Simulator tests", "Typr* PR to iPhone"]
     types: [completed]
 
 permissions:
@@ -22,6 +22,7 @@ jobs:
       && github.event.workflow_run.repository.full_name == github.repository
       && github.event.workflow_run.head_repository.full_name == github.repository
       && (github.event.workflow_run.path == '.github/workflows/typr-ci.yml'
+          || github.event.workflow_run.path == '.github/workflows/typr-simulator.yml'
           || github.event.workflow_run.path == '.github/workflows/typr-ad-hoc.yml')
     runs-on: ubuntu-latest
     timeout-minutes: 25

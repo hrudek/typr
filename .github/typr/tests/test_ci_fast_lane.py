@@ -6,10 +6,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCE = (ROOT / '.github/workflows/typr-ci.yml').read_text()
+SIMULATOR = (ROOT / '.github/workflows/typr-simulator.yml').read_text()
+CHECKS = (ROOT / '.github/workflows/typr-checks.yml').read_text()
+DECIDE = (ROOT / '.github/typr/decide-lanes.sh').read_text()
 
 
 def job(name):
-    return re.split(r'\n  \S', SOURCE.split(f'\n  {name}:\n', 1)[1], maxsplit=1)[0]
+    source = SIMULATOR if name == 'test' else SOURCE
+    return re.split(r'\n  \S', source.split(f'\n  {name}:\n', 1)[1], maxsplit=1)[0]
 
 
 def condition(name, event, distribution='', changed='true', only_testing='', draft=False,
@@ -33,6 +37,21 @@ def condition(name, event, distribution='', changed='true', only_testing='', dra
 
 
 class FastLaneContracts(unittest.TestCase):
+    def test_three_distinct_workflow_results_and_trusted_status(self):
+        for source, name in ((CHECKS, 'Checks'), (SIMULATOR, 'Simulator tests'),
+                             (SOURCE, 'TestFlight')):
+            self.assertIn(f'\nname: {name}\n', source)
+            self.assertIn('branches: [main]', source)
+        self.assertNotIn('macos-', CHECKS)
+        self.assertNotIn('secrets.', SIMULATOR)
+        self.assertNotIn('ARTIFACT_AGE_RECIPIENT', SIMULATOR)
+        self.assertNotIn('only_testing:', SOURCE)
+        status = (ROOT / '.github/workflows/typr-status.yml').read_text()
+        self.assertIn('types: [completed]', status)
+        self.assertIn('ref: main', status)
+        self.assertIn("head_branch == 'main'", status)
+        self.assertIn('head_repository.full_name == github.repository', status)
+
     def test_prs_never_allocate_macos_or_decide(self):
         for draft in (False, True):
             for name in ('test', 'build', 'decide'):
@@ -53,11 +72,11 @@ class FastLaneContracts(unittest.TestCase):
         self.assertEqual(scheduled, ['typr-status.yml'])
         status = (workflows / 'typr-status.yml').read_text()
         self.assertIn("cron: '17 6 * * 1'", status)
-        self.assertIn("if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'", status)
+        self.assertIn("workflows: [Checks, Simulator tests, TestFlight]", status)
         self.assertTrue(condition('test', 'workflow_dispatch', 'simulator'))
         self.assertFalse(condition('build', 'workflow_dispatch', 'simulator'))
         self.assertFalse(condition('test', 'workflow_dispatch', 'simulator', only_testing='none'))
-        self.assertIn('unsigned|simulator) ;;', job('decide'))
+        self.assertIn('unsigned|simulator) ;;', DECIDE)
 
     def test_only_main_pushes_and_required_job_names_stay_stable(self):
         push = re.search(r'^  push:\n(.*?)(?=^  \S)', SOURCE, re.M | re.S).group(1)
@@ -72,7 +91,8 @@ class FastLaneContracts(unittest.TestCase):
             self.assertEqual(re.search(r'^    name: (.+)$', job(key), re.M).group(1), expected)
             names.add(expected)
         self.assertEqual(names, set(reuse.REQUIRED_JOBS))
-        self.assertNotRegex(job('linux'), re.compile(r'^    if:', re.M))
+        checks_linux = CHECKS.split('\n  linux:\n')[1].split('\n  labels:')[0]
+        self.assertNotRegex(checks_linux, re.compile(r'^    if:', re.M))
         self.assertIn("if: github.event_name != 'pull_request'", job('decide'))
         self.assertIn('python3 -m unittest discover -s ios/tools/dictation_log/tests -v', job('linux'))
 
@@ -91,7 +111,7 @@ class FastLaneContracts(unittest.TestCase):
         for name in ('test', 'build'):
             self.assertTrue(condition(name, 'workflow_dispatch', 'automatic'))
             self.assertFalse(condition(name, 'workflow_dispatch', 'automatic', changed='false'))
-        decide = job('decide')
+        decide = job('decide') + DECIDE
         self.assertIn('Automatic distribution only from main', decide)
         self.assertIn('BASE_SHA: ${{ inputs.base_sha }}', decide)
         self.assertIn('base=$BASE_SHA', decide)
@@ -122,9 +142,12 @@ class FastLaneContracts(unittest.TestCase):
         # TestFlight follows the archive alone; red tests are fixed locally afterwards.
         self.assertIn("if: needs.decide.outputs.sign != '' && needs.build.result == 'success'", job('sign'))
         self.assertNotIn('typr-fix', SOURCE)
-        status = job('status')
-        self.assertIn("&& github.ref == 'refs/heads/main'", status)
-        self.assertIn('gh workflow run typr-status.yml --ref main', status)
+        self.assertNotIn('\n  test:\n', SOURCE)
+        self.assertNotIn('\n  build:\n', SIMULATOR)
+        self.assertNotIn('environment: typr-', SIMULATOR)
+        for source in (SOURCE, SIMULATOR):
+            self.assertNotIn('  pull_request:', source)
+            self.assertIn('run: bash .github/typr/decide-lanes.sh', source)
 
 
 if __name__ == '__main__':
