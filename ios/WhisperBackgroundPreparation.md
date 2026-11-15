@@ -38,7 +38,8 @@ estimate is about 4.5 GB beyond the installed files.
   minutes without any callback. The scheduler's exact cadence is undocumented.
 - iOS can reject a foreground submission without an error (observed when the app
   had become active ~20 ms earlier). Typr confirms the task actually started within
-  one second and otherwise retries, up to three attempts while active. Becoming active
+  one second. Otherwise it withdraws that request and retries, up to three attempts
+  while active, so a slow launch cannot start a duplicate task. Becoming active
   again during a running preparation without a continued task requests one again; it
   never starts a second preparation.
 - App preparation spinners and the Metal dot scope stop drawing while the scene is
