@@ -242,11 +242,7 @@ struct ContentView: View {
                     NavigationLink(value: SettingsDestination.statistics) {
                         HStack(spacing: 12) {
                             Image(systemName: "hand.tap").foregroundStyle(TyprTheme.agentBlue)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Statistics").foregroundStyle(TyprTheme.textBase)
-                                Text("Taps · Heat, aim and estimated accuracy")
-                                    .font(.caption).foregroundStyle(TyprTheme.textMuted)
-                            }
+                            Text("Statistics").foregroundStyle(TyprTheme.textBase)
                             Spacer()
                             Image(systemName: "chevron.right").foregroundStyle(TyprTheme.textMuted)
                         }
