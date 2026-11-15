@@ -22,7 +22,7 @@ commands: [.github/typr/README.md](.github/typr/README.md).
 - Every feature adds simulator tests in `ios/TyprTests`. CI runs them after merge;
   locally run only targeted tests when debugging:
   `bash .github/typr/agent-test.sh [Target/Class,…]` (macOS only).
-- On Linux, the checks are the `linux` job in `.github/workflows/typr-ci.yml`.
+- On Linux, the checks are the `linux` job in `.github/workflows/typr-checks.yml`.
 - Report honestly: a written test is not a passing run, a simulator is not a real
   iPhone. Name the exact checks run, failures, and what remains unverified.
 

@@ -56,7 +56,7 @@ def validate_run(run, pr, repo):
     require(run['repository']['full_name'] == repo
             and run['head_repository']['full_name'] == repo, 'Run must belong to this repository')
     require(run['event'] == 'workflow_dispatch'
-            and run['path'] == '.github/workflows/typr-ci.yml', 'Expected a manually dispatched Unsigned build (typr-ci.yml) build')
+            and run['path'] == '.github/workflows/typr-ci.yml', 'Expected a manually dispatched unsigned build (typr-ci.yml)')
     require(run['head_sha'] == pr['head']['sha'] and run['head_branch'] == pr['head']['ref'],
             'PR changed since this run; wait for CI on the current commit')
     # Tests/screenshots may still run or fail; only the required jobs gate reuse.
