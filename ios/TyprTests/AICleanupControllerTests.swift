@@ -38,6 +38,7 @@ private actor CleanupASR: LocalTranscribing {
     func arm() { suspend = true }
     func fail() { shouldThrow = true }
     func resume() { gate?.resume(returning: "Die Katze sitzt auf der Mathe"); gate = nil }
+    func isWaiting() -> Bool { gate != nil }
     func prepare(progressHandler: @escaping @Sendable (ModelPreparationProgress) -> Void) async throws {}
     func transcribe(_ url: URL) async throws -> String {
         if shouldThrow { throw CocoaError(.fileReadUnknown) }
@@ -48,8 +49,30 @@ private actor CleanupASR: LocalTranscribing {
 
 @MainActor
 final class AICleanupControllerTests: XCTestCase {
-    private func settle() async throws {
-        for _ in 0..<8 { try await Task.sleep(for: .milliseconds(25)) }
+    private func ready(_ controller: DictationController) async throws {
+        controller.prepareModel()
+        try await waitForState("model ready") { controller.phase == .ready }
+    }
+
+    /// `prewarms`: the model's total prewarm count once this capture records; a capture admitted to
+    /// Typr cleanup starts a prewarm task in the same step that sets `.recording`.
+    private func record(_ controller: DictationController, job: String, style: DictationStyle? = nil,
+                        copy: Bool = false, model: CleanupTestSession, prewarms: Int) async throws {
+        controller.startRecording(keyboardJobID: job, styleOverride: style, copyToPasteboard: copy)
+        try await waitForState("recording \(job)") {
+            controller.phase == .recording && model.prepareCount == prewarms
+        }
+    }
+
+    /// Teardown drain before the defaults are removed: the transcription task has unwound, no model
+    /// call is in flight, and the fired deadline sleeper (it ignores cancellation, like a late
+    /// wake-up) has run its no-op continuation.
+    private func drain(_ controller: DictationController, model: CleanupTestSession,
+                       clock: CleanupTestSleeper) async throws {
+        controller.cancelCurrentJob()
+        clock.fire()
+        try await waitForState("cleanup controller idle") { controller.isIdleForTest && model.cleansInFlight == 0 }
+        await mainActorBarrier()
     }
 
     func testControllerDeliveryFallbackAndFrozenSwitch() async throws {
@@ -68,13 +91,14 @@ final class AICleanupControllerTests: XCTestCase {
             if mode == 7 { await asr.fail() }
             let controller = DictationController(audio: CleanupAudio(), keyboardBridge: bridge, transcriber: asr,
                 transcriberFactory: { asr }, autoPrepareOnInit: false, cleanup: mode == 3 ? nil : deps)
-            controller.prepareModel(); try await settle()
+            try await ready(controller)
             let style: DictationStyle = mode == 2 ? .verbatim : .polished
-            controller.startRecording(keyboardJobID: "job", styleOverride: style, copyToPasteboard: true)
-            try await settle()
+            try await record(controller, job: "job", style: style, copy: true, model: model,
+                             prewarms: [0, 4, 5, 7].contains(mode) ? 1 : 0)
             if mode == 5 { enabled = false }
             if mode == 6 { enabled = true }
-            controller.finishRecording(); try await settle()
+            controller.finishRecording()
+            try await waitForState("transcription and cleanup finished") { controller.isIdleForTest }
             if mode == 7 {
                 if case .failed = controller.phase {} else { XCTFail("ASR failure must retain existing failure path") }
                 XCTAssertEqual(bg.ends, [1])
@@ -92,7 +116,7 @@ final class AICleanupControllerTests: XCTestCase {
                 let expectedOutcome: CleanupOutcome = cleaned ? .completed : (mode == 4 ? .failed(.generationFailed) : .skipped(mode == 2 ? .verbatim : .off))
                 XCTAssertEqual(observer.events.map(\.outcome), mode == 3 ? [] : [expectedOutcome])
             }
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            try await drain(controller, model: model, clock: clock)
         }
     }
 
@@ -107,23 +131,28 @@ final class AICleanupControllerTests: XCTestCase {
             background: bg, isEnabled: { true }, sleep: clock.sleep, observer: observer)
         let controller = DictationController(audio: CleanupAudio(), keyboardBridge: bridge, transcriber: asr,
             transcriberFactory: { asr }, autoPrepareOnInit: false, cleanup: deps)
-        controller.prepareModel(); try await settle()
-        controller.startRecording(keyboardJobID: "a"); try await settle()
-        controller.finishRecording(); try await settle()
+        try await ready(controller)
+        try await record(controller, job: "a", model: model, prewarms: 1)
+        controller.finishRecording()
+        try await waitForState("A's cleanup model call suspended") { model.gate != nil }
         XCTAssertEqual(controller.phase, .transcribing)
-        controller.cancelCurrentJob(); try await settle()
+        controller.cancelCurrentJob()
+        try await waitForState("A's transcription task unwound") { controller.isIdleForTest }
         XCTAssertTrue(controller.transcript.isEmpty)
         XCTAssertEqual(bg.ends, [1])
-        controller.startRecording(keyboardJobID: "b"); try await settle()
-        controller.finishRecording(); try await settle()
+        // A's cancelled model still holds the reservation: B is not admitted and not prewarmed.
+        try await record(controller, job: "b", model: model, prewarms: 1)
+        controller.finishRecording()
+        try await waitForState("B delivered") { controller.isIdleForTest }
         XCTAssertEqual(controller.transcript, "Die Katze sitzt auf der Mathe.")
         let resultID = bridge.snapshot().resultID
-        model.resume(); try await settle()
+        model.resume()
+        try await waitForState("A's late model call returned") { model.cleansInFlight == 0 }
         XCTAssertEqual(controller.transcript, "Die Katze sitzt auf der Mathe.")
         XCTAssertEqual(bridge.snapshot().resultID, resultID)
         XCTAssertEqual(model.cleanCount, 1)
         XCTAssertEqual(observer.events.map(\.outcome), [.cancelled, .skipped(.busy)])
-        controller.cancelCurrentJob(); clock.fire(); try await settle()
+        try await drain(controller, model: model, clock: clock)
     }
 
     func testExpiryDuringASRAndWarmSessionEndDuringCleanup() async throws {
@@ -139,18 +168,26 @@ final class AICleanupControllerTests: XCTestCase {
                 background: bg, isEnabled: { true }, sleep: clock.sleep)
             let controller = DictationController(audio: CleanupAudio(), keyboardBridge: bridge, transcriber: asr,
                 transcriberFactory: { asr }, autoPrepareOnInit: false, cleanup: deps)
-            controller.prepareModel(); try await settle()
-            controller.selectWarmDuration(.fifteenMinutes); try await settle()
-            controller.startRecording(keyboardJobID: "warm"); try await settle()
-            controller.finishRecording(); try await settle()
+            try await ready(controller)
+            controller.selectWarmDuration(.fifteenMinutes)
+            try await waitForState("warm session active") {
+                controller.keyboardSessionEnabled && controller.phase == .ready
+            }
+            try await record(controller, job: "warm", model: model, prewarms: 1)
+            controller.finishRecording()
+            if expire {
+                try await waitForState("ASR suspended") { await asr.isWaiting() }
+            } else {
+                try await waitForState("cleanup model call suspended") { model.gate != nil }
+            }
             if expire { bg.expiration?(); await asr.resume() }
             else { controller.endWarmSession(); model.resume() }
-            try await settle()
+            try await waitForState("transcription and cleanup finished") { controller.isIdleForTest }
             XCTAssertEqual(controller.phase, .ready)
             XCTAssertEqual(controller.transcript, expire ? "Die Katze sitzt auf der Mathe." : "Die Katze sitzt auf der Matte.")
             XCTAssertEqual(bg.ends, [1])
             XCTAssertEqual(model.cleanCount, expire ? 0 : 1)
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            try await drain(controller, model: model, clock: clock)
         }
     }
 }
