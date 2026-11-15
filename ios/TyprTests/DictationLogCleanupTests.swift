@@ -3,8 +3,24 @@ import XCTest
 
 @MainActor
 final class DictationLogCleanupTests: XCTestCase {
-    private func settle() async {
-        for _ in 0..<20 { await Task.yield() }
+    /// The model task runs first and suspends on the session gate; the deadline task created in the
+    /// same step then registers its sleep.
+    private func modelSuspended(_ session: CleanupTestSession, _ sleeper: CleanupTestSleeper) async throws {
+        try await waitForState("model and deadline suspended") { session.gate != nil && !sleeper.gates.isEmpty }
+    }
+
+    /// The model task records a late answer and releases the reservation in the job that returns
+    /// from `clean`, so no model call in flight means the late answer is recorded.
+    private func modelReturned(_ session: CleanupTestSession) async throws {
+        try await waitForState("model call returned") { session.cleansInFlight == 0 }
+    }
+
+    /// Before `dispose` removes defaults and files: the fired deadline task returns in its next
+    /// main-actor job, and no model task may still hold the reservation.
+    private func drain(_ job: CleanupJob, _ sleeper: CleanupTestSleeper, _ coordinator: CleanupCoordinator,
+                       _ session: CleanupTestSession) async throws {
+        job.finish(); sleeper.fire(); await mainActorBarrier()
+        try await waitForState("cleanup drained") { coordinator.reservedBy == nil && session.cleansInFlight == 0 }
     }
 
     func testAcceptedUnchangedRejectedAndEmptyAnswers() async throws {
@@ -25,7 +41,7 @@ final class DictationLogCleanupTests: XCTestCase {
             job.begin()
             let work = Task { await coordinator.clean(raw, style: mode == 4 ? .notes : .polished,
                 job: job, dependencies: deps, diagnostics: recording) }
-            await settle()
+            // No wait: the model answers at once and the entry is written before `clean` returns.
             let value = await work.value
             time = start.advanced(by: .milliseconds(50))
             let entry = try XCTUnwrap(env.store.entries.first)
@@ -44,7 +60,7 @@ final class DictationLogCleanupTests: XCTestCase {
                 XCTAssertEqual(entry.answerUse, "rejected(\(reason.label)); not used")
                 XCTAssertEqual(entry.cleanupOutcome, "failed(\(reason.label))")
             }
-            job.finish(); sleeper.fire(); await settle()
+            try await drain(job, sleeper, coordinator, session)
             await env.dispose()
         }
     }
@@ -64,8 +80,7 @@ final class DictationLogCleanupTests: XCTestCase {
             job.begin()
             let work = Task { await coordinator.clean("Die Katze sitzt auf der Mathe", style: .polished,
                 job: job, dependencies: deps, diagnostics: a) }
-            await settle()
-            XCTAssertNotNil(session.gate)
+            try await modelSuspended(session, sleeper)
             time = start.advanced(by: .seconds(4))
             if expire { background.expiration?() } else { sleeper.fire() }
             let output = await work.value
@@ -78,7 +93,7 @@ final class DictationLogCleanupTests: XCTestCase {
             b.finish(text: bOutput, beforeSpelling: bOutput)
             let bBefore = env.store.entries.first
             time = start.advanced(by: .milliseconds(6_250))
-            session.resume(); await settle()
+            session.resume(); try await modelReturned(session)
             let late = try XCTUnwrap(env.store.entries.first { $0.id == a.entryID })
             XCTAssertEqual(late.status, .finished)
             XCTAssertEqual(late.aiAnswer?.text, session.result)
@@ -94,7 +109,7 @@ final class DictationLogCleanupTests: XCTestCase {
             XCTAssertEqual(bBefore?.cleanupOutcome, "skipped(busy)")
             XCTAssertEqual(observer.events.count, 2) // Late text is not a second resolution.
             XCTAssertNil(coordinator.reservedBy)
-            job.finish(); sleeper.fire(); await settle()
+            try await drain(job, sleeper, coordinator, session)
             await env.dispose()
         }
     }
@@ -110,13 +125,13 @@ final class DictationLogCleanupTests: XCTestCase {
             job.begin()
             let work = Task { await coordinator.clean("Die Katze sitzt auf der Mathe", style: .polished,
                 job: job, dependencies: deps, diagnostics: recording) }
-            await settle()
+            try await modelSuspended(session, sleeper)
             if mode == 0 { env.store.clear() }
             else if mode == 1 { env.store.setEnabled(false); env.store.setEnabled(true) }
             else { recording.finishIfOpen(.cancelled) }
             coordinator.cancel(job.id)
             _ = await work.value
-            session.resume(); await settle()
+            session.resume(); try await modelReturned(session)
             if mode == 2 {
                 XCTAssertEqual(env.store.entries.first?.status, .cancelled)
                 XCTAssertNil(env.store.entries.first?.aiAnswer)
@@ -125,10 +140,10 @@ final class DictationLogCleanupTests: XCTestCase {
                 XCTAssertEqual(env.store.entries.first?.status, .interrupted)
                 XCTAssertNil(env.store.entries.first?.aiAnswer)
             } else {
-                await env.storage.flush(); await settle()
+                await env.storage.flush(); await mainActorBarrier() // Save completions hop to the main actor.
                 XCTAssertTrue(env.store.entries.isEmpty)
             }
-            job.finish(); sleeper.fire(); await settle()
+            try await drain(job, sleeper, coordinator, session)
             await env.storage.flush()
             XCTAssertEqual(env.persistedEntryCount, mode == 0 ? 0 : 1)
             await env.dispose()
@@ -149,7 +164,7 @@ final class DictationLogCleanupTests: XCTestCase {
         XCTAssertEqual(env.store.entries.first?.cleanupOutcome, "failed(refused)")
         XCTAssertNotNil(env.store.entries.first?.modelMilliseconds)
         XCTAssertNil(env.store.entries.first?.aiAnswer)
-        job.finish(); sleeper.fire(); await settle()
+        try await drain(job, sleeper, coordinator, session)
         await env.dispose()
     }
 
