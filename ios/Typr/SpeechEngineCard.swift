@@ -234,7 +234,7 @@ struct SpeechEngineCard: View {
         switch state.action {
         case .none: break
         case .use: dictation.selectEngine(state.engine)
-        case .prepare: dictation.prepareModel()
+        case .prepare: dictation.prepareModel(userInitiated: true)
         case .download, .retryDownload: installer.install()
         case .cancelDownload: installer.cancel()
         }

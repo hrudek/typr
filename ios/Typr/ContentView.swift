@@ -756,7 +756,7 @@ struct ContentView: View {
 
                                 Button("Try again") {
                                     withAnimation(TyprMotion.stageAnimation(reduceMotion: reduceMotion)) {
-                                        dictation.prepareModel()
+                                        dictation.prepareModel(userInitiated: true)
                                     }
                                 }
                                 .font(.system(size: 15, weight: .semibold))
