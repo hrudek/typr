@@ -20,6 +20,8 @@ nonisolated struct KeyboardSuggestion: Equatable, Sendable {
     var isPersonal = false
     /// Manual-only exact suffix replacement; never trains tap labels or phrase counts.
     var boundary: KeyboardBoundaryDecoder.Candidate?
+    /// An alternative for the word just swiped: swaps it in place, never learned.
+    var isSwipe = false
 
     var willAutoReplace: Bool {
         if case .primary(let auto) = kind { return auto }
@@ -1074,6 +1076,15 @@ final class AutocorrectEngine {
             : DecodeCache(evidence: evidence, languages: languages, generation: generation,
                           resources: spatialDecoder?.resourceRevision ?? -1, outcome: outcome)
         return outcome
+    }
+
+    /// A swiped lexicon word as written: FrequencyWords is lowercase, so German noun casing comes
+    /// only from the dictionary (title case valid, lowercase not), like `GermanAutocorrect.nounSuggestion`.
+    func swipeSpelling(_ word: String, language: SpatialWordDecoder.Language?) -> String {
+        if language == .english || german == nil { return word == "i" ? "I" : word }
+        guard let german, !german.isValid(word) else { return word }
+        let title = word.prefix(1).uppercased() + word.dropFirst()
+        return german.isValid(title) ? title : word
     }
 
     private func spatialSpelling(_ candidate: SpatialWordDecoder.Candidate, token: String) -> (text: String, validated: Bool) {

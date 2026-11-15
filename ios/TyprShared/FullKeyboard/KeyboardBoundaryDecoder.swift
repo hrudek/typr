@@ -97,7 +97,7 @@ nonisolated enum KeyboardBoundaryDecoder {
         "a", "i", "am", "an", "as", "at", "be", "by", "do", "he", "if", "in", "is", "it", "me", "my",
         "no", "of", "oh", "on", "or", "so", "to", "up", "us", "we"
     ]
-    private static let shortPrior = log(0.01)
+    static let shortPrior = log(0.01)
 
     static func shortWords(languages: Set<Language>) -> [String] {
         var words: Set<String> = []

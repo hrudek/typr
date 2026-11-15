@@ -7,7 +7,11 @@ import UIKit
 final class KeyboardKeyPlaneView: UIView {
     let engine: FullKeyboardEngine
     var typrPressed = false { didSet { if typrPressed != oldValue { setNeedsDisplay() } } }
-    var palette = FullKeyboardPalette(isDark: false) { didSet { if palette != oldValue { setNeedsDisplay() } } }
+    var palette = FullKeyboardPalette(isDark: false) { didSet {
+        guard palette != oldValue else { return }
+        trailLayer.strokeColor = palette.actionFill.withAlphaComponent(0.35).cgColor
+        setNeedsDisplay()
+    } }
     var returnLabel = "return" { didSet { if returnLabel != oldValue { setNeedsDisplay() } } }
     var returnSymbol: String? = "return" { didSet { if returnSymbol != oldValue { setNeedsDisplay() } } }
     var returnIsAction = false { didSet { if returnIsAction != oldValue { setNeedsDisplay() } } }
@@ -22,10 +26,18 @@ final class KeyboardKeyPlaneView: UIView {
     private var deleteTimer: Timer?
     private var deleteStartedAt: TimeInterval = 0
     private var accentHoldWork: [Int: DispatchWorkItem] = [:]
+    /// The swipe trail: its own layer so a swipe redraws a path, not every key.
+    private let trailLayer = CAShapeLayer()
 
     init(engine: FullKeyboardEngine) {
         self.engine = engine
         super.init(frame: .zero)
+        trailLayer.fillColor = nil
+        trailLayer.lineWidth = 5
+        trailLayer.lineCap = .round
+        trailLayer.lineJoin = .round
+        trailLayer.strokeColor = palette.actionFill.withAlphaComponent(0.35).cgColor
+        layer.addSublayer(trailLayer)
         isOpaque = false
         backgroundColor = .clear
         isMultipleTouchEnabled = true
@@ -188,7 +200,7 @@ final class KeyboardKeyPlaneView: UIView {
         for touch in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
             guard let id = id(for: touch, creating: true) else { continue }
             let point = touch.location(in: self)
-            engine.touchBegan(id: id, at: point)
+            engine.touchBegan(id: id, at: point, time: touch.timestamp)
             if let kind = engine.touches[id]?.key.kind {
                 onKeyDown?(kind)
                 if kind == .delete { startDeleteRepeat() }
@@ -198,10 +210,19 @@ final class KeyboardKeyPlaneView: UIView {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        defer { updateTrail() }
         for touch in touches {
             guard let id = id(for: touch, creating: false) else { continue }
             let previousKey = engine.touches[id]?.key.kind
-            engine.touchMoved(id: id, to: touch.location(in: self))
+            // Coalesced samples keep the full 120 Hz path for swipe recognition.
+            let samples = (event?.coalescedTouches(for: touch) ?? [touch]).map {
+                (point: $0.location(in: self), time: $0.timestamp)
+            }
+            engine.touchMoved(id: id, to: touch.location(in: self), samples: samples)
+            if engine.touches[id]?.isSwipe == true {
+                cancelAccentTimer(for: id)
+                continue
+            }
             let currentKey = engine.touches[id]?.key.kind
             if currentKey != previousKey {
                 cancelAccentTimer(for: id)
@@ -228,6 +249,21 @@ final class KeyboardKeyPlaneView: UIView {
             if engine.touches[id]?.key.kind == .delete { stopDeleteRepeat() }
             engine.touchCancelled(id: id)
         }
+    }
+
+    /// Called by the owner after engine changes and after each moved batch.
+    func updateTrail() {
+        let points = engine.swipeTrail
+        guard points.count >= 2 else {
+            if trailLayer.path != nil { trailLayer.path = nil }
+            return
+        }
+        let path = CGMutablePath()
+        path.addLines(between: points)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        trailLayer.path = path
+        CATransaction.commit()
     }
 
     func cancelAllTouches() {
