@@ -8,7 +8,7 @@ Implement evidence-supported fix plus simulator regression tests for background 
 
 - [x] Inspect device and implementation: Tailscale read-only access succeeded; GPU background-rendering errors observed, no Core ML/expiration evidence. Preparation root cause remains unconfirmed.
 - [x] Fix concrete progress-reporting contract and background spinners; add technical metadata logging and simulator regression tests (written, not run).
-- [ ] Linux checks and PR/review: local 88 helper + 25 log tests, bash syntax, shellcheck, actionlint, diff check passed. PR pending.
-- [ ] Follow integration/delivery results if merged
+- [x] Linux checks and PR/review: local 88 helper + 25 log tests, bash syntax, shellcheck, actionlint, diff check passed. PR #162 merged as e0d2b630 after Linux + Typr review PASS (6194cb3d); no review findings.
+- [ ] Main delivery: TestFlight run 43720130405 succeeded (upload accepted). Simulator run 43720128607 compiled/executed 906 tests: new regressions passed, 1 pre-existing copy assertion failed (same failure on previous main 43715273830). Fixing stale assertion promptly in fix/whisper-preparation-copy-test; follow-up PR pending. No premerge simulator wait.
 
 Report: reports/whisper-background-failure.md. Raw scoped logs/helper remain private outside Git in ~/.local/share/typr-diagnostics/whisper-background-failure/. No signing or device changes. Real signed-device retest remains required; do not claim the user's preparation failure is reproduced or resolved.
