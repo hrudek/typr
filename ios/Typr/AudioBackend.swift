@@ -28,6 +28,7 @@ extension ActiveAudioCapture {
 @MainActor
 protocol AudioManaging: AnyObject {
     var isKeepaliveRunning: Bool { get }
+    var isOtherAudioPlaying: Bool { get }
     var onSystemEvent: ((AudioSystemEvent) -> Void)? { get set }
     var onUnexpectedCaptureEnd: ((URL, Bool) -> Void)? { get set }
 
@@ -43,6 +44,8 @@ protocol AudioManaging: AnyObject {
 }
 
 extension AudioManaging {
+    var isOtherAudioPlaying: Bool { false }
+
     func ensureKeepalive(allowBluetooth: Bool) throws {
         guard !isKeepaliveRunning else { return }
         try startKeepalive(allowBluetooth: allowBluetooth)
@@ -240,20 +243,17 @@ private final class TapCaptureAdapter: ActiveAudioCapture {
     private let writer: TapFileWriter
     private let router: TapRouter
     private let onFinish: @MainActor (URL, Bool) -> Void
-    private let onStop: @MainActor () -> Void
     private var stopped = false
 
     init(
         url: URL,
         writer: TapFileWriter,
         router: TapRouter,
-        onStop: @escaping @MainActor () -> Void,
         onFinish: @escaping @MainActor (URL, Bool) -> Void
     ) {
         self.url = url
         self.writer = writer
         self.router = router
-        self.onStop = onStop
         self.onFinish = onFinish
     }
 
@@ -278,14 +278,12 @@ private final class TapCaptureAdapter: ActiveAudioCapture {
         stopped = true
         router.detach(writer)
         writer.close()
-        onStop()
     }
 
     func writerEnded(succeeded: Bool) {
         guard !stopped else { return }
         stopped = true
         router.detach(writer)
-        onStop()
         onFinish(url, succeeded)
     }
 }
@@ -303,6 +301,10 @@ final class SystemAudioManager: AudioManaging {
 
     var isKeepaliveRunning: Bool {
         inputGraph.isRunning
+    }
+
+    var isOtherAudioPlaying: Bool {
+        AVAudioSession.sharedInstance().isOtherAudioPlaying
     }
 
     init() {
@@ -333,9 +335,6 @@ final class SystemAudioManager: AudioManaging {
 
     func ensureKeepalive(allowBluetooth: Bool) throws {
         if inputGraph.isRunning, keepaliveAllowsBluetooth == allowBluetooth {
-            // Also retry a failed return to mixing, without restarting the input.
-            // A category refusal must not tear down an otherwise healthy warm input.
-            try? audioSession.refresh(allowBluetooth: allowBluetooth)
             return
         }
         try startKeepalive(allowBluetooth: allowBluetooth)
@@ -362,12 +361,7 @@ final class SystemAudioManager: AudioManaging {
         try ensureKeepalive(allowBluetooth: allowBluetooth)
 
         let writer = try TapFileWriter(url: url, maxDuration: maxDuration)
-        try audioSession.beginCapture(allowBluetooth: allowBluetooth)
-        let capture = TapCaptureAdapter(url: url, writer: writer, router: tapRouter, onStop: { [weak self] in
-            // Stop writing before releasing the interruption, including cancellation and
-            // automatic writer completion. Keep the input alive for the next dictation.
-            try? self?.audioSession.endCapture(allowBluetooth: allowBluetooth)
-        }) { [weak self] finishedURL, ok in
+        let capture = TapCaptureAdapter(url: url, writer: writer, router: tapRouter) { [weak self] finishedURL, ok in
             self?.onUnexpectedCaptureEnd?(finishedURL, ok)
         }
         writer.onEnd = { [weak capture] succeeded in
