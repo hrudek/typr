@@ -133,6 +133,8 @@ struct DictationLogContext: Codable, Equatable, Sendable {
     var cleanupContextCharacters: Int?
     /// `TechGlossary.revision` used for this entry's spelling fixes. nil means not recorded.
     var glossaryRevision: String?
+    /// `CleanupEngine.rawValue` chosen for Typr cleanup. nil: not recorded (older entries: Apple Intelligence).
+    var cleanupEngine: String?
 
     static let maximumLoggedVocabularyTerms = CustomVocabularySettings.maxTermCount
     static func cappedVocabularyTerms(_ terms: [String]) -> [String] {
@@ -164,6 +166,8 @@ struct DictationLogContext: Codable, Equatable, Sendable {
         }
         context.loudestAverageDBFS = loudestAverage
         context.cleanupPath = cleanupPath
+        // Read when the log entry begins; the cleaner reads the same preference per dictation.
+        context.cleanupEngine = cleanupPath == .typr ? CleanupEnginePreferences().engine.rawValue : nil
         context.vocabularyCount = vocabularyCount
         context.vocabularyEnabled = vocabularyEnabled
         context.upstreamCleanupEnabled = upstreamCleanupEnabled

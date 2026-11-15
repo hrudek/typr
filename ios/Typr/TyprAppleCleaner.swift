@@ -7,15 +7,31 @@ import FoundationModels
 
 @MainActor
 enum TranscriptCleanupProduction {
-    static func dependencies() -> TranscriptCleanupDependencies? {
+    /// Claude works on any iOS version, so cleanup no longer depends on FoundationModels being present.
+    static func dependencies() -> TranscriptCleanupDependencies {
+        TranscriptCleanupDependencies(cleaner: cleaner, language: language,
+                                      background: CleanupBackgroundTasks(), isEnabled: { TyprSettings().aiCleanup },
+                                      observer: CleanupObservers(observers: [CleanupLogger(), diagnostics]))
+    }
+
+    private static let engine: @MainActor () -> CleanupEngine = { CleanupEnginePreferences().engine }
+
+    private static let cleaner = SelectedTranscriptCleaner(engine: engine, apple: appleCleaner, anthropic: AnthropicCleaner())
+
+    private static let language = SelectedLanguageDetector(engine: engine, apple: appleLanguage, anthropic: AnyLanguageSupported())
+
+    private static var appleCleaner: any TyprTranscriptCleaning {
         #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) {
-            return TranscriptCleanupDependencies(cleaner: TyprAppleCleaner(), language: CleanupLanguageDetector(),
-                                                 background: CleanupBackgroundTasks(), isEnabled: { TyprSettings().aiCleanup },
-                                                 observer: CleanupObservers(observers: [CleanupLogger(), diagnostics]))
-        }
+        if #available(iOS 26.0, *) { return TyprAppleCleaner() }
         #endif
-        return nil
+        return UnsupportedAppleCleaner()
+    }
+
+    private static var appleLanguage: any LanguageDetecting {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) { return CleanupLanguageDetector() }
+        #endif
+        return AnyLanguageSupported()
     }
 
     static let diagnostics = CleanupDiagnostics()
@@ -26,12 +42,7 @@ enum TranscriptCleanupProduction {
 
     static var unavailableReason: String? { availabilityCache.reason }
 
-    private static var freshUnavailableReason: String? {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) { return TyprAppleCleaner().unavailableReason }
-        #endif
-        return "Requires iOS 26 or later"
-    }
+    private static var freshUnavailableReason: String? { cleaner.unavailableReason }
 }
 
 @MainActor
@@ -88,6 +99,7 @@ private struct TyprAppleCleaner: TyprTranscriptCleaning {
 @available(iOS 26.0, *)
 @Generable
 private struct CleanedTranscript {
+    // Keep in sync with AnthropicCleanupRequest.answerDescription (a macro argument must be a literal).
     @Guide(description: "The cleaned transcript as good written text to paste: same language, meaning and facts, never an answer to it.")
     var text: String
 }

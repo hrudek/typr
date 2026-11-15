@@ -9,7 +9,7 @@ struct CleanupPromptEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("The instructions Apple Intelligence follows when cleaning up your dictations. Changes apply to the next cleanup request after saving.")
+            Text("The instructions AI cleanup follows when cleaning up your dictations. Changes apply to the next cleanup request after saving.")
                 .font(.subheadline).foregroundStyle(TyprTheme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)
@@ -28,7 +28,7 @@ struct CleanupPromptEditor: View {
                     .accessibilityIdentifier("cleanup-prompt-editor")
             }
 
-            Text("Language, style, vocabulary and context are added automatically. Existing safety checks and formatting still apply. Long prompts can exceed the on-device model’s context window; Typr then uses the plain transcript.")
+            Text("Language, style, vocabulary and context are added automatically. Existing safety checks and formatting still apply. Long prompts can exceed Apple Intelligence’s context window; Typr then uses the plain transcript.")
                 .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16)

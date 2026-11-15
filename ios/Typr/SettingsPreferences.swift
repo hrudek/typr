@@ -26,12 +26,30 @@ struct TextProcessingSettingsCard: View {
     @State private var aiCleanup = TyprSettings().aiCleanup
     @State private var cleanupReason = TranscriptCleanupProduction.unavailableReason
     @State private var customPrompt = CleanupPromptPreferences().isCustom
+    @State private var engine = CleanupEnginePreferences().engine
+    @State private var hasAPIKey = AnthropicKeyStore().hasKey
+    @State private var keyDraft = ""
 
     var body: some View {
         VStack(spacing: 24) {
             SettingsSection(title: "AI cleanup") {
-                SettingsToggle(title: "Clean up dictations", detail: "Clearer text with on-device Apple Intelligence. Skipped in Verbatim; plain transcript if unavailable.", isOn: $aiCleanup)
+                SettingsToggle(title: "Clean up dictations", detail: toggleDetail, isOn: $aiCleanup)
                     .onChange(of: aiCleanup) { _, enabled in TyprSettings().aiCleanup = enabled }
+                SettingsDivider()
+                Picker("Cleanup engine", selection: $engine) {
+                    ForEach(CleanupEngine.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .accessibilityIdentifier("cleanup-engine")
+                .onChange(of: engine) { _, selected in
+                    CleanupEnginePreferences().engine = selected
+                    refresh()
+                }
+                if engine == .anthropic {
+                    SettingsDivider()
+                    anthropicKey
+                }
                 if let reason = cleanupReason {
                     Text(reason).font(.subheadline).foregroundStyle(TyprTheme.textMuted)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -55,6 +73,50 @@ struct TextProcessingSettingsCard: View {
         aiCleanup = TyprSettings().aiCleanup
         cleanupReason = TranscriptCleanupProduction.unavailableReason
         customPrompt = CleanupPromptPreferences().isCustom
+        engine = CleanupEnginePreferences().engine
+        hasAPIKey = AnthropicKeyStore().hasKey
+    }
+
+    private var toggleDetail: String {
+        switch engine {
+        case .appleIntelligence: "Clearer text with on-device Apple Intelligence. Skipped in Verbatim; plain transcript if unavailable."
+        case .anthropic: "Clearer text with Claude by Anthropic. Skipped in Verbatim; plain transcript if unavailable."
+        }
+    }
+
+    /// The saved key is never shown again, only whether one exists.
+    private var anthropicKey: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if hasAPIKey {
+                HStack {
+                    Label("Key saved", systemImage: "checkmark.circle")
+                        .font(.body).foregroundStyle(TyprTheme.textBase)
+                    Spacer(minLength: 12)
+                    Button("Remove key", role: .destructive) {
+                        AnthropicKeyStore().remove()
+                        refresh()
+                    }
+                    .accessibilityIdentifier("remove-anthropic-key")
+                }
+            } else {
+                SecureField("Anthropic API key", text: $keyDraft)
+                    .textContentType(.password)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .accessibilityIdentifier("anthropic-key-field")
+                Button("Save key") {
+                    guard AnthropicKeyStore().save(keyDraft) else { return }
+                    keyDraft = ""
+                    refresh()
+                }
+                .disabled(!AnthropicKeyStore.canSave(keyDraft))
+                .accessibilityIdentifier("save-anthropic-key")
+            }
+            Text("Dictations are sent to Anthropic for cleanup. Requires internet; plain transcript if unavailable.")
+                .font(.footnote).foregroundStyle(TyprTheme.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
     }
 }
 
