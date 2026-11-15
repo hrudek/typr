@@ -6,7 +6,10 @@ Implementierung und Dokumentation vorhanden; lokale Linux-Prüfungen erfolgreich
 Simulator-/Device-/Signaturprüfung auf diesem Linux-Rechner nicht ausgeführt.
 PR: https://github.com/hrudek/typr/pull/161 (feature/whisper-background), Labels
 `feature`, `infra`, `no-auto-merge`, `needs-human`. Linux-CI für 0618bf9e grün.
-Erstes Typr-Review: FIX mit einem nummerierten Befund; siehe Review-Verlauf unten.
+Typr review **PASS** und Linux-CI grün auf `2fc39678`; beide vorherigen
+nummerierten Befunde behoben. Feature bleibt bis Owner-Capability-/Profilklärung
+bewusst ungemergt. Dieser abschließende Tracking-Commit ändert keinen App-Code
+und startet die Gates erneut; vor Worker-Abschluss wird auch dessen Ergebnis geprüft.
 
 ## Vereinbartes Verhalten
 
@@ -126,4 +129,9 @@ Background App Refresh/Lock/Force-quit, echte Ressourcenablehnung und Profile.
   explizit beendet werden. Korrigiert zu synchronem `MainActor.assumeIsolated`;
   `expire` → `finish` → `endGrace` läuft jetzt vollständig vor Handler-Rückkehr.
   Reale UIKit-Expiration wurde hier nicht ausgeführt (Linux).
-- Nächster Review-Lauf folgt automatisch auf den Korrektur-Push.
+- Commit `2fc39678`: Typr review **PASS — nothing to fix**, Linux-CI grün.
+  Review bestätigt beide Fixes und die eigenständige Owner-Provisionierungssperre.
+  Run: https://github.com/hrudek/typr/actions/runs/43714605529 .
+- Finale Tracking-Aktualisierung wird gepusht und deren Linux-/Review-Gates vor
+  Rückmeldung erneut abgewartet, ohne auf Simulator zu warten. Worktree wird sauber
+  übergeben. Keine Profile, Secrets oder Portalzustände wurden verändert.
