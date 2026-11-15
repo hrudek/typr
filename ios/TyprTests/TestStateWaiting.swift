@@ -23,6 +23,13 @@ func waitForState(_ description: String, timeout: Duration = .seconds(10),
     }
 }
 
+/// Returns after every main-actor job enqueued before it has run (the main executor is a FIFO
+/// serial queue). For hops whose correct effect is "nothing changed", e.g. a late progress update.
+@MainActor
+func mainActorBarrier() async {
+    await Task { @MainActor in }.value
+}
+
 extension DictationController {
     /// Drain signal before teardown: no capture, permission request, transcription (including the
     /// unwind of a cancelled one) or cleanup job is left, and no phase is mid-work.
