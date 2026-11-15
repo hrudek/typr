@@ -5,7 +5,8 @@ import XCTest
 /// Test prefixes include a held-out lead-in, not new target transitions: measures repeated
 /// personal associations, not language generalization. Phrases and training paths live in
 /// `PersonalTrigramPhraseFixtures`; exact counts and earlier-context selection are gated by
-/// `PersonalTypingTrigramTests` in the default run.
+/// `PersonalTypingTrigramTests` in the default run. Run with:
+/// bash ios/tools/run-research-tests.sh <simulator destination>.
 @MainActor
 final class PersonalTypingTrigramEvaluationTests: XCTestCase {
     private typealias Fixtures = PersonalTrigramPhraseFixtures
@@ -29,8 +30,7 @@ final class PersonalTypingTrigramEvaluationTests: XCTestCase {
         let rest = chips.filter { $0 != best }
         return ([best].compactMap { $0 } + rest).map { KeyboardContextModel.key($0.replacement) }
     }
-#if TYPR_RESEARCH
-    // Research-only sweep: recall is printed, not gated.
+    // Research-only (research.yml): recall is printed, not gated.
     func testRepeatedPersonalPhrasesAndAcceptedChoices() throws {
         let model = try XCTUnwrap(Self.model)
         for language in ["de", "en", "mixed"] {
@@ -59,7 +59,6 @@ final class PersonalTypingTrigramEvaluationTests: XCTestCase {
             }
         }
     }
-#endif // TYPR_RESEARCH
 
     func testPublicHeldoutWithTwoWordPrefixes() throws {
         let model = try XCTUnwrap(Self.model)
