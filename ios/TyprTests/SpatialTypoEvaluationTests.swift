@@ -164,11 +164,10 @@ final class SpatialTypoEvaluationTests: XCTestCase {
             let failed = known.incomplete + unknown.incomplete + known.unavailable + unknown.unavailable
             XCTAssertLessThanOrEqual(Double(failed) / Double(controls.count), 0.05, "control evidence/search availability")
         }
-        // Keep real noisy-touch decoder prefix sentinels from each language, with both
+        // Keep real noisy-touch decoder prefix sentinels from four fixed control words, with both
         // edit modes and both seeds/sigmas. Lexical SpatialPrefixSearch is a different path.
         // These replace the diagnostic-only all-prefix sweep, not a prefix-quality gate.
-        for word in ["arbeit", "always"] {
-            let index = try XCTUnwrap(controls.firstIndex(of: word))
+        for (index, word) in controls.enumerated().filter({ $0.element.count >= 6 }).prefix(4) {
             let full = try evidence(word, ordinal: 90_000 + index, seed: seed, sigma: sigma)
             for length in [3, word.count - 1] {
                 let prefix = KeyboardTouchWord(layout: grid, samples: Array(full.samples.prefix(length)))
