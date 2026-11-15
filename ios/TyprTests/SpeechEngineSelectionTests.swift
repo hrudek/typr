@@ -276,7 +276,9 @@ private final class EngineFixture {
          vocabularyTerms: [String] = [],
          cleanup: ((UserDefaults) -> TranscriptCleanupDependencies)? = nil,
          dictationLog: DictationLogStore? = nil,
-         defaults existing: UserDefaults? = nil) {
+         defaults existing: UserDefaults? = nil,
+         whisperBackground: (any WhisperPreparationScheduling)? = nil,
+         deferPreparationUntilActive: Bool = false) {
         defaults = existing ?? UserDefaults(suiteName: suite)!
         settings = TyprSettings(defaults: defaults)
         if existing == nil {
@@ -301,7 +303,9 @@ private final class EngineFixture {
             cleanup: cleanup?(defaults),
             dictationLog: dictationLog,
             languageSettings: settings,
-            engineProvider: self.provider
+            engineProvider: self.provider,
+            whisperBackground: whisperBackground,
+            deferPreparationUntilActive: deferPreparationUntilActive
         )
     }
 
@@ -388,10 +392,14 @@ final class SpeechEngineSelectionTests: XCTestCase {
                          vocabularyTerms: [String] = [],
                          cleanup: ((UserDefaults) -> TranscriptCleanupDependencies)? = nil,
                          dictationLog: DictationLogStore? = nil,
-                         defaults: UserDefaults? = nil) -> EngineFixture {
+                         defaults: UserDefaults? = nil,
+                         whisperBackground: (any WhisperPreparationScheduling)? = nil,
+                         deferPreparationUntilActive: Bool = false) -> EngineFixture {
         let made = EngineFixture(preferred: preferred, language: language, autoPrepare: autoPrepare, provider: provider,
                                  transcriberFactory: transcriberFactory, vocabularyTerms: vocabularyTerms,
-                                 cleanup: cleanup, dictationLog: dictationLog, defaults: defaults)
+                                 cleanup: cleanup, dictationLog: dictationLog, defaults: defaults,
+                                 whisperBackground: whisperBackground,
+                                 deferPreparationUntilActive: deferPreparationUntilActive)
         fixtures.append(made)
         return made
     }
@@ -1430,5 +1438,171 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertTrue(vocabularies.first?.contains("Rudek") == true, "the hint list is still passed (and ignored by Whisper)")
         let languages = await whisper.languages
         XCTAssertEqual(languages, [.german])
+    }
+}
+
+@MainActor
+private final class FakeWhisperBackground: WhisperPreparationScheduling {
+    var expirations: [@MainActor () -> Void] = []
+    var finishes: [Bool] = []
+    var updates: [ModelPreparationProgress] = []
+    var maintenance: [Bool] = []
+    func begin(expiration: @escaping @MainActor () -> Void) { expirations.append(expiration) }
+    func update(_ progress: ModelPreparationProgress) { updates.append(progress) }
+    func finish(success: Bool) { finishes.append(success) }
+    func scheduleMaintenance(needed: Bool) { maintenance.append(needed) }
+}
+
+// These simulator tests drive the real controller with a cancellable runtime stand-in. They
+// do not claim the simulator grants background execution, exercises ANE, or honors scheduling.
+extension SpeechEngineSelectionTests {
+    func testInstalledWhisperWaitsForForegroundThenPreparesOnlyOnce() async throws {
+        let background = FakeWhisperBackground()
+        let f = fixture(preferred: .whisperLargeV3Turbo, autoPrepare: true,
+                        whisperBackground: background, deferPreparationUntilActive: true)
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertTrue(f.fake.created.isEmpty, "background-only launch must wait for the registered handler")
+        f.controller.noteSceneDidBecomeActive()
+        f.controller.noteSceneDidBecomeActive()
+        f.controller.prepareInstalledWhisperIfNeeded() // maintenance joins, it never creates another model
+        try await f.waitUntil { f.controller.phase == .ready }
+        f.controller.noteSceneDidBecomeActive()
+        XCTAssertEqual(f.fake.explicitCalls, [.whisperLargeV3Turbo])
+        XCTAssertEqual(background.expirations.count, 1)
+        XCTAssertEqual(background.finishes.last, true)
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+        XCTAssertTrue(f.audio.captures.isEmpty)
+    }
+
+    func testBackgroundOnlyLaunchDefersOtherEnginePreparationToo() async throws {
+        let f = fixture(preferred: .appleSpeech, autoPrepare: true, deferPreparationUntilActive: true)
+        await Task.yield()
+        XCTAssertTrue(f.fake.created.isEmpty, "a stale maintenance wake must not prepare another engine")
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.fake.explicitCalls, [.appleSpeech])
+    }
+
+    func testOpeningDoesNotDownloadMissingWhisperOrChangeOtherEngine() async throws {
+        let choices: [SpeechEngineChoice?] = [nil, .appleSpeech, .parakeetV2, .whisperLargeV3Turbo]
+        for preferred in choices {
+            let background = FakeWhisperBackground()
+            let provider = FakeEngineProvider()
+            provider.installed = []
+            let f = fixture(preferred: preferred, provider: provider, whisperBackground: background)
+            f.controller.noteSceneDidBecomeActive()
+            f.controller.prepareInstalledWhisperIfNeeded()
+            await Task.yield()
+            XCTAssertTrue(provider.explicitCalls.isEmpty)
+            XCTAssertTrue(provider.automaticCalls.isEmpty)
+            XCTAssertTrue(background.expirations.isEmpty)
+            XCTAssertEqual(background.maintenance.last, false)
+            XCTAssertEqual(f.controller.preferredEngine, preferred)
+            XCTAssertFalse(f.audio.isKeepaliveRunning)
+        }
+    }
+
+    func testExpirationCannotPublishLateReadyAndRetryWaitsForOldModel() async throws {
+        let background = FakeWhisperBackground()
+        let old = EngineASR(.whisperLargeV3Turbo)
+        await old.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.queued[.whisperLargeV3Turbo] = [old]
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { provider.created.count == 1 }
+        // Ensure the cancellation-ignoring fake has actually entered its model operation.
+        for _ in 0..<100 {
+            if await old.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let count = await old.prepareCount
+        XCTAssertEqual(count, 1)
+        let expire = try XCTUnwrap(background.expirations.first)
+        expire()
+        XCTAssertTrue(f.controller.phase.isFailure)
+        XCTAssertFalse(f.controller.isModelReady)
+        XCTAssertNil(f.controller.currentEngine)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.settle()
+        XCTAssertEqual(provider.created.count, 1, "a retry must not overlap a non-interruptible Core ML call")
+        await old.releasePrepare()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(provider.created.count, 2)
+        expire() // late expiration from the previous lease must not invalidate the new engine
+        XCTAssertEqual(f.controller.phase, .ready)
+        XCTAssertEqual(background.finishes.filter { $0 }.count, 1)
+        XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo)
+    }
+
+    func testBackgroundingKeepsOnePreparationAndDoesNotStartAudio() async throws {
+        let background = FakeWhisperBackground()
+        let whisper = EngineASR(.whisperLargeV3Turbo)
+        await whisper.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.queued[.whisperLargeV3Turbo] = [whisper]
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { provider.created.count == 1 }
+        f.controller.noteSceneDidEnterBackground()
+        f.controller.prepareInstalledWhisperIfNeeded()
+        XCTAssertEqual(background.expirations.count, 1)
+        XCTAssertEqual(background.maintenance.last, true)
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+        await whisper.releasePrepare()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(background.finishes.last, true)
+        XCTAssertEqual(provider.created.count, 1)
+    }
+
+    func testMaintenanceUsesChosenLanguageAndDoesNotLaunchHandoff() async throws {
+        let background = FakeWhisperBackground()
+        let f = fixture(preferred: .whisperLargeV3Turbo, language: .german, whisperBackground: background)
+        f.controller.prepareInstalledWhisperIfNeeded()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.fake.explicitLanguages, [.german])
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+        XCTAssertTrue(f.audio.captures.isEmpty)
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+    }
+
+    func testPreparationResourceFailureCompletesUnsuccessfullyWithoutSwitchingEngine() async throws {
+        let background = FakeWhisperBackground()
+        let whisper = EngineASR(.whisperLargeV3Turbo)
+        let error = WhisperTranscriber.TranscriberError.preparationFailed("Resources unavailable")
+        await whisper.setPrepareFailure(error)
+        let provider = FakeEngineProvider()
+        provider.queued[.whisperLargeV3Turbo] = [whisper]
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        f.controller.prepareInstalledWhisperIfNeeded()
+        try await f.waitUntil { f.controller.phase.isFailure }
+        XCTAssertEqual(f.controller.phase, .failed(error.localizedDescription))
+        XCTAssertEqual(background.finishes.last, false)
+        XCTAssertFalse(f.controller.isModelReady)
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+        XCTAssertTrue(provider.automaticCalls.isEmpty)
+        XCTAssertFalse(error.localizedDescription.contains("Download"))
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+    }
+
+    func testSwitchingAwayInvalidatesWhisperExpirationAndMaintenance() async throws {
+        let background = FakeWhisperBackground()
+        let whisper = EngineASR(.whisperLargeV3Turbo)
+        await whisper.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.queued[.whisperLargeV3Turbo] = [whisper]
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { provider.created.count == 1 }
+        let expire = try XCTUnwrap(background.expirations.first)
+        XCTAssertEqual(f.controller.selectEngine(.parakeetV2), .selected)
+        expire()
+        await whisper.releasePrepare()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV2)
+        XCTAssertEqual(background.maintenance.last, false)
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
     }
 }

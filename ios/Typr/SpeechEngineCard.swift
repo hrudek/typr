@@ -68,7 +68,7 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
             : (isChosen ? "Chosen" : nil)
         let warning = languageWarning(engine: engine, language: language)
         let note: String? = isWhisper
-            ? "First use optimizes the model for several minutes. Vocabulary and the tech glossary apply after recognition, not as Whisper hints."
+            ? "Opening Typr prepares the installed, chosen model automatically. First optimization can take several minutes. iOS may continue it in the background, but can pause or stop it; reopen Typr to retry. Vocabulary and the tech glossary apply after recognition, not as Whisper hints."
             : nil
 
         func row(_ status: String, progress: Double? = nil, isIndeterminate: Bool = false, action: Action = .none, title: String? = nil) -> SpeechEngineRowState {

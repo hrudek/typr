@@ -92,8 +92,11 @@ nonisolated enum WhisperModelSpec {
     /// Whisper V3's vocabulary size; any other logits size is a wrong or corrupt model.
     static let expectedLogitsSize = 51_866
 
-    /// No GPU: iOS denies GPU work in the background, where keyboard dictations finish.
-    /// (WhisperKit forces .cpuOnly in the Simulator regardless.)
+    /// No GPU: background GPU use requires device support, a resource request and a separate
+    /// entitlement. CPU/ANE do not request that resource. On iOS 27, background ANE additionally
+    /// requires Background Inference (app entitlement + provisioning profile); a continued task
+    /// alone does not grant it. Core ML still controls resource availability and may fail.
+    /// WhisperKit forces .cpuOnly in the Simulator, which cannot validate ANE behavior.
     static let melComputeUnits: MLComputeUnits = .cpuOnly
     static let audioEncoderComputeUnits: MLComputeUnits = .cpuAndNeuralEngine
     static let textDecoderComputeUnits: MLComputeUnits = .cpuAndNeuralEngine

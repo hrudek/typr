@@ -57,8 +57,12 @@ targets:
         NSSpeechRecognitionUsageDescription: Typr uses Apple's on-device SpeechTranscriber to turn your recording into text.
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
+        BGTaskSchedulerPermittedIdentifiers:
+          - dev.rudek.typr.whisper-maintenance
+          - dev.rudek.typr.whisper-prepare.*
         UIBackgroundModes:
           - audio
+          - processing
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:
