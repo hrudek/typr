@@ -2,7 +2,11 @@
 
 ## State
 
-Fix prepared on `fix/whisper-background-failure`; PR/review pending. No subworkers.
+PR [#162](https://github.com/hrudek/typr/pull/162) merged as `e0d2b630` after
+Linux and Typr review PASS on `6194cb3d` (no findings). Original branch:
+`fix/whisper-background-failure`. Follow-up branch `fix/whisper-preparation-copy-test`
+repairs a pre-existing failing simulator assertion found while following delivery.
+No subworkers.
 
 ## Device evidence (2026-11-15)
 
@@ -68,6 +72,20 @@ v1.7.11 with workflow flags, and `git diff --check`. The host's unconfigured Go 
 initially rejected actionlint; reran successfully with `mise exec go@1.27.3` (no
 configuration edits).
 
-No simulator execution on this Linux host. No fix installed or exercised on iPhone.
-Need a signed release retest and, if failure persists, a scoped capture during a
-fresh attempt including the new technical preparation/scheduler diagnostics.
+No simulator execution on this Linux host. Main CI simulator run
+[43720128607](https://github.com/hrudek/typr/actions/runs/43720128607) **compiled and
+executed 906 tests, with one failure**. Both new tests (milestone accounting and
+resource-failure foreground retry) and the expanded component progress test passed.
+The only failure was the stale `First use optimizes` copy assertion at
+`SpeechEngineSelectionTests.swift:452`. Previous main run
+[43715273830](https://github.com/hrudek/typr/actions/runs/43715273830) has exactly the
+same failure (904 tests). PR #161 changed the copy to automatic preparation /
+`First optimization`; its test assertion was not updated. Follow-up updates the
+assertion to the current automatic-preparation, optimization and retry contract;
+no production copy or behavior changes.
+
+Main TestFlight run [43720130405](https://github.com/hrudek/typr/actions/runs/43720130405)
+succeeded, including archive, signing and upload. This proves upload acceptance,
+not Apple processing or tester installation. No fixed build installed or exercised
+on iPhone. Need a signed release retest and, if failure persists, a scoped capture
+during a fresh attempt including the new technical preparation/scheduler diagnostics.

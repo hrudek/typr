@@ -449,8 +449,10 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertNil(missing.progress)
         XCTAssertNotNil(missing.note)
         XCTAssertTrue(missing.note?.contains("not as Whisper hints") == true)
-        XCTAssertTrue(missing.note?.contains("First use optimizes") == true)
+        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
+        XCTAssertTrue(missing.note?.contains("First optimization") == true)
         XCTAssertTrue(missing.note?.contains("several minutes") == true, "disclose optimization before choosing Use")
+        XCTAssertTrue(missing.note?.contains("can pause or stop it; reopen Typr to retry") == true)
         XCTAssertNil(row(.appleSpeech).note)
 
         let ready = row(install: .installed)
