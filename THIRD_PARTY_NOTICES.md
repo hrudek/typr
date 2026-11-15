@@ -358,6 +358,34 @@ candidate ranking ideas from iikb `LanguageModel.swift` / `Corrector.swift` at
 MIT, **Copyright (c) 2026 Bassim Shahidy**. The full existing iikb notice above
 covers this adaptation; no duplicate notice or iikb resource is included.
 
+## Swipe typing (FUTO Swipe encoder, iikb swipe code)
+
+`ios/TyprShared/FullKeyboard/SwipeEncoder.swift` and `SwipeDecoder.swift` translate the
+pure-Swift swipe encoder kernels, path resampling and CTC prefix beam search over a word trie
+from iikb `Packages/KeyboardModules/Sources/KeyboardCore/Correction/{Swipe,SwipeKernels,SwipeLayout,SwipeMath,SwipeNetwork,SwipeSearch}.swift`
+and `Tools/SwipeBuilder` at
+[`f42bad59ce3c0f6f35c7ec0cf727d0b67c146608`](https://github.com/AVGVSTVS96/iikb/tree/f42bad59ce3c0f6f35c7ec0cf727d0b67c146608),
+MIT, **Copyright (c) 2026 Bassim Shahidy** (license re-verified at that revision; the full
+iikb notice above applies). Typr's changes: its own TSE1 weight file, per-language folded
+ä/ö/ü/ß tries built from Typr's word lists, bilingual merging and no decoder model.
+No iikb swipe file (`*.swipe`) or word list is bundled.
+
+`ios/TyprShared/FullKeyboard/SwipeModel/swipe-encoder.tse` holds the encoder weights of
+**FUTO Swipe** (`honorable_sturgeon/model_fp32.pte`) from
+[futo-org/futo-swipe at `0a9a44bbe4d5b8aa8d1ff579ffc40d4861ae2467`](https://huggingface.co/futo-org/futo-swipe/tree/0a9a44bbe4d5b8aa8d1ff579ffc40d4861ae2467),
+sha256 `725242bab5d14345e96ff214e8de2bfbc1f962c232d320df9c24cb82ffd1fbaf`, under the
+**FUTO Model Weights License 1.0** (custom, permissive, not GPL-family). The weights were
+modified: converted and repacked by `ios/tools/swipe_model/build.py` (transposed, zero-padded
+float32, not retrained); FUTO's decoder model is not included. The license requires a visible
+end-user notice: Typr's keyboard settings show “Swipe typing powered by FUTO Swipe.” The full
+license text and the modification notice ship next to the weights in
+[ios/TyprShared/FullKeyboard/SwipeModel/LICENSE-FUTO-SWIPE.txt](ios/TyprShared/FullKeyboard/SwipeModel/LICENSE-FUTO-SWIPE.txt),
+in both the app and the keyboard. FUTO does not endorse Typr.
+
+The evaluation swipes used during development (FUTO
+[swipe.futo.org dataset](https://huggingface.co/datasets/futo-org/swipe.futo.org) at
+`d71bf5fd7f45b3e7c2ed2d76a21b0dbd3b4ba566`, MIT) are not bundled or committed.
+
 The separate `keyboard-de.tbg` / `keyboard-en.tbg` statistics adapt:
 
 - **Common Voice and its sentence-collector contributors**, DE/EN text at

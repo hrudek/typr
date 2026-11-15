@@ -276,6 +276,8 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         flushLearning()
         discardTouchEvidence()
         dismissStyleMenu()
+        // The folded swipe tries rebuild on the next swipe; the mapped model weights cost no dirty memory.
+        Task { await SwipeRecognizer.shared.releaseLexicons() }
         if !showsRecording, let panel = recordingPanel {
             panel.tearDown()
             panel.removeFromSuperview()
@@ -625,6 +627,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     private func engineChanged() {
         plane.setNeedsDisplay()
+        plane.updateTrail()
         updateCallout()
         refreshStrip()
         if globeButton.isHidden != (engine.layout.key(.globe) == nil) || typrKey.frame != engine.layout.key(.typr)?.hitFrame {

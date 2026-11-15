@@ -24,8 +24,11 @@ targets:
     sources:
       - Typr
       - path: TyprShared
-        excludes: [FullKeyboard/WordData]
+        excludes: [FullKeyboard/WordData, FullKeyboard/SwipeModel]
       - path: TyprShared/FullKeyboard/WordData
+        type: folder
+        buildPhase: resources
+      - path: TyprShared/FullKeyboard/SwipeModel
         type: folder
         buildPhase: resources
       - TyprActivity
@@ -98,8 +101,11 @@ targets:
     sources:
       - TyprKeyboard
       - path: TyprShared
-        excludes: [FullKeyboard/WordData]
+        excludes: [FullKeyboard/WordData, FullKeyboard/SwipeModel]
       - path: TyprShared/FullKeyboard/WordData
+        type: folder
+        buildPhase: resources
+      - path: TyprShared/FullKeyboard/SwipeModel
         type: folder
         buildPhase: resources
       - Branding/TyprWordmark.swift

@@ -12,6 +12,8 @@ struct KeyboardSettingsCard: View {
     @State private var autocorrectEnglish = TyprSettings().autocorrectEnglish
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
 
+    static let swipeNotice = "Swipe typing powered by FUTO Swipe."
+
     var body: some View {
         VStack(spacing: 24) {
             VStack(alignment: .leading, spacing: 8) {
@@ -31,6 +33,10 @@ struct KeyboardSettingsCard: View {
                         .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                         .padding(.horizontal, 16)
                 }
+                // Required end-user notice of the FUTO Model Weights License (SwipeModel/LICENSE-FUTO-SWIPE.txt).
+                Text("Slide across the letters to type a word. \(Self.swipeNotice)")
+                    .font(.footnote).foregroundStyle(TyprTheme.textMuted)
+                    .padding(.horizontal, 16)
             }
             if fullKeyboard {
                 SettingsSection(title: "Typing assistance") {

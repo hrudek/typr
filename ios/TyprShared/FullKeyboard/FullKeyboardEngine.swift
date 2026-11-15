@@ -67,12 +67,30 @@ final class FullKeyboardEngine {
         /// True once a spacebar press crosses `trackpadActivationDistance`.
         var isTrackpad = false
         var trackpadAnchorX: CGFloat = 0
+        /// Samples of a letter press that may still become a swipe; nil once it cannot.
+        var swipePath: [SwipePoint]?
+        /// Crossed `swipeActivation`: no key, preview or accent menu any more; a word on release.
+        var isSwipe = false
+    }
+
+    /// The word a swipe inserted, its cased alternatives and the context right after it. While the
+    /// context is unchanged, the strip offers the alternatives, Delete removes the whole word and
+    /// Space/punctuation leave it alone (never autocorrected, never learned).
+    struct SwipeWord: Equatable {
+        var inserted: String
+        let words: [String]
+        var context: String?
     }
 
     static let accentHoldDelay: TimeInterval = 0.40
     static let accentSlop: CGFloat = 10
     static let trackpadActivationDistance: CGFloat = 10
     static let trackpadPointsPerCharacter: CGFloat = 7.5
+    /// A letter press becomes a swipe after travelling this many letter widths (iikb: 0.8):
+    /// beyond a slipped tap, short of a deliberate slide.
+    static let swipeActivation: CGFloat = 0.8
+    /// Coalesced samples of one swipe; older halves are thinned beyond this.
+    static let swipePathLimit = 1_024
 
     private(set) var shift = ShiftStateMachine()
     private(set) var layerState = KeyboardLayerState()
@@ -84,6 +102,13 @@ final class FullKeyboardEngine {
 
     private(set) var activeAccentMenu: AccentMenu?
     private var activeAccentTouchID: Int?
+    /// The active swipe's points for the trail; empty when none. RAM-only, cleared on release.
+    private(set) var swipeTrail: [CGPoint] = []
+    private(set) var swipeWord: SwipeWord?
+    /// Bumped by anything that makes a decoding swipe stale (new touch, text/field/layout change).
+    private var swipeGeneration: UInt64 = 0
+    private var swipeTask: Task<Void, Never>?
+    private let swipeDecoder: SwipeDecoding
     private(set) var suggestions: [KeyboardSuggestion] = []
     private let suggestionWorker: KeyboardSuggestionWorker
     private let suggestionEngineID = UUID()
@@ -181,8 +206,10 @@ final class FullKeyboardEngine {
 
     init(target: KeyboardTextTarget, autocorrect: AutocorrectEngine? = nil,
          suggestionWorker: KeyboardSuggestionWorker? = nil,
-         statistics: UsageStatisticsSession? = nil) {
+         statistics: UsageStatisticsSession? = nil,
+         swipeDecoder: SwipeDecoding? = nil) {
         self.statistics = statistics
+        self.swipeDecoder = swipeDecoder ?? { await SwipeRecognizer.shared.decode($0) }
         self.target = target
         self.autocorrect = autocorrect ?? AutocorrectEngine()
         self.suggestionWorker = suggestionWorker ?? KeyboardSuggestionWorker()
@@ -199,7 +226,7 @@ final class FullKeyboardEngine {
     var previewKey: KeyboardKey? {
         guard activeAccentMenu == nil else { return nil }
         for id in touchOrder.reversed() {
-            if let touch = touches[id], touch.key.character != nil, !touch.committed {
+            if let touch = touches[id], touch.key.character != nil, !touch.committed, !touch.isSwipe {
                 return touch.key
             }
         }
@@ -207,7 +234,7 @@ final class FullKeyboardEngine {
     }
 
     var pressedKinds: Set<KeyKind> {
-        Set(touches.values.map(\.key.kind))
+        Set(touches.values.filter { !$0.isSwipe }.map(\.key.kind))
     }
 
     func displayLabel(for key: KeyboardKey) -> String {
@@ -264,6 +291,8 @@ final class FullKeyboardEngine {
     private func invalidateTouchEvidence(resetFastAim: Bool = true) {
         textRevision &+= 1
         suggestionWorker.cancel()
+        cancelPendingSwipe()
+        swipeWord = nil
         autocorrect.discardEvidence(resetFastAim: resetFastAim)
         for id in touchOrder {
             touches[id]?.hasUnambiguousPoint = false
@@ -292,6 +321,13 @@ final class FullKeyboardEngine {
         // Current before returning to the event loop, independent of strip/worker readiness.
         attribution = autocorrect.keyMap(layout: layout, context: ownership.context,
                                         permitsCorrection: ownership.permitsCorrection).map { (ownership, $0) }
+        if swipeWord?.context != ownership.context { swipeWord = nil }
+        if let swipeWord, showsStrip {
+            suggestionWorker.cancel()
+            publishSuggestions(swipeChips(swipeWord, ownership: ownership), ownership: ownership,
+                               evidence: nil, final: true)
+            return
+        }
         // No current word: only corpus next-word predictions after a separator (no tap evidence).
         guard showsStrip, field == .text, ownership.permitsCorrection,
               ownership.token.map({ $0.count <= Self.suggestionTokenLimit && $0.utf8.count <= 256 })
@@ -301,7 +337,7 @@ final class FullKeyboardEngine {
             return
         }
         if let published, published.final, published.evidence == evidence,
-           published.ownership.hasSameContent(as: ownership) {
+           published.ownership.hasSameContent(as: ownership), !suggestions.contains(where: \.isSwipe) {
             // Same word, taps and configuration (warmup, poll, remount): keep the finished
             // ranking without flicker, re-owned by this revision while the checker step reruns.
             publishSuggestions(suggestions.map { var owned = $0; owned.ownership = ownership; return owned },
@@ -373,6 +409,10 @@ final class FullKeyboardEngine {
     func waitForSuggestions() async { await suggestionWorker.waitUntilIdle() }
 
     func acceptSuggestion(_ suggestion: KeyboardSuggestion) {
+        if suggestion.isSwipe {
+            replaceSwipeWord(with: suggestion)
+            return
+        }
         autocorrect.syncLearning()
         guard let ownership = suggestion.ownership,
               ownership.revision == textRevision, ownership == suggestionOwnership,
@@ -445,15 +485,23 @@ final class FullKeyboardEngine {
 
     // MARK: - Touches
 
-    func touchBegan(id: Int, at point: CGPoint) {
+    /// `time`: the touch's own timestamp (same clock as `clock`), for swipe sampling.
+    func touchBegan(id: Int, at point: CGPoint, time: TimeInterval? = nil) {
         guard let key = layout.hitTest(point) else { return }
         // A touch proves the keyboard is visible, even if a host activation notice was missed.
         if !suggestionsAreActive { resumeSuggestions() }
+        // A swipe still decoding would land after this key's text: drop it instead.
+        cancelPendingSwipe()
         // Rollover: commit a held character or real Space before the next key. Space
         // keeps its last observed point, never a fabricated key centre.
         for other in touchOrder {
             guard var touch = touches[other], !touch.committed else { continue }
-            if touch.key.kind == .space, !touch.isTrackpad {
+            if touch.isSwipe {
+                // A second finger ends a swipe without a word; it is not a held letter.
+                touch.isSwipe = false
+                touch.swipePath = nil
+                swipeTrail = []
+            } else if touch.key.kind == .space, !touch.isTrackpad {
                 let sample: KeyboardTouchWord.Sample? = touch.hasUnambiguousPoint && touch.evidenceLayout == layout
                     ? .init(text: " ", point: touch.point, key: touch.key) : nil
                 typeSpace(sample: sample)
@@ -467,6 +515,7 @@ final class FullKeyboardEngine {
                 commitCharacter(touch, recordsHeat: false)
             }
             touch.committed = true
+            touch.swipePath = nil
             touches[other] = touch
         }
 
@@ -478,6 +527,10 @@ final class FullKeyboardEngine {
             committed: false,
             returnLayer: nil
         )
+        if swipeIsAvailable, let letter = key.character, letter.count == 1,
+           letter.unicodeScalars.allSatisfy({ ("a"..."z").contains($0) }) {
+            touch.swipePath = [SwipePoint(x: point.x, y: point.y, time: time ?? clock())]
+        }
         switch key.kind {
         case .shift:
             shift.shiftDown(now: clock())
@@ -501,7 +554,7 @@ final class FullKeyboardEngine {
     func openAccentMenuIfEligible(forTouch id: Int) -> Bool {
         guard activeAccentMenu == nil,
               let touch = touches[id],
-              !touch.committed,
+              !touch.committed, !touch.isSwipe,
               let base = touch.key.character else { return false }
         let dx = touch.point.x - touch.startPoint.x
         let dy = touch.point.y - touch.startPoint.y
@@ -519,9 +572,18 @@ final class FullKeyboardEngine {
         return true
     }
 
-    func touchMoved(id: Int, to point: CGPoint) {
+    /// `samples`: the coalesced points since the last call (ending at `point`) with their timestamps.
+    func touchMoved(id: Int, to point: CGPoint, samples: [(point: CGPoint, time: TimeInterval)] = []) {
         guard var touch = touches[id] else { return }
         touch.point = point
+        let wasSwipe = touch.isSwipe
+        if activeAccentTouchID != id, !touch.committed, touch.swipePath != nil,
+           trackSwipe(&touch, samples: samples.isEmpty ? [(point, clock())] : samples) {
+            touches[id] = touch
+            // Only activation changes keys and preview; the trail itself is read by the plane view.
+            if !wasSwipe { onChange?() }
+            return
+        }
 
         // 1. Active long-press accent picker: horizontal drag selects the alternate character.
         if activeAccentTouchID == id, var menu = activeAccentMenu {
@@ -585,6 +647,12 @@ final class FullKeyboardEngine {
         guard var touch = touches.removeValue(forKey: id) else { return }
         touchOrder.removeAll { $0 == id }
         touch.point = point
+        if touch.isSwipe {
+            touch.swipePath?.append(SwipePoint(x: point.x, y: point.y, time: max(clock(), touch.swipePath?.last?.time ?? 0)))
+            finishSwipe(touch)
+            onChange?()
+            return
+        }
 
         if activeAccentTouchID == id, let menu = activeAccentMenu {
             let index = menu.index(for: point.x)
@@ -640,6 +708,7 @@ final class FullKeyboardEngine {
     }
 
     func touchCancelled(id: Int) {
+        if touches[id]?.isSwipe == true { swipeTrail = [] }
         discardTouchEvidence()
         if activeAccentTouchID == id {
             activeAccentMenu = nil
@@ -659,6 +728,7 @@ final class FullKeyboardEngine {
         let hadTouches = !touches.isEmpty || activeAccentMenu != nil
         touches.removeAll()
         touchOrder.removeAll()
+        swipeTrail = []
         activeAccentMenu = nil
         activeAccentTouchID = nil
         if shift.isHeld { shift.shiftUp() }
@@ -691,6 +761,18 @@ final class FullKeyboardEngine {
         prepareStatisticsEdit()
         autocorrect.syncLearning()
         let beforeDeletion = target.documentContextBeforeInput
+        if allowAutocorrectUndo, let swipe = ownedSwipeWord(before: beforeDeletion) {
+            // Like other swipe keyboards: the first Delete after a swipe takes the whole word.
+            if recordsStatistics { statistics?.deletion(wholeWord: true) }
+            autocorrect.clearPendingUndo()
+            autocorrect.discardFeedback()
+            for _ in 0..<swipe.inserted.count { target.deleteBackward() }
+            swipeWord = nil
+            autocorrect.touchInput.deletedBackward(before: nil, after: target.documentContextBeforeInput)
+            lastSpaceAt = nil
+            didEdit()
+            return
+        }
         if allowAutocorrectUndo,
            let undo = autocorrect.consumePendingUndo(),
            let before = target.documentContextBeforeInput,
@@ -799,6 +881,13 @@ final class FullKeyboardEngine {
             insert(text)
             return
         }
+        // A swiped word is already a lexicon word chosen by its whole path: never autocorrected or learned.
+        if ownedSwipeWord(before: before) != nil {
+            autocorrect.discardFeedback()
+            statistics?.direct(text)
+            insert(text)
+            return
+        }
         if let (original, replacement) = autocorrect.replacementOnSpace(
             beforeInput: target.documentContextBeforeInput,
             field: field,
@@ -859,7 +948,9 @@ final class FullKeyboardEngine {
             didEdit()
             return
         }
-        if let (original, replacement) = autocorrect.replacementOnSpace(
+        if ownedSwipeWord(before: target.documentContextBeforeInput) != nil {
+            autocorrect.discardFeedback()
+        } else if let (original, replacement) = autocorrect.replacementOnSpace(
             beforeInput: target.documentContextBeforeInput,
             field: field,
             autocorrectionType: target.autocorrectionType
@@ -929,6 +1020,166 @@ final class FullKeyboardEngine {
         onEdit?()
     }
 
+    // MARK: - Swipe typing
+
+    /// Records samples and activates the swipe once far enough. True while the touch is a swipe.
+    private func trackSwipe(_ touch: inout ActiveTouch, samples: [(point: CGPoint, time: TimeInterval)]) -> Bool {
+        guard var path = touch.swipePath, let origin = path.first else { return false }
+        for sample in samples {
+            path.append(SwipePoint(x: sample.point.x, y: sample.point.y, time: max(sample.time, path.last?.time ?? 0)))
+        }
+        if path.count > Self.swipePathLimit {
+            // Thin the older half; the encoder resamples to 64 points anyway.
+            let half = path.count / 2
+            path = path[..<half].enumerated().filter { $0.offset.isMultiple(of: 2) }.map(\.element) + path[half...]
+        }
+        touch.swipePath = path
+        if !touch.isSwipe {
+            let dx = touch.point.x - origin.x, dy = touch.point.y - origin.y
+            guard (dx * dx + dy * dy).squareRoot() >= Self.swipeActivation * layout.letterWidth,
+                  touch.evidenceLayout == layout, swipeIsAvailable else { return false }
+            touch.isSwipe = true
+            swipeTrail = path.map { CGPoint(x: $0.x, y: $0.y) }
+            // Earlier taps of this word no longer describe what is typed next.
+            autocorrect.touchInput.clear()
+            return true
+        }
+        swipeTrail.append(contentsOf: samples.map(\.point))
+        if swipeTrail.count > Self.swipePathLimit { swipeTrail.removeFirst(swipeTrail.count - Self.swipePathLimit) }
+        return true
+    }
+
+    /// Prose fields with an enabled word language and loaded word lists. Elsewhere (URL, email,
+    /// passwords, no languages) sliding over letters keeps its old meaning.
+    private var swipeIsAvailable: Bool {
+        guard field == .text, layerState.layer == .letters, activeAccentMenu == nil,
+              !autocorrect.suggestionLanguages.isEmpty,
+              autocorrect.spatialDecoder?.isResourceLoading == false,
+              autocorrect.spatialDecoder?.resourceSnapshot.isEmpty == false else { return false }
+        return suggestionOwnership.permitsCorrection
+    }
+
+    /// The task stays referenced so `waitForSwipe` also covers a cancelled, still-finishing decode.
+    private func cancelPendingSwipe() {
+        swipeGeneration &+= 1
+        swipeTask?.cancel()
+    }
+
+    /// Decodes off the main actor; the word goes in only if nothing changed in the meantime.
+    private func finishSwipe(_ touch: ActiveTouch) {
+        swipeTrail = []
+        cancelPendingSwipe()
+        guard let path = touch.swipePath, path.count >= 2, touch.evidenceLayout == layout,
+              let swipeLayout = SwipeLayout(layout: layout), swipeIsAvailable,
+              let decoder = autocorrect.spatialDecoder else { return }
+        let request = SwipeRequest(path: path, layout: swipeLayout, languages: autocorrect.suggestionLanguages,
+                                   lexicons: decoder.resourceSnapshot, resources: decoder.resourceRevision)
+        let generation = swipeGeneration
+        let context = target.documentContextBeforeInput
+        // Shift as it was while swiping: a held shift may be up by the time the word arrives.
+        let shiftState: ShiftState = shift.state == .locked ? .locked : shift.isUppercase ? .on : .off
+        let layout = layout
+        let decode = swipeDecoder
+        swipeTask = Task { [weak self] in
+            let candidates = await decode(request)
+            guard let self, !Task.isCancelled, self.swipeGeneration == generation, self.layout == layout,
+                  self.target.documentContextBeforeInput == context, self.swipeIsAvailable else { return }
+            self.commitSwipe(candidates, shift: shiftState)
+        }
+    }
+
+    /// Tests: wait for the last released swipe to be decoded and applied (or dropped).
+    func waitForSwipe() async {
+        await swipeTask?.value
+    }
+
+    private func commitSwipe(_ candidates: [SwipeSearch.Candidate], shift shiftState: ShiftState) {
+        var words: [String] = []
+        for candidate in candidates.prefix(3) {
+            let word = Self.swipeCased(autocorrect.swipeSpelling(candidate.word, language: candidate.language), shift: shiftState)
+            if !words.contains(word) { words.append(word) }
+        }
+        guard let word = words.first else { return }
+        let before = target.documentContextBeforeInput
+        let text = (Self.swipeNeedsSpace(before: before) ? " " : "") + word
+        prepareStatisticsEdit()
+        statistics?.direct(text)
+        autocorrect.clearPendingUndo()
+        // Never pending word feedback or tap evidence: a swipe is neither a confirmed word nor taps.
+        autocorrect.discardFeedback()
+        target.insertText(text)
+        autocorrect.touchInput.clear()
+        shift.didType()
+        lastSpaceAt = nil
+        layerState.didInsert(text)
+        swipeWord = SwipeWord(inserted: word, words: words,
+                              context: target.documentContextBeforeInput.flatMap(Self.boundedSuggestionContext))
+        rebuildLayoutIfNeeded()
+        didEdit()
+    }
+
+    /// Shift applies to the whole word: locked uppercases it, one-shot or auto-cap capitalizes it.
+    static func swipeCased(_ word: String, shift: ShiftState) -> String {
+        if shift == .locked { return word.uppercased() }
+        guard shift == .on, let first = word.first else { return word }
+        return first.uppercased() + word.dropFirst()
+    }
+
+    /// A swiped word starts its own word: a space after letters, digits and closing punctuation,
+    /// none at the start, after whitespace or after opening brackets and quotes.
+    static func swipeNeedsSpace(before: String?) -> Bool {
+        guard let last = before?.last else { return false }
+        return last.isLetter || last.isNumber || ".,;:!?)]}”’\"'%".contains(last)
+    }
+
+    private func ownedSwipeWord(before: String?) -> SwipeWord? {
+        guard let swipeWord, let before, swipeWord.context == Self.boundedSuggestionContext(before),
+              before.hasSuffix(swipeWord.inserted) else { return nil }
+        return swipeWord
+    }
+
+    /// [runner-up, inserted word, third]: the strip's center slot is the current choice.
+    private func swipeChips(_ swipe: SwipeWord, ownership: KeyboardSuggestionOwnership) -> [KeyboardSuggestion] {
+        let others = swipe.words.filter { $0 != swipe.inserted }
+        // Slots are positional: without an alternative there is nothing to offer.
+        guard !others.isEmpty else { return [] }
+        let ordered: [(String, KeyboardSuggestion.Kind)] = [
+            others.first.map { ($0, .secondary) },
+            (swipe.inserted, .primary(autoReplace: false)),
+            others.dropFirst().first.map { ($0, .secondary) },
+        ].compactMap { $0 }
+        return ordered.map { word, kind in
+            var chip = KeyboardSuggestion(displayText: word, replacement: word, kind: kind)
+            chip.ownership = ownership
+            chip.isSwipe = true
+            return chip
+        }
+    }
+
+    /// Swaps the swiped word for an alternative in place, without a space and without learning.
+    private func replaceSwipeWord(with suggestion: KeyboardSuggestion) {
+        let before = target.documentContextBeforeInput
+        guard let ownership = suggestion.ownership, ownership.revision == textRevision,
+              ownership == suggestionOwnership, var swipe = ownedSwipeWord(before: before) else {
+            refreshSuggestions()
+            return
+        }
+        if suggestion.replacement != swipe.inserted {
+            prepareStatisticsEdit()
+            statistics?.suggestion(suggestion.replacement, boundaryOriginal: nil)
+            autocorrect.clearPendingUndo()
+            autocorrect.discardFeedback()
+            for _ in 0..<swipe.inserted.count { target.deleteBackward() }
+            target.insertText(suggestion.replacement)
+            autocorrect.touchInput.clear()
+            swipe.inserted = suggestion.replacement
+            swipe.context = target.documentContextBeforeInput.flatMap(Self.boundedSuggestionContext)
+            swipeWord = swipe
+            lastSpaceAt = nil
+            didEdit()
+        }
+    }
+
     // MARK: - Layout
 
     private func rebuildLayoutIfNeeded() {
@@ -950,7 +1201,11 @@ final class FullKeyboardEngine {
         )
         if layout != previous {
             endStatisticsSession()
-            discardTouchEvidence()
+            // Switching to numbers for punctuation keeps the swiped word protected; its context still decides.
+            let swiped = swipeWord
+            invalidateTouchEvidence()
+            swipeWord = swiped
+            refreshSuggestions()
         }
     }
 }
