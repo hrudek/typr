@@ -503,7 +503,8 @@ final class DictationControllerTests: XCTestCase {
             let transcriber = ControlledTranscriber()
             let controller = DictationController(
                 audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
-                transcriberFactory: { transcriber }, autoPrepareOnInit: false
+                transcriberFactory: { transcriber }, autoPrepareOnInit: false,
+                audioActivationRetryDelays: []
             )
             controller.prepareModel()
             try await settle()
