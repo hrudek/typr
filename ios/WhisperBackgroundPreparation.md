@@ -12,14 +12,23 @@ estimate is about 4.5 GB beyond the installed files.
 
 ## Leaving the app
 
-- On iOS 26+, Typr requests a continued processing task while the app is active.
-  Opening the app with an installed, explicitly chosen Whisper model, choosing
-  that model, or tapping **Prepare/Try again** starts the work. iOS can show a system
-  Live Activity with a progress indicator and a cancellation control. Typr passes
-  only the title “Prepare Whisper” and an empty subtitle, so the Dynamic Island
-  takes less space; stage details appear only in the app.
-- If iOS declines that request, or on iOS 18–25, only UIKit's limited background
-  grace time is available. There is no guaranteed number of minutes.
+- On iOS 26+, Typr requests a continued processing task only after a tap in Typr:
+  **Use** on Whisper, **Prepare**, **Try again** or the main button. Apple's guidance
+  is that these tasks always start from an explicit action and never automatically,
+  even if a preference was set earlier. Opening Typr, launch, maintenance, handoff
+  and intents therefore prepare without a continued task and without a system
+  Live Activity.
+- iOS shows the continued task as a system Live Activity (Dynamic Island, Lock
+  Screen) with progress and a cancel control. iOS alone decides its size and
+  layout. Typr sets a succinct title, “Preparing Whisper”, and a short subtitle
+  that changes only with a real stage: “Starting”, “Optimizing for this iPhone”,
+  “Loading model”, “Checking model”. Detailed stage names stay in the app.
+- A tapped preparation whose request iOS rejected asks again when Typr becomes
+  active. An automatic one does not.
+- Without a continued task (automatic start, declined request, or iOS 18–25),
+  only UIKit's limited background grace time is available. There is no
+  guaranteed number of minutes. Tap **Try again** before leaving Typr to get the
+  continued task.
 - iOS controls admission, scheduling, memory limits and termination. Locking the
   phone, resource pressure, user cancellation or force quitting can interrupt
   preparation. A continued task is not permission to run indefinitely.
@@ -91,7 +100,8 @@ if preparation fails: submission failure, runtime expiration and Core ML failure
 are different outcomes and must not be inferred from a failed system status alone.
 
 Simulator tests cover controller lifecycle, eligibility, single-flight preparation,
-expiration, milestone/heartbeat progress accounting, re-requesting on activation, the
+expiration, milestone/heartbeat progress accounting, tap-only continued-task requests,
+the short system subtitle, re-requesting on activation, the
 background-paused dot scope and engine selection with fakes. They cannot prove background runtime,
 system Live Activity behavior, Neural Engine access or provisioning. WhisperKit
 forces CPU-only execution in the simulator. Verify these separately on a real
@@ -100,6 +110,7 @@ signed iPhone on iOS 26 and iOS 27+, and on older iOS for the UIKit fallback.
 ## Apple API references checked
 
 - [Performing long-running tasks on iOS and iPadOS](https://developer.apple.com/documentation/backgroundtasks/performing-long-running-tasks-on-ios-and-ipados): foreground/user-action origin, resource requests, progress and cancellation.
+- [WWDC25: Finish tasks in the background](https://developer.apple.com/videos/play/wwdc2025/227/): explicit action only, no automatic starts even after an earlier preference, succinct title and informative subtitle, timely progress.
 - [BGContinuedProcessingTaskRequest](https://developer.apple.com/documentation/backgroundtasks/bgcontinuedprocessingtaskrequest) and its initializer: iOS 26 availability, foreground submission and concrete identifiers under the permitted wildcard prefix.
 - [Task registration](https://developer.apple.com/documentation/backgroundtasks/bgtaskscheduler/register(fortaskwithidentifier:using:launchhandler:)): launch-time maintenance registration; the iOS 26 SDK `BGTaskScheduler.h` explicitly exempts continued-task registrations from the launch deadline. Each concrete identifier is registered once.
 - [UIKit background grace](https://developer.apple.com/documentation/uikit/uiapplication/beginbackgroundtask(withname:expirationhandler:)): expiration runs synchronously on the main thread; end the assertion before returning.

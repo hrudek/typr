@@ -437,7 +437,7 @@ final class DictationController {
         languageSettings.preferredSpeechEngine = engine
         engineName = engine.displayName
         // Pinning the automatically ready engine needs no model reload.
-        if currentEngine != engine || !isModelReady { prepareModel() }
+        if currentEngine != engine || !isModelReady { prepareModel(userInitiated: true) }
         return .selected
     }
 
@@ -456,7 +456,7 @@ final class DictationController {
     func performPrimaryAction() {
         switch phase {
         case .modelRequired, .failed:
-            prepareModel()
+            prepareModel(userInitiated: true)
         case .ready:
             startRecording(copyToPasteboard: false)
         case .recording:
@@ -865,7 +865,10 @@ final class DictationController {
 
     // MARK: - Model Preparation
 
-    func prepareModel() {
+    /// `userInitiated`: a tap in Typr (Prepare, Try again, Use, the main button). Only that
+    /// may request Whisper's continued background task; launch, reopening, maintenance,
+    /// handoff and intents prepare without one.
+    func prepareModel(userInitiated: Bool = false) {
         // This is also called by handoff/intents and tests, not just the settings button.
         guard canChangeEngine else { return }
         pendingAppleLanguageChange = false
@@ -891,7 +894,7 @@ final class DictationController {
         keyboardBridge.setModelInstalled(preferred.map { engineProvider.isInstalled($0) } ?? ParakeetTranscriber.hasCachedModel)
         publishKeyboardSnapshot()
         if preferred == .whisperLargeV3Turbo {
-            whisperBackground?.begin { [weak self] in
+            whisperBackground?.begin(userInitiated: userInitiated) { [weak self] in
                 self?.expireWhisperPreparation(generation: prepGen)
             }
         }

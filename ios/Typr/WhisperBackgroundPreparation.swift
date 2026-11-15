@@ -5,7 +5,9 @@ import UIKit
 /// Only the app's existing preparation uses this runtime; it never owns or creates a model.
 @MainActor
 protocol WhisperPreparationScheduling: AnyObject {
-    func begin(expiration: @escaping @MainActor () -> Void)
+    /// `userInitiated`: a tap in Typr started this preparation. Only then may a continued
+    /// task (and its system Live Activity) be requested; automatic starts use UIKit grace only.
+    func begin(userInitiated: Bool, expiration: @escaping @MainActor () -> Void)
     func update(_ progress: ModelPreparationProgress)
     func sceneDidBecomeActive()
     func finish(success: Bool)
@@ -24,6 +26,8 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     private var maintenanceRegistered = false
     private var maintenanceSubmitted = false
     private var operation: UUID?
+    private var operationUserInitiated = false
+    private var shownSubtitle: String?
     private var expiration: (@MainActor () -> Void)?
     private var continued: BGTask?
     private var maintenance: BGTask?
@@ -53,10 +57,11 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
     }
 
-    func begin(expiration: @escaping @MainActor () -> Void) {
+    func begin(userInitiated: Bool, expiration: @escaping @MainActor () -> Void) {
         finish(success: false)
         let token = UUID()
         operation = token
+        operationUserInitiated = userInitiated
         self.expiration = expiration
         // Covers the handoff to the continued task, and is the entire (bounded) fallback on
         // older iOS or rejected requests. No microphone, audio session or network is involved.
@@ -65,13 +70,17 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
             // returning; enqueueing a Task here could outlive the expiration deadline.
             MainActor.assumeIsolated { self?.expire(token) }
         }
+        // Apple: continued tasks start only from an explicit action, never automatically
+        // (launch, reopening, maintenance), even if the person chose the engine earlier.
+        guard userInitiated else { return }
         submitContinued(for: token, attempt: 1)
     }
 
-    /// A preparation that is still running without a continued task (a rejected or expired
+    /// A tapped preparation that is still running without a continued task (a rejected
     /// request) asks again whenever the app becomes active. Submission requires foreground.
     func sceneDidBecomeActive() {
-        guard let token = operation, continued == nil, pendingSubmission == nil else { return }
+        guard let token = operation, operationUserInitiated, continued == nil,
+              pendingSubmission == nil else { return }
         submitContinued(for: token, attempt: 1)
     }
 
@@ -93,10 +102,8 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         guard accepted else { return }
         let request = BGContinuedProcessingTaskRequest(
-            identifier: identifier, title: "Prepare Whisper", subtitle: ""
+            identifier: identifier, title: Self.taskTitle, subtitle: Self.taskSubtitle(for: latestProgress)
         )
-        // Title and progress only: the system Dynamic Island UI should stay small. Stage text
-        // is shown in the app, never pushed to the task.
         request.strategy = .fail // Never queue a second, stale preparation.
         // Default is zero, not "all supported resources". ANE access uses the separate
         // Background Inference entitlement; the only additional resource bit is GPU.
@@ -134,6 +141,8 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         if #available(iOS 26.0, *), let task = task as? BGContinuedProcessingTask {
             Self.updateTaskProgress(task.progress, from: latestProgress)
+            shownSubtitle = nil
+            updateSubtitle(of: task)
             startHeartbeat(for: task, token: token)
             Self.logger.notice("Continued preparation task started")
         }
@@ -192,11 +201,34 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         latestProgress = progress
         if #available(iOS 26.0, *), let task = continued as? BGContinuedProcessingTask {
             Self.updateTaskProgress(task.progress, from: progress)
+            updateSubtitle(of: task)
         }
+    }
+
+    /// Succinct title and a short, informative subtitle (Apple's guidance). The system bar
+    /// shows how far it is; detailed stage names and step counts stay in the app.
+    static let taskTitle = "Preparing Whisper"
+
+    static func taskSubtitle(for progress: ModelPreparationProgress?) -> String {
+        guard let progress, let stage = progress.stageProgress else { return "Starting" }
+        if stage.completed >= stage.total - 1 { return "Checking model" }
+        if progress.detail.hasPrefix("Optimizing") { return "Optimizing for this iPhone" }
+        return "Loading model"
+    }
+
+    /// Pushes text to the system UI only when the step changes, not on every callback.
+    @available(iOS 26.0, *)
+    private func updateSubtitle(of task: BGContinuedProcessingTask) {
+        let subtitle = Self.taskSubtitle(for: latestProgress)
+        guard subtitle != shownSubtitle else { return }
+        shownSubtitle = subtitle
+        task.updateTitle(Self.taskTitle, subtitle: subtitle)
     }
 
     func finish(success: Bool) {
         operation = nil
+        operationUserInitiated = false
+        shownSubtitle = nil
         expiration = nil
         latestProgress = nil
         heartbeat?.cancel()
