@@ -540,6 +540,16 @@ final class SpeechEngineSelectionTests: XCTestCase {
     }
 
     func testParakeetRowWarnsButDoesNotBlockGermanOrAutomaticLanguage() {
+        // Shared by the overview and engine picker: cover every language, including
+        // Automatic, and the absence of an engine as well as both non-Parakeet engines.
+        for language in DictationLanguage.allCases {
+            XCTAssertEqual(SpeechEngineRowState.languageWarning(engine: .parakeetV2, language: language) != nil,
+                           language != .english)
+            let otherEngines: [SpeechEngineChoice?] = [nil, .appleSpeech, .whisperLargeV3Turbo]
+            for engine in otherEngines {
+                XCTAssertNil(SpeechEngineRowState.languageWarning(engine: engine, language: language))
+            }
+        }
         for language in [DictationLanguage.german, .automatic] {
             let shown = row(.parakeetV2, language: language)
             XCTAssertEqual(shown.action, .use)

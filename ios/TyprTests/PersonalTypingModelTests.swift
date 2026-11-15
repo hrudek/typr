@@ -178,7 +178,7 @@ final class PersonalTypingModelTests: XCTestCase {
         XCTAssertTrue(model.lexicon.isKept("über"))
     }
 
-    func testWordAndKeepCapsUseCountThenRecencyAndKeepLRU() {
+    func testWordAndKeepCapsUseCountThenRecencyAndKeepLRU() throws {
         var tick = 0.0
         let model = PersonalTypingModel(now: { tick += 1; return Date(timeIntervalSince1970: tick) })
         for index in 0..<2000 { model.keep(word(index)); model.recordWord(word(index)) }
@@ -191,8 +191,28 @@ final class PersonalTypingModelTests: XCTestCase {
         XCTAssertNil(model.state.kept[word(1)])
         XCTAssertEqual(model.state.counts[word(0)]?.count, 2)
         XCTAssertNil(model.state.counts[word(1)])
-        for _ in 0..<10_100 { model.recordWord(word(0)) }
-        XCTAssertEqual(model.state.counts[word(0)]?.count, 10_000)
+        // Preserve the real capacity/eviction sequence above; seed only the saturation tail.
+        var boundary = model.state
+        boundary.counts[word(0)]?.count = 9_999
+        let validated = try XCTUnwrap(boundary.validated())
+        XCTAssertEqual(validated.counts.count, 2_000)
+        XCTAssertEqual(validated.kept.count, 2_000)
+        let capped = PersonalTypingModel(state: validated, now: { tick += 1; return Date(timeIntervalSince1970: tick) })
+        XCTAssertEqual(capped.state, validated)
+        XCTAssertEqual(capped.lexicon.counts[word(0)], 9_999) // Prime the cached snapshot too.
+        var previousUpdate = try XCTUnwrap(capped.state.counts[word(0)]).lastUpdated
+        for _ in 0..<2 {
+            XCTAssertTrue(capped.recordWord(word(0)))
+            let value = try XCTUnwrap(capped.state.counts[word(0)])
+            XCTAssertEqual(value.count, 10_000)
+            XCTAssertGreaterThan(value.lastUpdated, previousUpdate, "Recency must advance even at saturation")
+            XCTAssertEqual(value.lastUpdated, Date(timeIntervalSince1970: tick))
+            XCTAssertEqual(capped.lexicon.counts[word(0)], 10_000)
+            XCTAssertEqual(capped.state.counts.count, 2_000)
+            XCTAssertEqual(capped.state.kept, validated.kept)
+            XCTAssertNotNil(capped.state.validated())
+            previousUpdate = value.lastUpdated
+        }
     }
 
     func testDisjointKeepsAndCountsShareOneBudgetWithKeepPriority() {

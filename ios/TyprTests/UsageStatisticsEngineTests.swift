@@ -167,6 +167,11 @@ final class UsageStatisticsEngineTests: XCTestCase {
         XCTAssertTrue(session.recentLabels.isEmpty)
     }
 
+}
+
+/// The model's accepted-label callback does not require a full engine or disk fixtures.
+@MainActor
+final class UsageStatisticsAcceptedLabelTests: XCTestCase {
     func testValidatedLabelHookSeesOnlyAcceptedFiniteInRangeLabels() throws {
         let model = PersonalTypingModel(isLearningEnabled: true)
         let layout = KeyboardLayout(width: 393)

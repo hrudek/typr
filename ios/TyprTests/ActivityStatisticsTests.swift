@@ -182,6 +182,12 @@ final class ActivityStatisticsTests: XCTestCase {
     @MainActor
     func testAllFourSectionsHostEmptySparsePopulatedAndUnavailable() {
         XCTAssertEqual(StatisticsSection.allCases.map(\.rawValue), ["Overview", "Typing", "Dictation", "Taps"])
+        // Keep a default-initializer sentinel: the matrix below always supplies a section.
+        let defaultHost = UIHostingController(rootView: StatisticsView(fixture: .populated)
+            .environment(\.dynamicTypeSize, .accessibility3))
+        let defaultSize = defaultHost.sizeThatFits(in: CGSize(width: 320, height: 4000))
+        XCTAssertTrue(defaultSize.width.isFinite && defaultSize.height.isFinite)
+        XCTAssertLessThanOrEqual(defaultSize.width, 320.5)
         for section in StatisticsSection.allCases {
             for fixture in [StatisticsFixture.empty, .sparse, .populated, .unavailable] {
                 let host = UIHostingController(rootView: StatisticsView(fixture: fixture, section: section)

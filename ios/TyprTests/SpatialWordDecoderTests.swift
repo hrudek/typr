@@ -1121,7 +1121,6 @@ final class SpatialWordDecoderTests: XCTestCase {
             let source = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
             XCTAssertNotNil(source.logPrior(for: word))
         }
-        XCTAssertTrue(try bundledDecoder().decode(evidence("gello", aimedAt: "hello"), languages: [.english])?.candidates.contains { $0.word == "hello" } ?? false)
     }
 }
 

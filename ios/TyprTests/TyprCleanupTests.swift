@@ -243,19 +243,39 @@ final class TyprCleanupTests: XCTestCase {
     }
 
     func testInputAndLanguageAdmissionSkipModel() async {
-        let session = CleanupTestSession(), bg = CleanupTestBackground()
-        for text in [String(repeating: "ab ", count: CleanupCoordinator.maximumUTF8Bytes / 3 + 1),
-                     String(repeating: "word ", count: CleanupCoordinator.maximumWords + 1), "zwei Worte", raw] {
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(allowed: false),
-                background: bg, isEnabled: { true })
+        // Each row violates just one gate. In particular, many short words cannot
+        // isolate the byte budget, and a rejecting detector would mask every other gate.
+        let byteOnly = String(repeating: "lang", count: CleanupCoordinator.maximumUTF8Bytes / 4 + 1) + " eins zwei"
+        let wordOnly = String(repeating: "ab ", count: CleanupCoordinator.maximumWords + 1)
+        let shortOnly = "zwei Worte"
+        XCTAssertGreaterThan(byteOnly.utf8.count, CleanupCoordinator.maximumUTF8Bytes)
+        XCTAssertEqual(CleanupGuard.wordCount(byteOnly), 3)
+        XCTAssertLessThanOrEqual(CleanupGuard.wordCount(byteOnly), CleanupCoordinator.maximumWords)
+        XCTAssertGreaterThan(CleanupGuard.wordCount(wordOnly), CleanupCoordinator.maximumWords)
+        XCTAssertLessThanOrEqual(wordOnly.utf8.count, CleanupCoordinator.maximumUTF8Bytes)
+        XCTAssertEqual(CleanupGuard.wordCount(shortOnly), 2)
+        for text in [shortOnly, raw] {
+            XCTAssertLessThanOrEqual(text.utf8.count, CleanupCoordinator.maximumUTF8Bytes)
+            XCTAssertLessThanOrEqual(CleanupGuard.wordCount(text), CleanupCoordinator.maximumWords)
+        }
+        XCTAssertGreaterThanOrEqual(CleanupGuard.wordCount(raw), 3)
+
+        let rows: [(gate: String, text: String, languageAllowed: Bool)] = [
+            ("bytes", byteOnly, true), ("words", wordOnly, true),
+            ("short", shortOnly, true), ("language", raw, false)
+        ]
+        for row in rows {
+            let session = CleanupTestSession(), bg = CleanupTestBackground()
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session),
+                language: CleanupTestLanguage(allowed: row.languageAllowed), background: bg, isEnabled: { true })
             let job = CleanupJob(session: session, background: bg); job.begin()
             let coordinator = CleanupCoordinator()
-            let value = await coordinator.clean(text, style: .polished, job: job, dependencies: deps)
-            XCTAssertEqual(value, text)
-            XCTAssertNil(coordinator.reservedBy)
+            let value = await coordinator.clean(row.text, style: .polished, job: job, dependencies: deps)
+            XCTAssertEqual(value, row.text, row.gate)
+            XCTAssertNil(coordinator.reservedBy, row.gate)
+            XCTAssertEqual(session.cleanCount, 0, row.gate)
             job.finish()
         }
-        XCTAssertEqual(session.cleanCount, 0)
     }
 
     func testAlreadyCancelledBeforeRegistrationDoesNotStartModel() async {

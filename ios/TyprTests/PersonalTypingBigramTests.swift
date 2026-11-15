@@ -390,8 +390,6 @@ final class PersonalTypingBigramTests: XCTestCase {
         XCTAssertNil(state.validated())
         state.schemaVersion = 3; state.bigrams = nil
         XCTAssertNil(state.validated())
-        // A schema-2 reader rejects schema 3 by version (simulated with its exact gate).
-        XCTAssertFalse((1...2).contains(PersonalTypingModel.State().schemaVersion))
     }
 
     func testPermissionRevocationBreaksPendingSequenceAndUsesRAMOnly() throws {

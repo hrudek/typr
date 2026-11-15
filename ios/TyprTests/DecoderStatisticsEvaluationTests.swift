@@ -2,6 +2,7 @@ import Foundation
 import XCTest
 @testable import Typr
 
+/// Opt-in target only: bash ios/tools/run-research-tests.sh <simulator destination>.
 /// R2-8 trial only: fixed retrieval, no automatic authority, no product switch.
 /// Student-t predictive density and reading summation translated from iikb
 /// Correction/{TouchModel,Decoder}.swift, 09a2e9cd (MIT © 2026 Bassim Shahidy).

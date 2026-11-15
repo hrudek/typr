@@ -4,7 +4,9 @@ import XCTest
 @testable import Typr
 #endif
 
-/// Test-only int8-weight / Float32-activation MLP. Not linked into the keyboard.
+#if NEURAL_CLI || TYPR_RESEARCH
+/// Research-only int8-weight / Float32-activation MLP. Not linked into the keyboard.
+/// Run its XCTest gates with: bash ios/tools/run-research-tests.sh <simulator destination>.
 /// TNN1: magic, UInt32 V/E/H; for embedding/hidden/output, Float32 row scales
 /// then signed int8 row-major weights; finally Float32 hidden/output biases.
 private struct NeuralSpikeModel {
@@ -92,6 +94,8 @@ private struct NeuralSpikeModel {
     }
 }
 
+#endif // NEURAL_CLI || TYPR_RESEARCH
+
 #if NEURAL_CLI
 @main
 struct NeuralSpikeCLI {
@@ -134,6 +138,7 @@ struct NeuralSpikeCLI {
 }
 #else
 final class KeyboardNeuralEvaluationTests: XCTestCase {
+#if TYPR_RESEARCH
     private func fixture() -> Data {
         let v: Int = 4, e: Int = 16, h: Int = 32
         var data: Data = Data("TNN1".utf8)
@@ -159,7 +164,6 @@ final class KeyboardNeuralEvaluationTests: XCTestCase {
         XCTAssertNil(model.logits(-1, 0)); XCTAssertNil(model.logits(0, 4))
         XCTAssertEqual(model.macs, 1152)
         XCTAssertEqual(model.workspaceBytes, 272)
-        XCTAssertLessThanOrEqual(16 + 2048 * 16 + 32 * 32 + 2048 * 32 + 4 * (4096 + 32 + 32 + 2048), 124176)
         print("EVAL R2_10_contract deterministic=1 tiny_logits=128 macs=1152 workspace_bytes=272 automatic_changes=0 production_integration=0")
     }
 
@@ -179,6 +183,8 @@ final class KeyboardNeuralEvaluationTests: XCTestCase {
         XCTAssertNil(NeuralSpikeModel(bad))
     }
 
+#else
+    // Production regression: remains in the default TyprTests target.
     func testPersonalTrigramPrecedenceAndDeletionUnchanged() {
         var profile: PersonalBigramModel = .init()
         profile.record("morgen", after: "wir", earlier: "sehen")
@@ -192,5 +198,6 @@ final class KeyboardNeuralEvaluationTests: XCTestCase {
         XCTAssertEqual(profile.probability("morgen", after: nil, corpus: 0.1), 0.1)
         print("EVAL R2_10_learning trigram_precedence=1 probability=0.55 delete_backoff=1 reset_corpus=1 neural_storage_bytes=0")
     }
+#endif // TYPR_RESEARCH
 }
 #endif

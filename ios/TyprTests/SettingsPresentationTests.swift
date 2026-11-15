@@ -12,6 +12,9 @@ final class SettingsPresentationTests: XCTestCase {
                 destination
             )
         }
+        // This external route name is a contract, not just a raw-value round trip.
+        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
+            ["Typr", "--snap-state", "settings-cleanup-prompt"]), .cleanupPrompt)
         XCTAssertEqual(Set(SettingsDestination.allCases.map(\.title)),
                        ["Keyboard", "Statistics", "Autocorrect languages",
                         "Manage learned words", "AI & vocabulary", "History & feedback", "Speech engine", "Style", "Language", "Cleanup prompt"])
@@ -33,15 +36,23 @@ final class SettingsPresentationTests: XCTestCase {
     @MainActor
     func testLearnedWordsSearchFiltersEveryCategoryAndBothSidesOfCorrections() {
         var state = KeyboardLearnedWordsView.fixtureState()
+        state.kept["zebra"] = KeyboardLearnedWordsView.fixtureDate
+        state.counts["zebra"] = .init(count: 1, lastUpdated: KeyboardLearnedWordsView.fixtureDate)
+        state.rejected.append(.init(typed: "adn", replacement: "and"))
+        typealias Results = KeyboardLearnedWordsView.SearchResults
+        let correction = RejectedCorrection(typed: "teh", replacement: "the")
+        let visible = Results(state: state, query: "t")
+        XCTAssertEqual(visible.kept, ["swift", "typr"])
+        XCTAssertEqual(visible.pairs, [correction])
+        XCTAssertTrue(visible.counts.isEmpty)
+
         state.kept["München"] = KeyboardLearnedWordsView.fixtureDate
         state.kept["hello"] = KeyboardLearnedWordsView.fixtureDate
         state.counts["other"] = .init(count: 3, lastUpdated: KeyboardLearnedWordsView.fixtureDate)
-        typealias Results = KeyboardLearnedWordsView.SearchResults
-
         let all = Results(state: state, query: "  \n ")
         XCTAssertEqual(all.kept, state.kept.keys.sorted())
         XCTAssertEqual(all.pairs, state.rejected)
-        XCTAssertEqual(all.counts, ["hello", "other"])
+        XCTAssertEqual(all.counts, ["hello", "other", "zebra"])
         XCTAssertEqual(all.pairWords, ["hello", "world"])
 
         let partial = Results(state: state, query: "  ELL  ")
@@ -51,8 +62,10 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertEqual(partial.pairWords, ["hello"])
         XCTAssertEqual(Results(state: state, query: "WORL").pairWords, ["world"])
         XCTAssertEqual(Results(state: state, query: "munchen").kept, ["München"])
-        XCTAssertEqual(Results(state: state, query: "TEH").pairs, state.rejected)
-        XCTAssertEqual(Results(state: state, query: "THE").pairs, state.rejected)
+        XCTAssertEqual(Results(state: state, query: "TEH").pairs, [correction])
+        XCTAssertEqual(Results(state: state, query: "THE").pairs, [correction])
+        XCTAssertEqual(Results(state: state, query: "zeb").kept, ["zebra"])
+        XCTAssertEqual(Results(state: state, query: "zeb").counts, ["zebra"])
 
         let none = Results(state: state, query: "not-saved")
         XCTAssertTrue(none.kept.isEmpty)
@@ -60,26 +73,7 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertTrue(none.counts.isEmpty)
         XCTAssertTrue(none.pairWords.isEmpty)
         XCTAssertEqual(state.counts["hello"]?.count, 12)
-        XCTAssertEqual(state.kept.count, 4)
-    }
-
-    @MainActor
-    func testLearnedWordsFilteredDeletionTargetsVisibleEntriesOnly() {
-        var state = KeyboardLearnedWordsView.fixtureState()
-        state.kept["zebra"] = KeyboardLearnedWordsView.fixtureDate
-        state.counts["zebra"] = .init(count: 1, lastUpdated: KeyboardLearnedWordsView.fixtureDate)
-        state.rejected.append(.init(typed: "adn", replacement: "and"))
-        let visible = KeyboardLearnedWordsView.SearchResults(state: state, query: "t")
-        XCTAssertEqual(visible.kept, ["swift", "typr"])
-        XCTAssertEqual(visible.pairs, [.init(typed: "teh", replacement: "the")])
-        XCTAssertTrue(visible.counts.isEmpty)
-
-        state.kept.removeValue(forKey: visible.kept[0])
-        state.rejected.removeAll { $0 == visible.pairs[0] }
-        XCTAssertNotNil(state.kept["zebra"])
-        XCTAssertNotNil(state.kept["typr"])
-        XCTAssertNil(state.kept["swift"])
-        XCTAssertEqual(state.rejected, [.init(typed: "adn", replacement: "and")])
+        XCTAssertEqual(state.kept.count, 5)
     }
 
     @MainActor
@@ -112,17 +106,6 @@ final class SettingsPresentationTests: XCTestCase {
 
     func testTypingAssistanceSnapshotOpensKeyboardSettings() {
         XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", "settings-keyboard-typing"]), .keyboard)
-    }
-
-    func testOverviewLanguageWarningCoversExplicitAndAutomaticParakeet() {
-        for language in DictationLanguage.allCases {
-            XCTAssertEqual(SpeechEngineRowState.languageWarning(engine: .parakeetV2, language: language) != nil,
-                           language != .english)
-            let otherEngines: [SpeechEngineChoice?] = [nil, .appleSpeech, .whisperLargeV3Turbo]
-            for engine in otherEngines {
-                XCTAssertNil(SpeechEngineRowState.languageWarning(engine: engine, language: language))
-            }
-        }
     }
 
     func testOrdinaryLaunchesAndUnrelatedScenesDoNotNavigate() {

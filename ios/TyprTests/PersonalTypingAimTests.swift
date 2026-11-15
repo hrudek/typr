@@ -264,13 +264,15 @@ final class PersonalTypingAimTests: XCTestCase {
         let lengthBytes = nodes * MemoryLayout<UInt16>.stride
         XCTAssertLessThan(fileBytes + 2 * indexBytes + lengthBytes, 8 * 1024 * 1024, "shipping data plus subtree priors, child masks and length spans, not RSS")
         print("EVAL P7_lexiconMemory mappedFileBytes=\(fileBytes) priorIndexBytes=\(indexBytes) continuationMaskBytes=\(indexBytes) lengthSpanBytes=\(lengthBytes) totalFileAndIndexBytes=\(fileBytes + 2 * indexBytes + lengthBytes) transientAndHeapOverheadExcluded=true")
-        let start = ProcessInfo.processInfo.systemUptime
-        for _ in 0..<200 { XCTAssertNotNil(model.calibration(for: grid)) }
-        let snapshotMs = (ProcessInfo.processInfo.systemUptime - start) * 1000 / 200
-        let learningStart = ProcessInfo.processInfo.systemUptime
-        for _ in 0..<200 { model.learn([label("e", 0.15, 0.1)], layout: grid, source: .keep) }
-        let labelMs = (ProcessInfo.processInfo.systemUptime - learningStart) * 1000 / 200
-        // Numeric/encoded byte bounds above gate resource regressions; timings are diagnostic.
-        print(String(format: "EVAL P7_modelLatency calls=200 snapshotMeanMs=%.3f trustedLabelMeanMs=%.3f platform=local_debug_not_iPhone", snapshotMs, labelMs))
+        // Exercise a real read and trusted update, without benchmark repetition.
+        XCTAssertNotNil(model.calibration(for: grid))
+        let outcome = model.learn([label("e", 0.15, 0.1)], layout: grid, source: .keep)
+        XCTAssertEqual(outcome.accepted, 1)
+        XCTAssertNotNil(model.calibration(for: grid))
+        XCTAssertNotNil(model.state.validated())
+        maximumLayouts.layouts[KeyboardLayoutSignature(grid).id] = model.state.layouts[KeyboardLayoutSignature(grid).id]
+        XCTAssertNotNil(maximumLayouts.validated())
+        XCTAssertLessThan(try JSONEncoder().encode(maximumLayouts).count, 64 * 1024,
+                          "The four-layout byte bound must still hold after learning")
     }
 }
