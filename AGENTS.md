@@ -11,6 +11,10 @@ commands: [.github/typr/README.md](.github/typr/README.md).
   behavior, decisions, what was and wasn't tested. Keep it and affected docs current.
 - After pushing, fix every numbered finding of the latest **Typr review** and wait
   for the next verdict. `⚠️ NO RESULT`: re-run once, then tell the owner.
+- **Prefer fast integration:** open small PRs promptly; do not wait for simulator
+  tests before merging. Linux checks and Typr review remain required. Simulator
+  tests run on `main` alongside TestFlight delivery; follow the results and promptly
+  fix regressions or revert.
 - Removing a feature: prefer **Revert** of its PR(s).
 
 ## Tests
