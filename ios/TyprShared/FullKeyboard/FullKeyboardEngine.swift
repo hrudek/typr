@@ -648,7 +648,8 @@ final class FullKeyboardEngine {
         touchOrder.removeAll { $0 == id }
         touch.point = point
         if touch.isSwipe {
-            touch.swipePath?.append(SwipePoint(x: point.x, y: point.y, time: max(clock(), touch.swipePath?.last?.time ?? 0)))
+            let last = touch.swipePath?.last?.time ?? 0
+            touch.swipePath?.append(SwipePoint(x: point.x, y: point.y, time: max(clock(), last)))
             finishSwipe(touch)
             onChange?()
             return
