@@ -151,6 +151,8 @@ final class WhisperInstallerTests: XCTestCase {
     private var downloader: FakeWhisperDownloader!
     private var checker: FakeTokenizerChecker!
     private var installers: [WhisperModelInstaller] = []
+    /// Install tasks (including joined and superseded ones) whose body has not returned yet.
+    private var unfinishedInstallTasks = 0
 
     private static let weightPath = "openai_whisper-large-v3-v20240930_626MB/AudioEncoder.mlmodelc/weights/weight.bin"
     private static let melWeightPath = "openai_whisper-large-v3-v20240930_626MB/MelSpectrogram.mlmodelc/weights/weight.bin"
@@ -164,8 +166,10 @@ final class WhisperInstallerTests: XCTestCase {
 
     override func tearDown() async throws {
         for installer in installers { installer.cancel() }
-        // Cancellable fake download/checker waits must unwind before their files are removed.
-        try await settle()
+        // `.cancelled` is shown before the cancelled run stops: drain until every install task has
+        // returned, i.e. the cancellable fake download/checker waits have unwound, before the
+        // files are removed. A timeout fails and keeps the files.
+        try await waitForState("install tasks unwound") { self.unfinishedInstallTasks == 0 }
         installers = []
         try? FileManager.default.removeItem(at: root)
     }
@@ -177,8 +181,16 @@ final class WhisperInstallerTests: XCTestCase {
         return installer
     }
 
-    private func settle() async throws {
-        for _ in 0..<8 { try await Task.sleep(for: .milliseconds(25)) }
+    /// Every install goes through here so teardown can wait for its unwind, not for its status.
+    @discardableResult
+    private func install(_ installer: WhisperModelInstaller) -> Task<Void, Never> {
+        let task = installer.install()
+        unfinishedInstallTasks += 1
+        Task {
+            await task.value
+            self.unfinishedInstallTasks -= 1
+        }
+        return task
     }
 
     private func waitUntil(_ condition: @MainActor () -> Bool, timeout: TimeInterval = 3) async throws {
@@ -325,7 +337,7 @@ final class WhisperInstallerTests: XCTestCase {
     func testCreatingTheInstallerNeverDownloads() async throws {
         let installer = makeInstaller()
         installer.refresh()
-        try await settle()
+        // Synchronous: only install() starts work, and it marks the installer busy before returning.
         XCTAssertEqual(installer.state, .notInstalled)
         XCTAssertFalse(installer.isInstalled)
         XCTAssertFalse(installer.isBusy)
@@ -338,7 +350,7 @@ final class WhisperInstallerTests: XCTestCase {
         let installer = makeInstaller()
         XCTAssertEqual(installer.state, .installed)
         XCTAssertTrue(installer.isInstalled)
-        try await settle()
+        XCTAssertFalse(installer.isBusy)
         XCTAssertTrue(downloader.calls.isEmpty, "a restart with an installed model reaches no network")
     }
 
@@ -390,7 +402,7 @@ final class WhisperInstallerTests: XCTestCase {
 
     func testExplicitInstallDownloadsEveryFileOnceInOrderThenVerifiesAndMarks() async throws {
         let installer = makeInstaller()
-        await installer.install().value
+        await install(installer).value
 
         XCTAssertEqual(installer.state, .installed)
         XCTAssertTrue(installer.isInstalled)
@@ -405,7 +417,7 @@ final class WhisperInstallerTests: XCTestCase {
     func testDownloadProgressIsByteWeightedAndSeparateFromVerifying() async throws {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
-        let task = installer.install()
+        let task = install(installer)
         XCTAssertTrue(installer.isBusy)
         XCTAssertEqual(installer.state, .verifying, "preflight runs before byte-weighted download progress begins")
 
@@ -425,7 +437,7 @@ final class WhisperInstallerTests: XCTestCase {
     func testProgressNeverRegressesAndCancelledCallbacksCannotReviveAnInstall() async throws {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
-        let task = installer.install()
+        let task = install(installer)
         try await waitUntil { self.downloader.calls.last == Self.weightPath }
         let file = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.weightPath })
         let advanced = WhisperDownloadProgress.weighted(finishedBytes: bytes(before: file.path),
@@ -433,13 +445,13 @@ final class WhisperInstallerTests: XCTestCase {
         downloader.emit(0.8, for: file.path)
         try await waitUntil { installer.state == .downloading(advanced) }
         downloader.emit(0.1, for: file.path)
-        try await settle()
+        await mainActorBarrier() // The late progress hop has run (and was ignored).
         XCTAssertEqual(installer.state, .downloading(advanced), "late progress never moves the display backwards")
 
         installer.cancel()
         downloader.emit(1, for: file.path)
         await task.value
-        try await settle()
+        await mainActorBarrier() // The cancelled run's last progress hop has run.
         XCTAssertEqual(installer.state, .cancelled)
         XCTAssertFalse(installer.isInstalled)
     }
@@ -450,7 +462,7 @@ final class WhisperInstallerTests: XCTestCase {
         let installer = WhisperModelInstaller(store: store, downloader: downloader, tokenizerChecker: slowChecker,
                                               availableCapacity: { .max })
         installers.append(installer)
-        let task = installer.install()
+        let task = install(installer)
         try await waitUntil { slowChecker.hasEntered && installer.state == .verifying }
         XCTAssertTrue(installer.isBusy)
         XCTAssertFalse(store.hasMarker)
@@ -463,11 +475,11 @@ final class WhisperInstallerTests: XCTestCase {
     func testSecondInstallWhileBusyJoinsTheRunningDownload() async throws {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
-        let first = installer.install()
-        let second = installer.install()
+        let first = install(installer)
+        let second = install(installer)
         XCTAssertEqual(first, second)
-        try await settle()
-        let third = installer.install()
+        try await waitForState("download held mid-file") { self.downloader.calls.last == Self.weightPath }
+        let third = install(installer)
         XCTAssertEqual(first, third)
 
         downloader.release(Self.weightPath)
@@ -480,7 +492,7 @@ final class WhisperInstallerTests: XCTestCase {
     func testInstallWhenAlreadyInstalledMakesNoDownloaderCalls() async throws {
         try WhisperTestFiles.populate(store, marker: true)
         let installer = makeInstaller()
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .installed)
         XCTAssertTrue(downloader.calls.isEmpty)
     }
@@ -488,14 +500,14 @@ final class WhisperInstallerTests: XCTestCase {
     func testCancelKeepsDownloadedFilesNotSelectableAndRetryFinishesOnlyTheRest() async throws {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
-        let task = installer.install()
+        let task = install(installer)
         try await waitUntil { self.downloader.calls.last == Self.weightPath }
 
         installer.cancel()
         XCTAssertEqual(installer.state, .cancelled)
         XCTAssertFalse(installer.isBusy)
         await task.value
-        try await settle()
+        await mainActorBarrier() // Progress hops queued before the unwind have run.
         XCTAssertEqual(installer.state, .cancelled, "a late progress callback never revives a cancelled download")
         XCTAssertFalse(store.hasMarker)
         XCTAssertFalse(installer.isInstalled)
@@ -505,7 +517,7 @@ final class WhisperInstallerTests: XCTestCase {
         }
 
         downloader.set(.write, for: Self.weightPath)
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .installed)
         let afterCancel = Array(downloader.calls.drop { $0 != Self.weightPath }.dropFirst())
         XCTAssertEqual(afterCancel.first, Self.weightPath, "Retry restarts the interrupted file")
@@ -515,11 +527,11 @@ final class WhisperInstallerTests: XCTestCase {
     func testRetryImmediatelyAfterCancelWaitsForTheCancelledDownloadToStop() async throws {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
-        _ = installer.install()
+        _ = install(installer)
         try await waitUntil { self.downloader.calls.last == Self.weightPath }
         installer.cancel()
         downloader.set(.write, for: Self.weightPath)
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .installed)
         XCTAssertEqual(downloader.maxConcurrent, 1, "the retry never writes beside the cancelled download")
     }
@@ -533,7 +545,7 @@ final class WhisperInstallerTests: XCTestCase {
     func testDownloadFailureIsReportedKeepsFilesAndRetrySucceeds() async throws {
         downloader.set(.fail(FakeDownloadFailure(message: "Server said no.")), for: Self.melWeightPath)
         let installer = makeInstaller()
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .failed("Download failed: Server said no. Tap Retry to start again."))
         XCTAssertFalse(installer.isBusy)
         XCTAssertFalse(store.hasMarker)
@@ -541,7 +553,7 @@ final class WhisperInstallerTests: XCTestCase {
         XCTAssertNil(downloader.calls.firstIndex(of: WhisperModelSpec.modelFiles.last!.path), "stops at the failure")
 
         downloader.set(.write, for: Self.melWeightPath)
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .installed)
         XCTAssertEqual(downloader.calls.filter { $0 == Self.melWeightPath }.count, 2)
         XCTAssertEqual(downloader.calls.filter { $0 == Self.weightPath }.count, 1, "files before the failure are kept")
@@ -551,7 +563,7 @@ final class WhisperInstallerTests: XCTestCase {
         let file = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.melWeightPath })
         downloader.set(.writeBytes(file.bytes - 7), for: file.path)
         let installer = makeInstaller()
-        await installer.install().value
+        await install(installer).value
         let expected = WhisperInstallError.sizeMismatch(path: file.path, expected: file.bytes, actual: file.bytes - 7)
         XCTAssertEqual(installer.state, .failed(try XCTUnwrap(expected.errorDescription)))
         XCTAssertFalse(store.hasMarker)
@@ -561,7 +573,7 @@ final class WhisperInstallerTests: XCTestCase {
     func testCorruptTokenizerFailsAndIsNeverMarked() async throws {
         checker.fail(with: WhisperTokenizerError.unresolvedToken("<|de|>"))
         let installer = makeInstaller()
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state,
                        .failed("The Whisper tokenizer on this iPhone is damaged (missing <|de|>). Download Whisper again."))
         XCTAssertFalse(store.hasMarker)
@@ -571,7 +583,7 @@ final class WhisperInstallerTests: XCTestCase {
 
     func testInsufficientStorageFailsBeforeAnyDownload() async throws {
         let installer = makeInstaller(capacity: 1_000_000)
-        await installer.install().value
+        await install(installer).value
         guard case .failed(let message) = installer.state else { return XCTFail("expected failure, got \(installer.state)") }
         let needed = WhisperModelSpec.totalBytes + WhisperModelSpec.storageHeadroomBytes
         XCTAssertEqual(message, WhisperInstallError.insufficientStorage(needed: needed, available: 1_000_000).errorDescription)
@@ -582,7 +594,7 @@ final class WhisperInstallerTests: XCTestCase {
         try WhisperTestFiles.populate(store, marker: false, except: [Self.melWeightPath])
         let missing = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.melWeightPath })
         let installer = makeInstaller(capacity: missing.bytes + WhisperModelSpec.storageHeadroomBytes)
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .installed)
         XCTAssertEqual(downloader.calls, [missing.path], "complete files do not consume the required download space twice")
     }
@@ -594,7 +606,7 @@ final class WhisperInstallerTests: XCTestCase {
         XCTAssertFalse(store.isInstalled)
 
         let installer = makeInstaller()
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .installed, "the fake Hub refuses to overwrite an existing destination")
         XCTAssertEqual(downloader.calls, [file.path], "only the invalid cached file is downloaded again")
         XCTAssertEqual(store.size(of: file), file.bytes)
@@ -608,7 +620,7 @@ final class WhisperInstallerTests: XCTestCase {
         checker.fail(with: WhisperTokenizerError.unresolvedToken("<|de|>"), times: 1)
         let installer = makeInstaller()
         XCTAssertEqual(installer.state, .installed, "restart detection initially checks marker and sizes")
-        await installer.install().value
+        await install(installer).value
 
         XCTAssertEqual(installer.state, .installed)
         XCTAssertEqual(downloader.calls, WhisperModelSpec.tokenizerFiles.map(\.path))
@@ -624,7 +636,7 @@ final class WhisperInstallerTests: XCTestCase {
         let installer = WhisperModelInstaller(store: store, downloader: downloader, tokenizerChecker: held,
                                               availableCapacity: { .max })
         installers.append(installer)
-        let task = installer.install()
+        let task = install(installer)
         try await waitUntil { !self.store.hasMarker }
         XCTAssertFalse(installer.isInstalled, "a stale marker never advertises an install being repaired")
         installer.cancel()
@@ -640,7 +652,7 @@ final class WhisperInstallerTests: XCTestCase {
         downloader.set(.fail(URLError(.notConnectedToInternet)), for: Self.weightPath)
         let installer = makeInstaller()
         XCTAssertEqual(installer.state, .notInstalled)
-        await installer.install().value
+        await install(installer).value
         XCTAssertEqual(installer.state, .failed("No internet connection. Connect and tap Retry."))
         XCTAssertFalse(store.hasMarker, "an invalid marker never survives a failed retry")
         XCTAssertEqual(downloader.calls, [Self.weightPath], "only the missing file is downloaded")

@@ -7,12 +7,15 @@ private final class LogAudio: AudioManaging {
     var onSystemEvent: ((AudioSystemEvent) -> Void)?
     var onUnexpectedCaptureEnd: ((URL, Bool) -> Void)?
     var duration: TimeInterval = 1.5
+    /// The controller's transcription task removes its capture file in its final `defer`.
+    private(set) var captureURLs: [URL] = []
     func requestPermission() async -> Bool { true }
     func startKeepalive(allowBluetooth: Bool) throws { isKeepaliveRunning = true }
     func stopKeepalive() { isKeepaliveRunning = false }
     func deactivateSession() { isKeepaliveRunning = false }
     func beginCapture(at url: URL, maxDuration: TimeInterval, allowBluetooth: Bool) throws -> any ActiveAudioCapture {
-        LogCapture(url: url, duration: duration)
+        captureURLs.append(url)
+        return LogCapture(url: url, duration: duration)
     }
 }
 
@@ -81,11 +84,6 @@ private final class LogControllerFixture {
             cleanup: deps, dictationLog: injectLog ? env.store : nil, statistics: statistics)
     }
 
-    func settle() async throws {
-        // Same bounded settling pattern as the existing controller tests; model/ASR waits
-        // themselves are continuation-driven, not simulated four-second wall-clock waits.
-        for _ in 0..<8 { try await Task.sleep(for: .milliseconds(25)) }
-    }
     func waitUntil(_ description: String, file: StaticString = #filePath, line: UInt = #line,
                    _ condition: () -> Bool) async throws {
         // These are state/serialization tests, not latency tests. A cold CI simulator can
@@ -124,7 +122,11 @@ private final class LogControllerFixture {
         await asr.resume()
         model.resume()
         sleeper.fire()
-        try await settle()
+        // Drain before the archive and defaults are removed: the (possibly stale) transcription
+        // task has unwound and written its last log state, and no model call can still answer late.
+        try await waitUntil("Expected dictation and model work to drain before teardown") {
+            controller.isIdleForTest && model.cleansInFlight == 0
+        }
         await env.dispose()
     }
 }
@@ -276,7 +278,10 @@ final class DictationLogControllerTests: XCTestCase {
         let f = LogControllerFixture()
         await f.asr.fail()
         try await f.start()
-        f.controller.finishRecording(); try await f.settle()
+        f.controller.finishRecording()
+        try await f.waitUntil("Expected the failed transcription to unwind") {
+            f.controller.phase.isFailure && f.controller.isIdleForTest
+        }
         XCTAssertEqual(f.env.store.entries.first?.status, .asrFailed)
         XCTAssertEqual(f.env.store.entries.first?.asrFailure, .modelNotReady)
         XCTAssertNil(f.env.store.entries.first?.finalText)
@@ -292,22 +297,25 @@ final class DictationLogControllerTests: XCTestCase {
             let f = LogControllerFixture()
             await f.asr.arm()
             try await f.start()
-            f.controller.finishRecording(); try await f.settle()
-            let waiting = await f.asr.isWaiting()
-            XCTAssertTrue(waiting)
+            f.controller.finishRecording()
+            try await f.waitUntilASRIsSuspended()
             let id = try XCTUnwrap(f.env.store.entries.first?.id)
             if replace { f.controller.startRecording(keyboardJobID: "b") }
             else { f.controller.cancelCurrentJob() }
             // No settling or ASR resumption needed to see cancellation.
             XCTAssertEqual(f.env.store.entries.first?.status, .cancelled)
             XCTAssertNil(f.env.store.entries.first?.finalText)
-            await f.asr.resume(); try await f.settle()
+            await f.asr.resume()
+            let firstCapture = try XCTUnwrap(f.audio.captureURLs.first)
+            try await f.waitUntil("Expected the stale transcription task's final cleanup") {
+                !FileManager.default.fileExists(atPath: firstCapture.path)
+            }
             let cancelled = try XCTUnwrap(f.env.store.entries.first { $0.id == id })
             XCTAssertEqual(cancelled.status, .cancelled)
             XCTAssertNil(cancelled.recognized)
             XCTAssertNil(cancelled.finalText)
             if replace {
-                f.controller.finishRecording(); try await f.settle()
+                f.controller.finishRecording(); try await f.waitUntilFinished()
                 XCTAssertEqual(f.env.store.entries.count, 2)
                 XCTAssertEqual(f.env.store.entries.first?.status, .finished)
             }
@@ -352,7 +360,7 @@ final class DictationLogControllerTests: XCTestCase {
                 f.model.gate != nil && !f.sleeper.gates.isEmpty && f.background.expiration != nil
             }
             if expire { f.background.expiration?() } else { f.sleeper.fire() }
-            // Fallback delivery can await cold archive readiness for longer than settle's 200 ms.
+            // Fallback delivery can await cold archive readiness for a long time on a cold simulator.
             // Do not start B until A has actually finished, or B cancels A instead.
             try await f.waitUntilFinished()
             let first = try XCTUnwrap(f.env.store.entries.first)
@@ -360,7 +368,8 @@ final class DictationLogControllerTests: XCTestCase {
             XCTAssertEqual(first.finalText?.text, "Die Katze sitzt auf der Mathe.")
             XCTAssertEqual(first.cleanupOutcome, expire ? "failed(expired)" : "failed(deadline)")
             // A second dictation skips busy while A still owns the model reservation.
-            f.controller.startRecording(keyboardJobID: "b"); try await f.settle()
+            f.controller.startRecording(keyboardJobID: "b")
+            try await f.waitUntil("Expected B to record") { f.controller.phase == .recording }
             f.controller.finishRecording()
             try await f.waitUntilFinished()
             let b = try XCTUnwrap(f.env.store.entries.first)
@@ -405,8 +414,9 @@ final class DictationLogControllerTests: XCTestCase {
                     !f.controller.transcript.isEmpty
                 }
                 XCTAssertFalse(f.controller.transcript.isEmpty)
+                // Every log write is queued before the flush: the transcription task has unwound.
+                try await f.waitUntil("Expected the transcription task to unwind") { f.controller.isIdleForTest }
                 await f.env.storage.flush()
-                try await f.settle()
                 if duringASR && mode != 0 {
                     XCTAssertEqual(f.env.store.entries.first?.status, .interrupted)
                     XCTAssertNil(f.env.store.entries.first?.finalText)
@@ -420,7 +430,10 @@ final class DictationLogControllerTests: XCTestCase {
     func testNoInjectedLogAndShortOrCancelledCaptureProduceNoEntries() async throws {
         let noLog = LogControllerFixture(injectLog: false)
         try await noLog.start()
-        noLog.controller.finishRecording(); try await noLog.settle()
+        noLog.controller.finishRecording()
+        try await noLog.waitUntil("Expected delivery without a log") {
+            !noLog.controller.transcript.isEmpty && noLog.controller.isIdleForTest
+        }
         XCTAssertFalse(noLog.controller.transcript.isEmpty)
         XCTAssertTrue(noLog.env.store.entries.isEmpty)
         await noLog.env.storage.flush()
@@ -430,8 +443,8 @@ final class DictationLogControllerTests: XCTestCase {
             let f = LogControllerFixture()
             if short { f.audio.duration = 0.1 }
             try await f.start()
+            // Both are synchronous: a short capture returns before any log or transcription work.
             if short { f.controller.finishRecording() } else { f.controller.cancelCurrentJob() }
-            try await f.settle()
             XCTAssertTrue(f.env.store.entries.isEmpty)
             try await f.dispose()
         }
@@ -447,8 +460,13 @@ final class DictationLogControllerTests: XCTestCase {
         try FileManager.default.removeItem(at: entries)
         try Data("not a directory".utf8).write(to: entries)
         try await f.start()
-        f.controller.finishRecording(); try await f.settle()
-        await f.env.storage.flush(); try await f.settle()
+        f.controller.finishRecording()
+        try await f.waitUntil("Expected delivery and transcription unwind") {
+            f.controller.phase == .ready && f.controller.isIdleForTest
+        }
+        await f.env.storage.flush()
+        // The failed write reports back in a main-actor hop after the storage queue.
+        try await f.waitUntil("Expected the failed write to be reported") { f.env.store.storageProblem != nil }
         XCTAssertEqual(f.controller.phase, .ready)
         XCTAssertEqual(f.controller.transcript, "Die Katze sitzt auf der Matte.")
         XCTAssertEqual(f.env.store.entries.first?.status, .finished)

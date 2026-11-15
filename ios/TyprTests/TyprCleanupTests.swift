@@ -13,6 +13,9 @@ final class CleanupTestSession: CleanupSession {
     var gate: CheckedContinuation<String, Never>?
     var suspendPrewarm = false
     var prewarmGate: CheckedContinuation<Void, Never>?
+    /// Model calls that have not returned. The coordinator's model task continues in the same
+    /// main-actor job after the return, so 0 also means that task has released its reservation.
+    private(set) var cleansInFlight = 0
     func prewarm() async {
         prepareCount += 1
         if suspendPrewarm { await withCheckedContinuation { prewarmGate = $0 } }
@@ -20,6 +23,8 @@ final class CleanupTestSession: CleanupSession {
     }
     func clean(_ text: String, style: DictationStyle) async throws -> String {
         cleanCount += 1
+        cleansInFlight += 1
+        defer { cleansInFlight -= 1 }
         if let failure { throw failure }
         if shouldThrow { throw CocoaError(.coderInvalidValue) }
         if suspend {
