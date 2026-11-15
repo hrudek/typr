@@ -1,5 +1,6 @@
 import CoreML
 import Foundation
+import OSLog
 import WhisperKit
 
 /// Typr's Whisper decoding choices as plain values, so tests can check them without WhisperKit
@@ -79,6 +80,10 @@ nonisolated enum WhisperPreparationComponent: String, CaseIterable, Sendable {
         try Task.checkCancellation()
     }
 
+    // Three sequential specializations, the final load, and validation. These units are
+    // milestones, not equal durations. Keep the app's Core ML fraction indeterminate.
+    static let totalPreparationStages: Int64 = 5
+
     func progress(optimizing: Bool) -> ModelPreparationProgress {
         let step: Int
         let name: String
@@ -89,7 +94,8 @@ nonisolated enum WhisperPreparationComponent: String, CaseIterable, Sendable {
         }
         let verb = optimizing ? "Optimizing" : "Loading"
         return ModelPreparationProgress(fractionCompleted: nil,
-            detail: "\(verb) Whisper \(name) · Step \(step) of 3")
+            detail: "\(verb) Whisper \(name) · Step \(step) of 3",
+            stageProgress: (Int64(step - 1), Self.totalPreparationStages))
     }
 }
 
@@ -134,6 +140,7 @@ actor WhisperTranscriber: LocalTranscribing {
         }
     }
 
+    private nonisolated static let logger = Logger(subsystem: "dev.rudek.typr", category: "WhisperPreparation")
     nonisolated static let loadingDetail = "Loading Whisper"
     nonisolated static let optimizingDetail = "Optimizing Whisper for this iPhone. This can take a few minutes."
 
@@ -299,10 +306,14 @@ actor WhisperTranscriber: LocalTranscribing {
                 )
             }
             try Task.checkCancellation()
-            progressHandler(ModelPreparationProgress(fractionCompleted: nil, detail: "Loading the prepared Whisper models"))
+            progressHandler(ModelPreparationProgress(fractionCompleted: nil,
+                detail: "Loading the prepared Whisper models",
+                stageProgress: (3, WhisperPreparationComponent.totalPreparationStages)))
             try await kit.loadModels()
             try Task.checkCancellation()
-            progressHandler(ModelPreparationProgress(fractionCompleted: nil, detail: "Checking the Whisper model"))
+            progressHandler(ModelPreparationProgress(fractionCompleted: nil,
+                detail: "Checking the Whisper model",
+                stageProgress: (4, WhisperPreparationComponent.totalPreparationStages)))
             try Self.validateLogitsSize(kit.textDecoder.logitsSize)
         } catch is CancellationError {
             throw CancellationError()
@@ -311,6 +322,12 @@ actor WhisperTranscriber: LocalTranscribing {
         } catch {
             // Resource denial (including background Core ML restrictions) is not evidence of
             // corrupt downloaded files. Do not tell the person to download the model again.
+            // Technical metadata only: descriptions can contain private paths or payloads.
+            let failure = error as NSError
+            Self.logger.error("Core ML preparation failed: domain=\(failure.domain, privacy: .public) code=\(failure.code)")
+            if let underlying = failure.userInfo[NSUnderlyingErrorKey] as? NSError {
+                Self.logger.error("Core ML underlying failure: domain=\(underlying.domain, privacy: .public) code=\(underlying.code)")
+            }
             throw TranscriberError.preparationFailed(error.localizedDescription)
         }
         return kit

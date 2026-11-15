@@ -26,8 +26,14 @@ estimate is about 4.5 GB beyond the installed files.
   Preparation starts again safely; it does not resume a Core ML call halfway
   through. Core ML may reuse completed specialization caches, but Typr cannot
   promise how much work is saved.
-- Status shows real stages, not a fabricated percentage or completion time. A long
-  Core ML stage can remain indeterminate; iOS may stop tasks showing little progress.
+- The app shows real stages, not a fabricated percentage or completion time.
+  The system task receives five discrete milestones (three component preparations,
+  the final load, validation), not an estimate of elapsed time or equally weighted
+  Core ML work. Completed stages advance system progress; a long individual Core ML
+  stage remains indeterminate in the app. iOS may still stop a slow or stalled task.
+- App preparation spinners are replaced by a static indicator while the scene is
+  inactive/backgrounded. A continued task grants processing time, not permission to
+  keep rendering GPU animation frames.
 
 Typr also requests opportunistic **processing maintenance**, requiring external
 power and no network. iOS decides whether and when to launch it (Background App
@@ -53,16 +59,23 @@ with iOS 27. It is required for **any** background Neural Engine access, not onl
 continued tasks. Typr declares it for the containing app only. Distribution and
 ad-hoc provisioning profiles must also permit it. The signing pipeline fails
 closed if the capability would be missing or stripped. No bundle IDs, App Group,
-URL scheme or team are changed. Core ML can still deny resources or fail; that is
+URL scheme or team are changed. The request uses default resources (zero), **not**
+all `supportedResources`. The iOS 27 SDK has no Neural Engine resource bit;
+`.gpu` is separate and must not be added just because it is supported.
+Core ML can still deny resources or fail; that is
 reported as a preparation failure, not a request to download good files again.
 
-**Release prerequisite:** the owner must enable Background Inference for the app
-in the developer portal and regenerate the app's distribution/ad-hoc profiles
-where needed (existing active profiles are reused by the provisioning helper;
-replace/invalidate old ones deliberately). Then run the existing owner provisioning
-commands in `.github/typr/README.md`. No portal capabilities, profiles or secrets
-are changed by this implementation worker. Profile support and real-device ANE
-behavior remain unverified on Linux.
+Background Inference was enabled and the app profiles replaced in the previous
+provisioning task. Signed TestFlight build 0.2.0 (290.1) was verified to carry the
+entitlement in both app signature and embedded profile. This does not prove runtime
+ANE access or completed tester availability. No capabilities, profiles or secrets
+are changed by this fix. Re-provision deliberately if profiles are replaced later.
+
+Preparation emits technical lifecycle and NSError domain/code metadata to the
+`dev.rudek.typr` / `WhisperPreparation` unified-log category. It does not log error
+descriptions, paths, transcripts or audio. Scoped device diagnosis is still needed
+if preparation fails: submission failure, runtime expiration and Core ML failure
+are different outcomes and must not be inferred from a failed system status alone.
 
 Simulator tests cover controller lifecycle, eligibility, single-flight preparation,
 expiration and engine selection with fakes. They cannot prove background runtime,
@@ -83,5 +96,8 @@ signed iPhone on iOS 26 and iOS 27+, and on older iOS for the UIKit fallback.
 
 SDK header cross-check (public SDK mirror, used to inspect API declarations, not
 vendored code): [iPhoneOS26.0 BGTaskScheduler.h](https://github.com/xybp888/iOS-SDKs/blob/master/iPhoneOS26.0.sdk/System/Library/Frameworks/BackgroundTasks.framework/Headers/BGTaskScheduler.h)
-and `BGTaskRequest.h` in the same directory. Apple's current documentation is newer
+and `BGTaskRequest.h` in the same directory. Also cross-checked the
+[iOS 27.0 headers](https://github.com/xybp888/iOS-SDKs/tree/master/iPhoneOS27.0.sdk/System/Library/Frameworks/BackgroundTasks.framework/Headers):
+`BGTask.h` requires runtime NSProgress reporting and warns stalled tasks may expire;
+`BGTaskRequest.h` defines only default and GPU resources. Apple's current documentation is newer
 than the iOS 26 SDK; in particular, Background Inference is an iOS 27 requirement.
