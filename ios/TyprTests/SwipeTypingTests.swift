@@ -290,6 +290,21 @@ final class SwipeTypingTests: XCTestCase {
         XCTAssertEqual(target.text, "o")
     }
 
+    func testSwipeTypingSwitchOffKeepsSlideToKey() async {
+        engine.swipeTypingEnabled = false
+        results = candidates("hello")
+        let end = slide(1, "helo")
+        XCTAssertFalse(engine.touches[1]?.isSwipe == true)
+        engine.touchEnded(id: 1, at: end)
+        await engine.waitForSwipe()
+        XCTAssertEqual(target.text, "o")
+        XCTAssertEqual(requests, 0)
+
+        engine.swipeTypingEnabled = true
+        await swipe("helo")
+        XCTAssertEqual(target.text, "o hello")
+    }
+
     func testHeldLetterStillOpensAccentsAndSwipeDoesNot() {
         engine.autocorrect.german = GermanAutocorrect(checker: nil)
         let start = center("a")

@@ -7,6 +7,7 @@ struct KeyboardSettingsCard: View {
     @Environment(\.openURL) private var openURL
     @State private var fullKeyboard = FullKeyboardSettings().isEnabled
     @State private var autocorrect = FullKeyboardSettings().autocorrect
+    @State private var swipeTyping = FullKeyboardSettings().swipeTyping
     @State private var personalLearning = TyprSettings().personalLearning
     @State private var autocorrectGerman = TyprSettings().autocorrectGerman
     @State private var autocorrectEnglish = TyprSettings().autocorrectEnglish
@@ -34,7 +35,7 @@ struct KeyboardSettingsCard: View {
                         .padding(.horizontal, 16)
                 }
                 // Required end-user notice of the FUTO Model Weights License (SwipeModel/LICENSE-FUTO-SWIPE.txt).
-                Text("Slide across the letters to type a word. \(Self.swipeNotice)")
+                Text(Self.swipeNotice)
                     .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                     .padding(.horizontal, 16)
             }
@@ -53,6 +54,11 @@ struct KeyboardSettingsCard: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    SettingsDivider()
+                    SettingsToggle(title: "Swipe typing", detail: "Slide across the letters to type a word.", isOn: $swipeTyping)
+                        .onChange(of: swipeTyping) { _, enabled in
+                            FullKeyboardSettings().swipeTyping = enabled
+                        }
                     SettingsDivider()
                     SettingsToggle(title: "Learn from my typing", detail: "Adapts to your taps, chosen words, recent German/English usage and what follows one or two words. Undo remembers rejected corrections and their preceding words.", isOn: $personalLearning)
                         .onChange(of: personalLearning) { _, enabled in
@@ -88,6 +94,7 @@ struct KeyboardSettingsCard: View {
     private func refresh() {
         fullKeyboard = FullKeyboardSettings().isEnabled
         autocorrect = FullKeyboardSettings().autocorrect
+        swipeTyping = FullKeyboardSettings().swipeTyping
         personalLearning = TyprSettings().personalLearning
         autocorrectGerman = TyprSettings().autocorrectGerman
         autocorrectEnglish = TyprSettings().autocorrectEnglish
