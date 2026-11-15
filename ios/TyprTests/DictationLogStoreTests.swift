@@ -24,13 +24,12 @@ final class LogTestEnvironment {
         store.begin(token: store.token(), context: context, clock: clock)!
     }
 
-    static func waitUntilLoaded(_ store: DictationLogStore) async throws {
-        for _ in 0..<100 {
-            await store.storage.flush()
-            try await Task.sleep(for: .milliseconds(5))
-            if !store.isLoading && store.metadata.prefix(50).allSatisfy({ store.entry($0.id) != nil }) { return }
+    static func waitUntilLoaded(_ store: DictationLogStore, file: StaticString = #filePath,
+                                line: UInt = #line) async throws {
+        try await waitForState("archive loaded", file: file, line: line) {
+            await store.storage.flush(); await mainActorBarrier()
+            return !store.isLoading && store.metadata.prefix(50).allSatisfy { store.entry($0.id) != nil }
         }
-        XCTFail("Archive did not load")
     }
 
     var persistedEntryCount: Int {
@@ -158,7 +157,7 @@ final class DictationLogStoreTests: XCTestCase {
         XCTAssertNotNil(migrated.entry(good.id))
         XCTAssertTrue(FileManager.default.fileExists(atPath: env.storage.url.path))
         migrated.delete(good.id); await migrated.storage.flush()
-        try await Task.sleep(for: .milliseconds(25))
+        await mainActorBarrier() // The delete completion hops to the main actor.
         let reloaded = DictationLogStore(storage: DictationLogStorage(url: env.storage.url), settings: env.settings)
         try await settle(reloaded)
         XCTAssertFalse(reloaded.metadata.contains { $0.id == good.id })
@@ -199,7 +198,7 @@ final class DictationLogStoreTests: XCTestCase {
         env.store.retry()
         recording.finish(text: "stale", beforeSpelling: "stale")
         await env.storage.flush()
-        try await Task.sleep(for: .milliseconds(25))
+        await mainActorBarrier() // Storage completions hop to the main actor.
         XCTAssertNil(env.store.entry(id))
         XCTAssertFalse(env.store.metadata.contains { $0.id == id })
         XCTAssertFalse(FileManager.default.fileExists(atPath: env.storage.root
@@ -254,12 +253,12 @@ final class DictationLogStoreTests: XCTestCase {
         let second = env.begin(); second.finish(text: "second", beforeSpelling: "second")
         try await settle(env.store)
         env.store.prepareJSON(ids: [first.entryID])
-        for _ in 0..<200 where env.store.exporting { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitForState("scoped export prepared") { !env.store.exporting }
         XCTAssertNotNil(env.store.preparedJSON(for: [first.entryID]))
         XCTAssertNil(env.store.preparedJSON(for: nil))
         XCTAssertNil(env.store.preparedJSON(for: [second.entryID]))
         env.store.prepareJSON()
-        for _ in 0..<200 where env.store.exporting { try await Task.sleep(for: .milliseconds(5)) }
+        try await waitForState("complete export prepared") { !env.store.exporting }
         XCTAssertNotNil(env.store.preparedJSON(for: nil))
         XCTAssertNil(env.store.preparedJSON(for: [first.entryID]))
         await env.dispose()
@@ -303,7 +302,7 @@ final class DictationLogStoreTests: XCTestCase {
         try Data("parent is a file".utf8).write(to: env.directory)
         let recording = env.begin()
         recording.finish(text: "retained for retry", beforeSpelling: "retained for retry")
-        await env.storage.flush(); try await Task.sleep(for: .milliseconds(25))
+        await env.storage.flush(); await mainActorBarrier() // The failed save reports on the main actor.
         XCTAssertNotNil(env.store.storageProblem)
         try FileManager.default.removeItem(at: env.directory)
         env.store.retry()
@@ -323,12 +322,12 @@ final class DictationLogStoreTests: XCTestCase {
         try Data("parent is a file".utf8).write(to: env.directory)
         env.begin().finish(text: "still delivered", beforeSpelling: "still delivered")
         await env.storage.flush()
-        try await Task.sleep(for: .milliseconds(25)) // Drain the main-actor completion, not disk.
+        await mainActorBarrier() // Drain the main-actor completion, not disk.
         XCTAssertNotNil(env.store.storageProblem)
         try FileManager.default.removeItem(at: env.directory)
         env.store.clear()
         await env.storage.flush()
-        try await Task.sleep(for: .milliseconds(25))
+        await mainActorBarrier() // The clear completion reports on the main actor.
         XCTAssertNil(env.store.storageProblem)
         XCTAssertTrue(env.store.entries.isEmpty)
         await env.dispose()

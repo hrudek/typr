@@ -89,8 +89,7 @@ final class DictationLogImprovementTests: XCTestCase {
         env.store.clear()
         env.store.saveFeedback(for: id, expectedText: "stale editor", note: "")
         recording.processingStages(cleanupOutput: "stale", formattedText: "stale")
-        await env.storage.flush()
-        try await Task.sleep(for: .milliseconds(25))
+        await env.storage.flush(); await mainActorBarrier() // Storage completions hop to the main actor.
         XCTAssertTrue(env.store.entries.isEmpty)
         await env.dispose()
     }
