@@ -5,9 +5,7 @@ import UIKit
 /// Only the app's existing preparation uses this runtime; it never owns or creates a model.
 @MainActor
 protocol WhisperPreparationScheduling: AnyObject {
-    /// `userInitiated`: a tap in Typr started this preparation. Only then may a continued
-    /// task (and its system Live Activity) be requested; automatic starts use UIKit grace only.
-    func begin(userInitiated: Bool, expiration: @escaping @MainActor () -> Void)
+    func begin(expiration: @escaping @MainActor () -> Void)
     func update(_ progress: ModelPreparationProgress)
     func sceneDidBecomeActive()
     func finish(success: Bool)
@@ -26,7 +24,6 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     private var maintenanceRegistered = false
     private var maintenanceSubmitted = false
     private var operation: UUID?
-    private var operationUserInitiated = false
     private var shownSubtitle: String?
     private var expiration: (@MainActor () -> Void)?
     private var continued: BGTask?
@@ -57,11 +54,10 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
     }
 
-    func begin(userInitiated: Bool, expiration: @escaping @MainActor () -> Void) {
+    func begin(expiration: @escaping @MainActor () -> Void) {
         finish(success: false)
         let token = UUID()
         operation = token
-        operationUserInitiated = userInitiated
         self.expiration = expiration
         // Covers the handoff to the continued task, and is the entire (bounded) fallback on
         // older iOS or rejected requests. No microphone, audio session or network is involved.
@@ -70,17 +66,16 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
             // returning; enqueueing a Task here could outlive the expiration deadline.
             MainActor.assumeIsolated { self?.expire(token) }
         }
-        // Apple: continued tasks start only from an explicit action, never automatically
-        // (launch, reopening, maintenance), even if the person chose the engine earlier.
-        guard userInitiated else { return }
+        // Deliberate deviation for this personal app: Apple's guidance is to request continued
+        // tasks only after an explicit tap. Typr also requests one when opening the app starts
+        // preparation, so leaving Typr does not pause it. See WhisperBackgroundPreparation.md.
         submitContinued(for: token, attempt: 1)
     }
 
-    /// A tapped preparation that is still running without a continued task (a rejected
-    /// request) asks again whenever the app becomes active. Submission requires foreground.
+    /// A preparation that is still running without a continued task (a rejected request)
+    /// asks again whenever the app becomes active. Submission requires foreground.
     func sceneDidBecomeActive() {
-        guard let token = operation, operationUserInitiated, continued == nil,
-              pendingSubmission == nil else { return }
+        guard let token = operation, continued == nil, pendingSubmission == nil else { return }
         submitContinued(for: token, attempt: 1)
     }
 
@@ -227,7 +222,6 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
 
     func finish(success: Bool) {
         operation = nil
-        operationUserInitiated = false
         shownSubtitle = nil
         expiration = nil
         latestProgress = nil

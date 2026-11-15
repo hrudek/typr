@@ -31,9 +31,8 @@ engine or language choice never silently falls back to another.
 ## Whisper preparation
 
 Opening Typr automatically prepares an installed, explicitly chosen Whisper model
-without downloading. On iOS 26+, after you tap Use, Prepare or Try again, Typr asks
-to continue that preparation after you leave the app; automatic starts and older
-iOS have only limited background grace time. Opportunistic
+without downloading. On iOS 26+, Typr asks to continue that preparation after you
+leave the app; older iOS has only limited background grace time. Opportunistic
 maintenance can also prepare it while charging. iOS may decline, pause or stop
 this work; there is no immediate post-update guarantee. Reopen Typr to retry.
 Preparation never starts the microphone or audio keepalive.
