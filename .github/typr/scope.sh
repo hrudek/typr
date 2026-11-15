@@ -18,7 +18,7 @@ if [[ -n "$automation" ]]; then
   fi
   echo "$automation"
 fi
-docs=$(git diff --name-only --diff-filter=A "$1" "$2" -- '*.md' || true)
+docs=$(git diff --name-only --no-renames --diff-filter=A "$1" "$2" -- '*.md' || true)
 if [[ -n "$docs" ]]; then
   if [[ ",$LABELS," == *",docs,"* ]]; then
     echo 'New Markdown files (label docs present):'
