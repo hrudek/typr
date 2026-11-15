@@ -116,6 +116,9 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
             self.pendingSubmission = nil
             Self.logger.notice("Continued preparation was not started by the system: attempt=\(attempt)")
             guard attempt < Self.maxSubmissionAttempts else { return }
+            // Withdraw this request first so a slow launch cannot start a duplicate task that
+            // the late-handler guard would then have to fail visibly in the Dynamic Island.
+            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
             self.submitContinued(for: token, attempt: attempt + 1)
         }
     }
@@ -147,10 +150,18 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     private func startHeartbeat(for task: BGContinuedProcessingTask, token: UUID) {
         heartbeat?.cancel()
         heartbeat = Task { @MainActor [weak self] in
+            var loggedCeiling = false
             while !Task.isCancelled {
                 try? await Task.sleep(for: Self.heartbeatInterval)
                 guard !Task.isCancelled, let self, self.operation == token, self.continued === task else { return }
-                Self.advanceHeartbeat(task.progress)
+                if Self.advanceHeartbeat(task.progress) {
+                    loggedCeiling = false
+                } else if !loggedCeiling {
+                    // Ceiling of the running stage (~83 min); a later stall expiry is expected.
+                    // Keeps looping: the next real milestone opens room again.
+                    loggedCeiling = true
+                    Self.logger.notice("Preparation heartbeat reached its stage ceiling")
+                }
             }
         }
     }
@@ -208,7 +219,9 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     }
 
     /// Idempotent within a process: resubmitting would cancel the pending request and push its
-    /// earliest begin date out again on every activation or background transition.
+    /// earliest begin date out again on every activation or background transition. A request
+    /// left by an earlier process survives `needed: false`; that is harmless because
+    /// `handleMaintenance` re-checks engine, install and readiness before doing any work.
     func scheduleMaintenance(needed: Bool) {
         guard maintenanceRegistered, needed != maintenanceSubmitted else { return }
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.maintenanceIdentifier)
