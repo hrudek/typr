@@ -51,7 +51,8 @@ final class SettingsPresentationTests: XCTestCase {
         state.counts["other"] = .init(count: 3, lastUpdated: KeyboardLearnedWordsView.fixtureDate)
         let all = Results(state: state, query: "  \n ")
         XCTAssertEqual(all.kept, state.kept.keys.sorted())
-        XCTAssertEqual(all.pairs, state.rejected)
+        // Pairs are listed sorted by typed word, then replacement, not in storage order.
+        XCTAssertEqual(all.pairs, [RejectedCorrection(typed: "adn", replacement: "and"), correction])
         XCTAssertEqual(all.counts, ["hello", "other", "zebra"])
         XCTAssertEqual(all.pairWords, ["hello", "world"])
 
