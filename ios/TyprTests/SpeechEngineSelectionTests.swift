@@ -33,6 +33,8 @@ private final class EngineAudio: AudioManaging {
     var holdPermission = false
     private var permissionWaiters: [CheckedContinuation<Bool, Never>] = []
     private(set) var captures: [EngineCapture] = []
+    /// Permission requests suspended in the fake's continuation.
+    var heldPermissionRequests: Int { permissionWaiters.count }
 
     func requestPermission() async -> Bool {
         guard holdPermission else { return true }
@@ -311,10 +313,6 @@ private final class EngineFixture {
 
     var storedPreferenceRaw: String? { defaults.string(forKey: "typr.preferredSpeechEngine") }
 
-    func settle() async throws {
-        for _ in 0..<8 { try await Task.sleep(for: .milliseconds(25)) }
-    }
-
     func waitUntil(timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line,
                    _ condition: @MainActor () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(timeout)
@@ -364,7 +362,9 @@ private final class EngineFixture {
                 await asr.releaseTranscribe()
             }
         }
-        for _ in 0..<20 { await Task.yield() }
+        // Drain before the defaults are removed: permission, transcription (including a cancelled
+        // one's unwind) and preparation work have finished. A timeout fails the test.
+        try? await waitForState("engine fixture idle before teardown") { self.controller.isIdleForTest }
         defaults.removePersistentDomain(forName: suite)
     }
 }
@@ -605,7 +605,16 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
     func testNoChoiceStaysNilThroughLaunchPrepareAndDictationAndUsesTheAutomaticPath() async throws {
         let f = fixture(autoPrepare: true)
-        try await f.settle()
+        // Launch without a choice either prepares (cached Parakeet), asks Apple Speech for a locale
+        // in a task, or does nothing. Wait for that decision instead of a fixed delay.
+        var appleSpeechAvailable = false
+        if #available(iOS 26.0, *) { appleSpeechAvailable = AppleSpeechTranscriber.isAvailable }
+        if ParakeetTranscriber.hasCachedModel || appleSpeechAvailable {
+            try await waitForState("launch engine decision") {
+                f.controller.phase != .preparingModel
+                    && (f.controller.phase != .modelRequired || f.controller.engineName == "Parakeet V2")
+            }
+        }
         XCTAssertNil(f.controller.preferredEngine)
         if f.controller.phase != .ready { try await f.ready() }
         try await f.dictate()
@@ -633,7 +642,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(f.controller.currentEngine, .appleSpeech)
         XCTAssertEqual(f.controller.phase, .ready)
         XCTAssertEqual(f.storedPreferenceRaw, "apple-speech")
-        try await f.settle()
+        // Synchronous: a reload would already have left `.ready` above.
         XCTAssertTrue(f.fake.explicitCalls.isEmpty, "pinning does not create another engine")
         let preparations = await automatic.prepareCount
         XCTAssertEqual(preparations, 1)
@@ -707,13 +716,15 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
         // Retrying asks for the same engine again; it never substitutes another one.
         f.controller.performPrimaryAction()
-        try await f.settle()
+        try await f.waitUntil {
+            if case .failed = f.controller.phase { f.fake.explicitCalls.count == 3 } else { false }
+        }
         XCTAssertEqual(f.fake.explicitCalls, [.parakeetV2, .appleSpeech, .appleSpeech])
         XCTAssertTrue(f.fake.automaticCalls.isEmpty)
 
         // Even a forced dictation is refused without a ready engine; the released engine is not used.
+        // Synchronous: without a ready engine `startRecording` returns before any task.
         f.controller.startRecording()
-        try await f.settle()
         XCTAssertTrue(f.audio.captures.isEmpty)
         let previousCalls = await previous.languages
         XCTAssertTrue(previousCalls.isEmpty, "the previous engine never transcribes after a switch")
@@ -871,7 +882,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
     func testLaunchWithWhisperChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
         let (f, downloader, store) = whisperChosenNotInstalled(autoPrepare: true)
-        try await f.settle()
+        // Synchronous: launch preparation skips an uninstalled Whisper without starting a task.
         XCTAssertEqual(f.controller.phase, .modelRequired)
         XCTAssertEqual(f.controller.engineName, "Whisper Large V3 Turbo")
         XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
@@ -891,7 +902,8 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
         // Keyboard cold-start handoff.
         f.controller.handleKeyboardLaunch(.startRecording(jobID: "kb-1", requestedAt: f.now, style: .polished, host: nil))
-        try await f.settle()
+        // The handoff starts another preparation; wait until it has failed again.
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
         XCTAssertEqual(f.controller.phase, .failed(notInstalled))
         XCTAssertTrue(f.audio.captures.isEmpty, "no recording without a ready engine")
         XCTAssertEqual(f.bridge.snapshot().state, .failed)
@@ -902,11 +914,10 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertNil(result)
         XCTAssertEqual(f.controller.phase, .failed(notInstalled))
         await TyprSystemCommandBus.shared.dispatch(.warmSession)
-        try await f.settle()
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
 
-        // Language change.
+        // Language change. Synchronous: only Apple Speech reprepares for a language.
         f.controller.setDictationLanguage(.english)
-        try await f.settle()
 
         XCTAssertTrue(downloader.calls.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Whisper")
@@ -1050,7 +1061,8 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(f.controller.selectEngine(.appleSpeech), .selected)
         try await f.waitUntil { f.fake.explicitCalls.last == .appleSpeech }
         XCTAssertEqual(f.controller.selectEngine(.whisperLargeV3Turbo), .selected, "choosing again while preparing is allowed")
-        try await f.settle()
+        // The new preparation task's first main-actor step would create the model without the wait.
+        await mainActorBarrier()
         XCTAssertFalse(f.fake.explicitCalls.contains(.whisperLargeV3Turbo),
                        "the next model is not created while the previous one is still loading")
 
@@ -1059,7 +1071,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo, "the superseded result is dropped")
         XCTAssertEqual(f.controller.engineName, "Whisper Large V3 Turbo")
         XCTAssertEqual(Array(f.fake.events.suffix(2)), ["create:apple-speech", "create:whisper-large-v3-turbo"])
-        try await f.settle()
+        // Synchronous: the superseded task finished before the Whisper one created its model.
         XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo)
 
         _ = try await f.dictate()
@@ -1185,8 +1197,8 @@ final class SpeechEngineSelectionTests: XCTestCase {
         try await f.ready()
         f.audio.holdPermission = true
         f.controller.startRecording()
-        // Allow the request task to enter the fake's continuation before cancelling it.
-        try await f.settle()
+        // The request task must be suspended in the fake's continuation before it is cancelled.
+        try await f.waitUntil { f.audio.heldPermissionRequests == 1 }
         f.controller.cancelCurrentJob()
         XCTAssertEqual(f.controller.phase, .ready)
         XCTAssertFalse(f.controller.canChangeEngine)
@@ -1257,8 +1269,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(f.controller.preferredEngine, .appleSpeech)
         XCTAssertEqual(f.controller.currentEngine, .appleSpeech)
         XCTAssertTrue(f.controller.isModelReady)
-        f.controller.setDictationLanguage(.english)
-        try await f.settle()
+        f.controller.setDictationLanguage(.english) // synchronous: the same language returns early
         XCTAssertEqual(f.fake.explicitLanguages, [.german, .english], "same language is not prepared again")
     }
 
@@ -1281,8 +1292,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(f.controller.phase, .preparingModel)
         XCTAssertFalse(f.controller.isModelReady)
         XCTAssertNil(f.controller.currentEngine)
-        f.controller.startRecording()
-        try await f.settle()
+        f.controller.startRecording() // synchronous: refused while the model is not ready
         XCTAssertEqual(f.audio.captures.count, 1, "the next capture cannot start with the previous Apple locale")
 
         await english.releasePrepare()
@@ -1380,7 +1390,8 @@ final class SpeechEngineSelectionTests: XCTestCase {
         f.controller.cancelCurrentJob()
         XCTAssertEqual(f.controller.phase, .ready)
         await whisper.releaseTranscribe()
-        try await f.settle()
+        // The cancelled transcription task has returned from the model and unwound.
+        try await f.waitUntil { f.controller.canChangeEngine }
         XCTAssertEqual(f.controller.transcript, "")
         XCTAssertNil(f.bridge.snapshot().transcript)
         XCTAssertEqual(f.controller.phase, .ready)
@@ -1537,7 +1548,8 @@ extension SpeechEngineSelectionTests {
         XCTAssertFalse(f.controller.isModelReady)
         XCTAssertNil(f.controller.currentEngine)
         f.controller.noteSceneDidBecomeActive()
-        try await f.settle()
+        // The retry's first main-actor step would create the model if it did not wait for the old one.
+        await mainActorBarrier()
         XCTAssertEqual(provider.created.count, 1, "a retry must not overlap a non-interruptible Core ML call")
         await old.releasePrepare()
         try await f.waitUntil { f.controller.phase == .ready }
