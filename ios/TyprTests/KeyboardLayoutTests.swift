@@ -374,6 +374,7 @@ final class FullKeyboardSettingsTests: XCTestCase {
 
         XCTAssertFalse(settings.isEnabled)
         XCTAssertTrue(settings.autocorrect)
+        XCTAssertTrue(settings.swipeTyping)
 
         settings.applyLaunchArguments(["Typr"])
         XCTAssertFalse(settings.isEnabled)
@@ -382,6 +383,8 @@ final class FullKeyboardSettingsTests: XCTestCase {
 
         settings.autocorrect = false
         XCTAssertFalse(FullKeyboardSettings(defaults: defaults).autocorrect)
+        settings.swipeTyping = false
+        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).swipeTyping)
     }
 
     func testNoAppGroupReadsAsOff() {

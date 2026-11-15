@@ -11,6 +11,7 @@ struct FullKeyboardSettings {
     private enum Key {
         static let fullKeyboard = "experiments.fullKeyboard"
         static let autocorrect = "settings.keyboardAutocorrect"
+        static let swipeTyping = "settings.keyboardSwipeTyping"
     }
 
     private let defaults: UserDefaults?
@@ -29,6 +30,12 @@ struct FullKeyboardSettings {
     var autocorrect: Bool {
         get { defaults?.object(forKey: Key.autocorrect) as? Bool ?? true }
         nonmutating set { defaults?.set(newValue, forKey: Key.autocorrect) }
+    }
+
+    /// Swipe typing over the letters. On by default; off keeps sliding as slide-to-key.
+    var swipeTyping: Bool {
+        get { defaults?.object(forKey: Key.swipeTyping) as? Bool ?? true }
+        nonmutating set { defaults?.set(newValue, forKey: Key.swipeTyping) }
     }
 
     /// Simulator scenes pass `--experiment-full-keyboard` to turn the experiment on.

@@ -195,6 +195,10 @@ final class FullKeyboardEngine {
         }
     }
     private(set) var layout = KeyboardLayout(width: 375)
+    /// Typr: the swipe typing switch. Off drops any pending decode; sliding keeps slide-to-key.
+    var swipeTypingEnabled = true {
+        didSet { if !swipeTypingEnabled { cancelPendingSwipe() } }
+    }
 
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
     /// Called whenever something visible changed (page, shift, pressed keys, suggestions, accents).
@@ -1053,7 +1057,7 @@ final class FullKeyboardEngine {
     /// Prose fields with an enabled word language and loaded word lists. Elsewhere (URL, email,
     /// passwords, no languages) sliding over letters keeps its old meaning.
     private var swipeIsAvailable: Bool {
-        guard field == .text, layerState.layer == .letters, activeAccentMenu == nil,
+        guard swipeTypingEnabled, field == .text, layerState.layer == .letters, activeAccentMenu == nil,
               !autocorrect.suggestionLanguages.isEmpty,
               autocorrect.spatialDecoder?.isResourceLoading == false,
               autocorrect.spatialDecoder?.resourceSnapshot.isEmpty == false else { return false }
