@@ -10,6 +10,8 @@ targets:
     sources:
       - TyprTests/DecoderStatisticsEvaluationTests.swift
       - TyprTests/KeyboardNeuralEvaluationTests.swift
+      - TyprTests/PersonalTrigramPhraseFixtures.swift
+      - TyprTests/PersonalTypingTrigramEvaluationTests.swift
       - TyprTests/SpatialTypoEvaluationEvidence.swift
       - TyprTests/SpatialTypoEvaluationFixtures.swift
     dependencies:
