@@ -1467,15 +1467,11 @@ final class SpeechEngineSelectionTests: XCTestCase {
 @MainActor
 private final class FakeWhisperBackground: WhisperPreparationScheduling {
     var expirations: [@MainActor () -> Void] = []
-    var userInitiated: [Bool] = []
     var finishes: [Bool] = []
     var updates: [ModelPreparationProgress] = []
     var maintenance: [Bool] = []
     var activations = 0
-    func begin(userInitiated: Bool, expiration: @escaping @MainActor () -> Void) {
-        self.userInitiated.append(userInitiated)
-        expirations.append(expiration)
-    }
+    func begin(expiration: @escaping @MainActor () -> Void) { expirations.append(expiration) }
     func update(_ progress: ModelPreparationProgress) { updates.append(progress) }
     func sceneDidBecomeActive() { activations += 1 }
     func finish(success: Bool) { finishes.append(success) }
@@ -1639,33 +1635,6 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(background.finishes.filter { $0 }.count, 1)
         XCTAssertFalse(f.audio.isKeepaliveRunning)
         XCTAssertTrue(f.audio.captures.isEmpty)
-    }
-
-    /// Apple: continued processing tasks start only from an explicit action, never automatically.
-    func testOnlyTapsMayRequestWhisperContinuedTask() async throws {
-        let automatic = FakeWhisperBackground()
-        let opened = fixture(preferred: .whisperLargeV3Turbo, whisperBackground: automatic)
-        opened.controller.noteSceneDidBecomeActive()
-        try await opened.waitUntil { opened.controller.phase == .ready }
-        opened.controller.prepareInstalledWhisperIfNeeded() // maintenance
-        opened.controller.prepareModel() // handoff, intents
-        try await opened.waitUntil { opened.controller.phase == .ready }
-        XCTAssertEqual(automatic.userInitiated, [false, false])
-
-        let tapped = FakeWhisperBackground()
-        let f = fixture(preferred: .appleSpeech, whisperBackground: tapped)
-        XCTAssertEqual(f.controller.selectEngine(.whisperLargeV3Turbo), .selected)
-        try await f.waitUntil { f.controller.phase == .ready }
-        f.controller.prepareModel(userInitiated: true) // Prepare, Try again
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(tapped.userInitiated, [true, true])
-
-        let primary = FakeWhisperBackground()
-        let g = fixture(preferred: .whisperLargeV3Turbo, whisperBackground: primary)
-        XCTAssertEqual(g.controller.phase, .modelRequired)
-        g.controller.performPrimaryAction()
-        try await g.waitUntil { g.controller.phase == .ready }
-        XCTAssertEqual(primary.userInitiated, [true])
     }
 
     /// Short system UI text that changes only with a real stage, never per heartbeat or callback.

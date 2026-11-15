@@ -12,23 +12,24 @@ estimate is about 4.5 GB beyond the installed files.
 
 ## Leaving the app
 
-- On iOS 26+, Typr requests a continued processing task only after a tap in Typr:
-  **Use** on Whisper, **Prepare**, **Try again** or the main button. Apple's guidance
-  is that these tasks always start from an explicit action and never automatically,
-  even if a preference was set earlier. Opening Typr, launch, maintenance, handoff
-  and intents therefore prepare without a continued task and without a system
-  Live Activity.
+- On iOS 26+, Typr requests a continued processing task while the app is active.
+  Opening the app with an installed, explicitly chosen Whisper model, choosing
+  that model, or tapping **Prepare/Try again** starts the work.
+- Deliberate deviation: Apple's guidance (WWDC25 227) is to start these tasks only
+  from an explicit action, never automatically. Typr is a personal app that is not
+  meant for the App Store; the owner chose automatic start so leaving Typr does
+  not pause preparation. iOS accepts the request either way. Revisit this before
+  any App Store submission.
 - iOS shows the continued task as a system Live Activity (Dynamic Island, Lock
   Screen) with progress and a cancel control. iOS alone decides its size and
   layout. Typr sets a succinct title, “Preparing Whisper”, and a short subtitle
   that changes only with a real stage: “Starting”, “Optimizing for this iPhone”,
   “Loading model”, “Checking model”. Detailed stage names stay in the app.
-- A tapped preparation whose request iOS rejected asks again when Typr becomes
-  active. An automatic one does not.
-- Without a continued task (automatic start, declined request, or iOS 18–25),
-  only UIKit's limited background grace time is available. There is no
-  guaranteed number of minutes. Tap **Try again** before leaving Typr to get the
-  continued task.
+  The API has no option for compact-only presentation; the person can collapse
+  the expanded view by swiping it up.
+- A preparation whose request iOS rejected asks again when Typr becomes active.
+- If iOS declines that request, or on iOS 18–25, only UIKit's limited background
+  grace time is available. There is no guaranteed number of minutes.
 - iOS controls admission, scheduling, memory limits and termination. Locking the
   phone, resource pressure, user cancellation or force quitting can interrupt
   preparation. A continued task is not permission to run indefinitely.
@@ -100,7 +101,7 @@ if preparation fails: submission failure, runtime expiration and Core ML failure
 are different outcomes and must not be inferred from a failed system status alone.
 
 Simulator tests cover controller lifecycle, eligibility, single-flight preparation,
-expiration, milestone/heartbeat progress accounting, tap-only continued-task requests,
+expiration, milestone/heartbeat progress accounting,
 the short system subtitle, re-requesting on activation, the
 background-paused dot scope and engine selection with fakes. They cannot prove background runtime,
 system Live Activity behavior, Neural Engine access or provisioning. WhisperKit
