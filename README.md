@@ -28,6 +28,19 @@ engine or language choice never silently falls back to another.
   Intelligence cleanup (iOS 26+) and formatting styles. The full keyboard adds
   German/English autocorrect and adaptive suggestions.
 
+## Whisper preparation
+
+Opening Typr automatically prepares an installed, explicitly chosen Whisper model
+without downloading. On iOS 26+, Typr asks to continue that preparation after you
+leave the app; older iOS has only limited background grace time. Opportunistic
+maintenance can also prepare it while charging. iOS may decline, pause or stop
+this work; there is no immediate post-update guarantee. Reopen Typr to retry.
+Preparation never starts the microphone or audio keepalive.
+
+See [Whisper background preparation](ios/WhisperBackgroundPreparation.md) for
+progress, cancellation, hardware restrictions and the required iOS 27 Background
+Inference provisioning capability.
+
 ## Build and test
 
 Requires Xcode 26+ and XcodeGen 2.46.0+ on macOS:

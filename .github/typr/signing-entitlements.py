@@ -25,7 +25,11 @@ def required_entitlements(config, bundle_id):
     # The widget extension does not access shared storage; app + keyboard do.
     if bundle_id == f'{config["bundle_id"]}.widgets':
         return {}
-    return {'com.apple.security.application-groups': [f'group.{config["bundle_id"]}']}
+    required = {'com.apple.security.application-groups': [f'group.{config["bundle_id"]}']}
+    if bundle_id == config['bundle_id']:
+        # iOS 27 requires this for any background Neural Engine access, including Core ML.
+        required['com.apple.developer.background-tasks.continued-processing.inference'] = True
+    return required
 
 
 def validate_entitlements(actual, required, bundle_id, team):

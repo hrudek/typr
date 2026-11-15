@@ -98,6 +98,10 @@ def main(distribution):
         group = data['Entitlements'].get('com.apple.security.application-groups')
         if not bundle.endswith('.widgets') and group != ['group.' + config['bundle_id']]:
             raise SystemExit(f'App Group missing in {name}; assign it in the portal and rerun')
+        if bundle == config['bundle_id'] and data['Entitlements'].get(
+                'com.apple.developer.background-tasks.continued-processing.inference') is not True:
+            raise SystemExit(f'Background Inference missing in {name}; enable it for the app in the '
+                             'portal and regenerate the profile before rerunning')
         paths.append(path)
     archive = ROOT / f'typr-{distribution}-profiles.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as output:

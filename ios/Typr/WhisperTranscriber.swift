@@ -106,6 +106,7 @@ actor WhisperTranscriber: LocalTranscribing {
         case silentAudio
         case emptyTranscript
         case corruptModel(String)
+        case preparationFailed(String)
         /// Specialization is expected and the storage it needs is not free (bytes available).
         case insufficientStorage(Int64)
 
@@ -121,6 +122,8 @@ actor WhisperTranscriber: LocalTranscribing {
                 "Whisper returned no text. Please try dictating again."
             case .corruptModel(let detail):
                 "The Whisper model on this iPhone could not be loaded: \(detail) Download Whisper again."
+            case .preparationFailed(let detail):
+                "Whisper could not be prepared: \(detail) Open Typr and try preparing it again. iOS controls background resources."
             case .insufficientStorage(let available):
                 "Whisper must be optimized for this iPhone first, which needs about "
                     + ByteCountFormatter.string(fromByteCount: WhisperModelSpec.optimizationStorageBytes, countStyle: .file)
@@ -303,8 +306,12 @@ actor WhisperTranscriber: LocalTranscribing {
             try Self.validateLogitsSize(kit.textDecoder.logitsSize)
         } catch is CancellationError {
             throw CancellationError()
+        } catch let error as TranscriberError {
+            throw error
         } catch {
-            throw TranscriberError.corruptModel(error.localizedDescription)
+            // Resource denial (including background Core ML restrictions) is not evidence of
+            // corrupt downloaded files. Do not tell the person to download the model again.
+            throw TranscriberError.preparationFailed(error.localizedDescription)
         }
         return kit
     }

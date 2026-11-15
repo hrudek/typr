@@ -3,6 +3,7 @@ import Contacts
 
 @main
 struct TyprApp: App {
+    @UIApplicationDelegateAdaptor(TyprAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
     @State private var dictation = DictationController.shared
     @State private var openedFromKeyboard = Self.initialOpenedFromKeyboard
@@ -38,7 +39,10 @@ struct TyprApp: App {
                     showSetup: $showSetup,
                     setupRequestID: setupRequestID
                 )
-                .task { PersonalLexiconImporter.shared.refresh(force: true) }
+                .task {
+                    PersonalLexiconImporter.shared.refresh(force: true)
+                    if scenePhase == .active { dictation.noteSceneDidBecomeActive() }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
                     PersonalLexiconImporter.shared.refresh()
                 }
@@ -65,7 +69,10 @@ struct TyprApp: App {
                     dictation.handleKeyboardLaunch(request)
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { PersonalLexiconImporter.shared.refresh(force: true) }
+                    if phase == .active {
+                        PersonalLexiconImporter.shared.refresh(force: true)
+                        dictation.noteSceneDidBecomeActive()
+                    }
                     if phase == .background {
                         dictation.noteSceneDidEnterBackground()
                         openedFromKeyboard = false

@@ -50,11 +50,31 @@ class ConfigTests(unittest.TestCase):
     def test_entitlements_per_target(self):
         config = config_module.load()
         group = {'com.apple.security.application-groups': ['group.dev.rudek.typr']}
-        self.assertEqual(signing.required_entitlements(config, 'dev.rudek.typr'), group)
+        inference = 'com.apple.developer.background-tasks.continued-processing.inference'
+        self.assertEqual(signing.required_entitlements(config, 'dev.rudek.typr'), {**group, inference: True})
+        committed = plistlib.loads((REPO / 'ios/Typr/Typr.entitlements').read_bytes())
+        self.assertEqual(signing.required_entitlements(config, 'dev.rudek.typr'), committed)
         self.assertEqual(signing.required_entitlements(config, 'dev.rudek.typr.keyboard'), group)
         self.assertEqual(signing.required_entitlements(config, 'dev.rudek.typr.widgets'), {})
         with self.assertRaises(ValueError):
             signing.required_entitlements(config, 'com.unreviewed.app')
+
+    def test_background_inference_cannot_be_stripped_from_app_signature(self):
+        config = config_module.load()
+        required = signing.required_entitlements(config, 'dev.rudek.typr')
+        actual = {**required, 'application-identifier': identity.TEAM_ID + '.dev.rudek.typr',
+                  'com.apple.developer.team-identifier': identity.TEAM_ID, 'get-task-allow': False}
+        signing.validate_entitlements(actual, required, 'dev.rudek.typr', identity.TEAM_ID)
+        for value in (None, False):
+            with self.subTest(value=value):
+                changed = dict(actual)
+                key = 'com.apple.developer.background-tasks.continued-processing.inference'
+                if value is None:
+                    changed.pop(key)
+                else:
+                    changed[key] = value
+                with self.assertRaisesRegex(ValueError, 'Missing or unexpected signed entitlement'):
+                    signing.validate_entitlements(changed, required, 'dev.rudek.typr', identity.TEAM_ID)
 
 
 class IdentityTests(unittest.TestCase):
