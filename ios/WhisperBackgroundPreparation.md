@@ -27,13 +27,23 @@ estimate is about 4.5 GB beyond the installed files.
   through. Core ML may reuse completed specialization caches, but Typr cannot
   promise how much work is saved.
 - The app shows real stages, not a fabricated percentage or completion time.
-  The system task receives five discrete milestones (three component preparations,
-  the final load, validation), not an estimate of elapsed time or equally weighted
-  Core ML work. Completed stages advance system progress; a long individual Core ML
-  stage remains indeterminate in the app. iOS may still stop a slow or stalled task.
-- App preparation spinners are replaced by a static indicator while the scene is
-  inactive/backgrounded. A continued task grants processing time, not permission to
-  keep rendering GPU animation frames.
+  The system task counts five milestone stages (three component preparations,
+  the final load, validation), each split into 1,000 sub-units. A finished stage
+  jumps to its boundary. While a stage runs, Typr advances one sub-unit every
+  5 seconds as a liveness signal; it never reaches the next milestone or completes
+  the task. Only real completion finishes it.
+- Why the liveness signal: on a real iPhone (iOS 27, build 293.1) the scheduler
+  marked the task stalled after ~46 seconds without a progress change and expired it
+  while one Core ML specialization was still running. One specialization can take
+  minutes without any callback. The scheduler's exact cadence is undocumented.
+- iOS can reject a foreground submission without an error (observed when the app
+  had become active ~20 ms earlier). Typr confirms the task actually started within
+  one second and otherwise retries, up to three attempts while active. Becoming active
+  again during a running preparation without a continued task requests one again; it
+  never starts a second preparation.
+- App preparation spinners and the Metal dot scope stop drawing while the scene is
+  in the background. iOS rejects background GPU work, and a continued task grants
+  processing time, not permission to keep rendering animation frames.
 
 Typr also requests opportunistic **processing maintenance**, requiring external
 power and no network. iOS decides whether and when to launch it (Background App
@@ -78,7 +88,8 @@ if preparation fails: submission failure, runtime expiration and Core ML failure
 are different outcomes and must not be inferred from a failed system status alone.
 
 Simulator tests cover controller lifecycle, eligibility, single-flight preparation,
-expiration and engine selection with fakes. They cannot prove background runtime,
+expiration, milestone/heartbeat progress accounting, re-requesting on activation, the
+background-paused dot scope and engine selection with fakes. They cannot prove background runtime,
 system Live Activity behavior, Neural Engine access or provisioning. WhisperKit
 forces CPU-only execution in the simulator. Verify these separately on a real
 signed iPhone on iOS 26 and iOS 27+, and on older iOS for the UIKit fallback.
