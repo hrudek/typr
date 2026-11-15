@@ -57,7 +57,9 @@ final class DictationAudioSession {
     }
 
     private func configure(allowBluetooth: Bool) throws {
-        var options: AVAudioSession.CategoryOptions = allowBluetooth ? [.allowBluetoothHFP] : []
+        // playAndRecord otherwise defaults built-in playback to the quiet receiver.
+        var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker]
+        if allowBluetooth { options.insert(.allowBluetoothHFP) }
         if !isCapturing { options.insert(.mixWithOthers) }
         // Keep category/mode and the input graph stable across capture boundaries.
         // Becoming mixable ends our interruption without stopping the warm microphone.

@@ -41,7 +41,11 @@ final class DictationAudioSessionTests: XCTestCase {
             try session.endCapture(allowBluetooth: false)
             XCTAssertFalse(session.isCapturing)
         }
-        XCTAssertEqual(spy.options, [.mixWithOthers, [], .mixWithOthers, [], .mixWithOthers])
+        XCTAssertEqual(spy.options, [
+            [.defaultToSpeaker, .mixWithOthers], [.defaultToSpeaker],
+            [.defaultToSpeaker, .mixWithOthers], [.defaultToSpeaker],
+            [.defaultToSpeaker, .mixWithOthers],
+        ])
         XCTAssertTrue(spy.categories.allSatisfy { $0 == .playAndRecord })
         XCTAssertTrue(spy.modes.allSatisfy { $0 == .measurement })
         XCTAssertEqual(spy.sampleRates, [16_000])
@@ -56,8 +60,9 @@ final class DictationAudioSessionTests: XCTestCase {
         try session.beginCapture(allowBluetooth: true)
         try session.endCapture(allowBluetooth: true)
         XCTAssertEqual(spy.options, [
-            [.allowBluetoothHFP, .mixWithOthers], [.allowBluetoothHFP],
-            [.allowBluetoothHFP, .mixWithOthers],
+            [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers],
+            [.defaultToSpeaker, .allowBluetoothHFP],
+            [.defaultToSpeaker, .allowBluetoothHFP, .mixWithOthers],
         ])
     }
 
@@ -67,7 +72,7 @@ final class DictationAudioSessionTests: XCTestCase {
         try session.activate(allowBluetooth: false)
         try session.beginCapture(allowBluetooth: false)
         try session.activate(allowBluetooth: false)
-        XCTAssertEqual(spy.options.last, [])
+        XCTAssertEqual(spy.options.last, .defaultToSpeaker)
         XCTAssertTrue(session.isCapturing)
     }
 
@@ -78,7 +83,7 @@ final class DictationAudioSessionTests: XCTestCase {
         spy.failNextCategoryChange = true
         XCTAssertThrowsError(try session.beginCapture(allowBluetooth: false))
         XCTAssertFalse(session.isCapturing)
-        XCTAssertEqual(spy.options.last, .mixWithOthers)
+        XCTAssertEqual(spy.options.last, [.defaultToSpeaker, .mixWithOthers])
     }
 
     func testFailedReleaseCanBeRetriedWithoutRestartingInput() throws {
@@ -90,7 +95,7 @@ final class DictationAudioSessionTests: XCTestCase {
         XCTAssertThrowsError(try session.endCapture(allowBluetooth: false))
         XCTAssertFalse(session.isCapturing)
         try session.refresh(allowBluetooth: false)
-        XCTAssertEqual(spy.options.last, .mixWithOthers)
+        XCTAssertEqual(spy.options.last, [.defaultToSpeaker, .mixWithOthers])
         XCTAssertEqual(spy.activations, [true])
     }
 
@@ -104,6 +109,6 @@ final class DictationAudioSessionTests: XCTestCase {
         XCTAssertEqual(spy.activations, [true, false])
         XCTAssertEqual(spy.activationOptions.last, .notifyOthersOnDeactivation)
         try session.activate(allowBluetooth: false)
-        XCTAssertEqual(spy.options.last, .mixWithOthers)
+        XCTAssertEqual(spy.options.last, [.defaultToSpeaker, .mixWithOthers])
     }
 }
