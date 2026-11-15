@@ -17,8 +17,9 @@ engine or language choice never silently falls back to another.
   leaving the keyboard. The idle microphone session mixes with other audio; only
   an actual dictation interrupts playback. Stopping or cancelling the recording
   releases that interruption immediately, without waiting for transcription or
-  ending the warm session. Resuming playback is ultimately controlled by the
-  interrupted app and iOS.
+  ending the warm session. If iOS refuses to interrupt playback in the background,
+  dictation still works, but playback may continue during that recording. Resuming
+  playback is ultimately controlled by the interrupted app and iOS.
 - Text processing combines vocabulary corrections, optional on-device Apple
   Intelligence cleanup (iOS 26+) and formatting styles. The full keyboard adds
   German/English autocorrect and adaptive suggestions.

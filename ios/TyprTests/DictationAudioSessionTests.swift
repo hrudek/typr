@@ -76,12 +76,12 @@ final class DictationAudioSessionTests: XCTestCase {
         XCTAssertTrue(session.isCapturing)
     }
 
-    func testFailedCaptureStartRestoresMixing() throws {
+    func testRefusedInterruptionKeepsCaptureAvailableInMixableMode() throws {
         let spy = SessionSpy()
         let session = spy.makeSession()
         try session.activate(allowBluetooth: false)
         spy.failNextCategoryChange = true
-        XCTAssertThrowsError(try session.beginCapture(allowBluetooth: false))
+        XCTAssertNoThrow(try session.beginCapture(allowBluetooth: false))
         XCTAssertFalse(session.isCapturing)
         XCTAssertEqual(spy.options.last, [.defaultToSpeaker, .mixWithOthers])
     }

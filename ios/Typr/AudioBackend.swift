@@ -334,7 +334,8 @@ final class SystemAudioManager: AudioManaging {
     func ensureKeepalive(allowBluetooth: Bool) throws {
         if inputGraph.isRunning, keepaliveAllowsBluetooth == allowBluetooth {
             // Also retry a failed return to mixing, without restarting the input.
-            try audioSession.refresh(allowBluetooth: allowBluetooth)
+            // A category refusal must not tear down an otherwise healthy warm input.
+            try? audioSession.refresh(allowBluetooth: allowBluetooth)
             return
         }
         try startKeepalive(allowBluetooth: allowBluetooth)

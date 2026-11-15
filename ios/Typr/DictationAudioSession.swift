@@ -38,7 +38,8 @@ final class DictationAudioSession {
         } catch {
             isCapturing = false
             try? configure(allowBluetooth: allowBluetooth)
-            throw error
+            // iOS can refuse to interrupt another app from the background ('!int').
+            // Keep dictation working from the existing input in mixable mode instead.
         }
     }
 
