@@ -24,9 +24,12 @@ engine or language choice never silently falls back to another.
   options on a running input. Later playback/interruption events are also checked
   before restarting idle input. Detection is a momentary iOS audio signal, not a
   per-app media inventory; actual resumption is controlled by the media app and iOS.
-- Text processing combines vocabulary corrections, optional on-device Apple
-  Intelligence cleanup (iOS 26+) and formatting styles. The full keyboard adds
-  German/English autocorrect and adaptive suggestions.
+- Text processing combines vocabulary corrections, optional AI cleanup and
+  formatting styles. Cleanup runs on-device with Apple Intelligence (iOS 26+,
+  default) or, with your own Anthropic API key (stored in the Keychain), with
+  Claude in the cloud; the plain transcript is used whenever cleanup is
+  unavailable. The full keyboard adds German/English autocorrect and adaptive
+  suggestions.
 
 ## Whisper preparation
 

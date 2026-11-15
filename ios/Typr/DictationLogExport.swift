@@ -37,7 +37,11 @@ extension DictationLogEntry {
         if context.cleanupPath == .typr {
             lines.append("Typr: \(cleanupOutcome ?? "not recorded"); answer: \(answerLabel)")
             lines.append("Prompt: \(promptRevision); guard: \(guardRevision)")
-            lines.append("Cleanup model: on-device Apple FoundationModels (exact model version unavailable)")
+            if context.cleanupEngine == CleanupEngine.anthropic.rawValue {
+                lines.append("Cleanup model: Anthropic \(AnthropicCleanupRequest.model) (cloud)")
+            } else {
+                lines.append("Cleanup model: on-device Apple FoundationModels (exact model version unavailable)")
+            }
         } else if context.cleanupPath == .upstream {
             lines.append("Upstream: \(upstreamOutcome ?? "not recorded")\(upstreamReason.map { "; \($0)" } ?? "")")
         }
