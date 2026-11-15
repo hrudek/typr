@@ -8,7 +8,8 @@ private final class ContextSession: CleanupSession {
     private(set) var contexts: [CleanupContext] = []
     private(set) var vocabularies: [[String]] = []
     private(set) var inputs: [String] = []
-    func prewarm() async {}
+    private(set) var prewarms = 0
+    func prewarm() async { prewarms += 1 }
     func clean(_ text: String, style: DictationStyle) async throws -> String { result }
     func clean(_ text: String, style: DictationStyle, vocabulary: [String], context: CleanupContext) async throws -> String {
         contexts.append(context)
@@ -74,7 +75,39 @@ private final class RequestedDurations {
 @MainActor
 final class CleanupRewriteTests: XCTestCase {
     private func drain() async { for _ in 0..<30 { await Task.yield() } }
-    private func settle() async throws { for _ in 0..<8 { try await Task.sleep(for: .milliseconds(25)) } }
+
+    private func ready(_ controller: DictationController) async throws {
+        controller.prepareModel()
+        try await waitForState("model ready") { controller.phase == .ready }
+    }
+
+    /// `prewarms`: the session's total once this capture records; a capture admitted to Typr cleanup
+    /// starts its prewarm task in the same step that sets `.recording`.
+    private func recording(_ controller: DictationController, session: ContextSession? = nil,
+                           prewarms: Int = 0) async throws {
+        try await waitForState("recording") {
+            controller.phase == .recording && (session?.prewarms ?? 0) == prewarms
+        }
+    }
+
+    private func finish(_ controller: DictationController) async throws {
+        controller.finishRecording()
+        try await waitForState("transcription and cleanup finished") { controller.isIdleForTest }
+    }
+
+    /// Lets the fired deadline sleeper (it ignores cancellation, like a late wake-up) run its no-op
+    /// continuation.
+    private func fireDeadline(_ clock: CleanupTestSleeper) async {
+        clock.fire()
+        await mainActorBarrier()
+    }
+
+    /// Teardown drain before defaults or the log archive are removed.
+    private func dispose(_ controller: DictationController, clock: CleanupTestSleeper) async throws {
+        controller.cancelCurrentJob()
+        try await waitForState("controller idle") { controller.isIdleForTest }
+        await fireDeadline(clock)
+    }
 
     // MARK: - Prompt
 
@@ -248,13 +281,14 @@ final class CleanupRewriteTests: XCTestCase {
                 transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
                 customVocabularySettings: CustomVocabularySettings(defaults: defaults), cleanup: deps,
                 languageSettings: TyprSettings(defaults: defaults))
-            controller.prepareModel(); try await settle()
-            controller.startRecording(styleOverride: style); try await settle()
-            controller.finishRecording(); try await settle()
             let modelRan = enabled && !unavailable && style != .verbatim
+            try await ready(controller)
+            controller.startRecording(styleOverride: style)
+            try await recording(controller, session: session, prewarms: modelRan ? 1 : 0)
+            try await finish(controller)
             XCTAssertEqual(session.inputs, modelRan ? [spaced] : [], "\(style)")
             XCTAssertEqual(controller.transcript, expected, "\(style), enabled: \(enabled)")
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            try await dispose(controller, clock: clock)
         }
     }
 
@@ -270,9 +304,10 @@ final class CleanupRewriteTests: XCTestCase {
         let controller = DictationController(audio: ContextAudio(), keyboardBridge: KeyboardBridge(defaults: defaults),
             transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
             customVocabularySettings: vocabulary, languageSettings: TyprSettings(defaults: defaults))
-        controller.prepareModel(); try await settle()
-        controller.startRecording(styleOverride: .verbatim); try await settle()
-        controller.finishRecording(); try await settle()
+        try await ready(controller)
+        controller.startRecording(styleOverride: .verbatim)
+        try await recording(controller)
+        try await finish(controller)
         XCTAssertEqual(controller.transcript, "Das Know how aus Baden-Württemberg")
     }
 
@@ -483,15 +518,15 @@ final class CleanupRewriteTests: XCTestCase {
                 transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
                 customVocabularySettings: vocabulary, cleanup: deps, dictationLog: nil, languageSettings: settings)
             XCTAssertEqual(controller.dictationLanguage, .automatic)
-            controller.prepareModel(); try await settle()
+            try await ready(controller)
             controller.startRecording(keyboardJobID: "job", styleOverride: .polished, copyToPasteboard: false)
-            try await settle()
-            controller.finishRecording(); try await settle()
+            try await recording(controller, session: session, prewarms: 1)
+            try await finish(controller)
 
             XCTAssertEqual(session.inputs, ["Erstelle einen Pull Request für Rudek"])
             XCTAssertEqual(session.vocabularies, [["Rudek", "Pull Request"]])
             XCTAssertEqual(controller.transcript, "Erstelle einen Pull Request für Rudek.")
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            try await dispose(controller, clock: clock)
         }
 
         for customEnabled in [false, true] {
@@ -515,13 +550,14 @@ final class CleanupRewriteTests: XCTestCase {
                 transcriber: asr, transcriberFactory: { asr }, autoPrepareOnInit: false,
                 customVocabularySettings: vocabulary, cleanup: deps, dictationLog: env.store,
                 languageSettings: env.settings)
-            controller.prepareModel(); try await settle()
+            try await ready(controller)
             bridge.send(.start, jobID: "integration", style: .polished, context: "Unser geheimer Projektkontext")
-            controller.processPendingKeyboardCommandForTesting(); try await settle()
+            controller.processPendingKeyboardCommandForTesting()
+            try await recording(controller, session: session, prewarms: 1)
             // Changes during capture apply only to the next recording.
             controller.setDictationLanguage(.english)
             vocabulary.isEnabled = !customEnabled
-            controller.finishRecording(); try await settle()
+            try await finish(controller)
 
             XCTAssertEqual(session.inputs, [prepared])
             XCTAssertEqual(session.vocabularies, [terms])
@@ -546,17 +582,18 @@ final class CleanupRewriteTests: XCTestCase {
             XCTAssertEqual(changes.contains { $0.before.text == "Hörder" && $0.after.text == "herdr" && $0.source == nil }, customEnabled)
             let encoded = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
             XCTAssertFalse(encoded.contains("geheimer Projektkontext"))
-            clock.fire(); try await settle()
+            await fireDeadline(clock)
 
             // Restore vocabulary to isolate the language/history change in the next recording.
             vocabulary.isEnabled = customEnabled
-            controller.startRecording(styleOverride: .polished); try await settle()
-            controller.finishRecording(); try await settle()
+            controller.startRecording(styleOverride: .polished)
+            try await recording(controller, session: session, prewarms: 2)
+            try await finish(controller)
             XCTAssertEqual(session.inputs, [prepared, prepared])
             XCTAssertEqual(session.vocabularies, [terms, terms])
             XCTAssertEqual(session.contexts.last, CleanupContext(language: .english,
                 preceding: final, source: .previousDictations))
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            try await dispose(controller, clock: clock)
             await env.dispose()
         }
 
@@ -578,23 +615,25 @@ final class CleanupRewriteTests: XCTestCase {
                 customVocabularySettings: CustomVocabularySettings(defaults: defaults), cleanup: deps,
                 dictationLog: nil, languageSettings: settings)
             XCTAssertEqual(controller.dictationLanguage, .german)
-            controller.prepareModel(); try await settle()
+            try await ready(controller)
 
             bridge.send(.start, jobID: "job", style: .polished, context: "Wir reden über den Branch und Git")
-            controller.processPendingKeyboardCommandForTesting(); try await settle()
-            controller.finishRecording(); try await settle()
+            controller.processPendingKeyboardCommandForTesting()
+            try await recording(controller, session: session, prewarms: 1)
+            try await finish(controller)
             XCTAssertEqual(session.contexts.first?.source, .keyboard)
             XCTAssertEqual(session.contexts.first?.preceding, "Wir reden über den Branch und Git")
             XCTAssertEqual(session.contexts.first?.language, .german)
             XCTAssertEqual(controller.transcript, "Erstelle einen Pull Request für den Feature Flag.")
-            clock.fire(); try await settle()
+            await fireDeadline(clock)
 
-            controller.startRecording(styleOverride: .polished); try await settle()
-            controller.finishRecording(); try await settle()
+            controller.startRecording(styleOverride: .polished)
+            try await recording(controller, session: session, prewarms: 2)
+            try await finish(controller)
             XCTAssertEqual(session.contexts.count, 2)
             XCTAssertEqual(session.contexts.last?.source, .previousDictations)
             XCTAssertEqual(session.contexts.last?.preceding, "Erstelle einen Pull Request für den Feature Flag.")
-            controller.cancelCurrentJob(); clock.fire(); try await settle()
+            try await dispose(controller, clock: clock)
         }
     }
 }
