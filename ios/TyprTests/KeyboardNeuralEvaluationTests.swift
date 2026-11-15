@@ -136,9 +136,8 @@ struct NeuralSpikeCLI {
         print("EVAL R2_10_swift vectors=\(calls) max_abs_error=\(worst) macs=\(model.macs) workspace_bytes=\(model.workspaceBytes) calls=1000 checksum=\(checksum) seconds=\(elapsed)")
     }
 }
-#else
+#elseif TYPR_RESEARCH
 final class KeyboardNeuralEvaluationTests: XCTestCase {
-#if TYPR_RESEARCH
     private func fixture() -> Data {
         let v: Int = 4, e: Int = 16, h: Int = 32
         var data: Data = Data("TNN1".utf8)
@@ -182,22 +181,5 @@ final class KeyboardNeuralEvaluationTests: XCTestCase {
         bad = valid; bad.append(0)
         XCTAssertNil(NeuralSpikeModel(bad))
     }
-
-#else
-    // Production regression: remains in the default TyprTests target.
-    func testPersonalTrigramPrecedenceAndDeletionUnchanged() {
-        var profile: PersonalBigramModel = .init()
-        profile.record("morgen", after: "wir", earlier: "sehen")
-        profile.record("morgen", after: "wir", earlier: "sehen")
-        let selected = profile.select(after: "wir", earlier: "sehen")
-        XCTAssertEqual(selected.context, "sehen wir")
-        XCTAssertEqual(profile.probability("morgen", after: selected.context, corpus: 0.1), 0.55, accuracy: 1e-12)
-        profile.purge("sehen")
-        XCTAssertEqual(profile.select(after: "wir", earlier: "sehen").context, "wir")
-        profile = .init()
-        XCTAssertEqual(profile.probability("morgen", after: nil, corpus: 0.1), 0.1)
-        print("EVAL R2_10_learning trigram_precedence=1 probability=0.55 delete_backoff=1 reset_corpus=1 neural_storage_bytes=0")
-    }
-#endif // TYPR_RESEARCH
 }
 #endif

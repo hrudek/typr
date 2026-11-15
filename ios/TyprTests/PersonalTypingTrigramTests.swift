@@ -39,6 +39,53 @@ final class PersonalTypingTrigramTests: XCTestCase {
         print("EVAL R2_2_query_work retainedTrigramLookups=1 fallbackLookups=2 noPreviousLookups=0 rowFollowersMax=8 rerankCandidatesMax=32")
     }
 
+    /// Moved from the research-only neural spike file: the exact discounted probability of
+    /// a selected two-word row, purge of the earlier predecessor and reset to corpus.
+    func testTrigramPrecedenceProbabilityPurgeBackoffAndReset() {
+        var profile: PersonalBigramModel = .init()
+        profile.record("morgen", after: "wir", earlier: "sehen")
+        profile.record("morgen", after: "wir", earlier: "sehen")
+        let selected = profile.select(after: "wir", earlier: "sehen")
+        XCTAssertEqual(selected.context, "sehen wir")
+        XCTAssertEqual(profile.probability("morgen", after: selected.context, corpus: 0.1), 0.55, accuracy: 1e-12)
+        profile.purge("sehen")
+        XCTAssertEqual(profile.select(after: "wir", earlier: "sehen").context, "wir")
+        profile = .init()
+        XCTAssertEqual(profile.probability("morgen", after: nil, corpus: 0.1), 0.1)
+    }
+
+    /// Default-run replacement for the research-only learning sweep. All four phrases share
+    /// their middle word, so only the earlier word can select each target.
+    func testSettledCompletionAndPredictionTeachTrigramCountsAndEarlierContext() throws {
+        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let phrases = try XCTUnwrap(PersonalTrigramPhraseFixtures.phrases["de"])
+        let middle = phrases[0][1]
+        let repetitions = PersonalBigramModel.novelFollowerMinimum
+        for mode in PersonalTrigramPhraseFixtures.trainingModes {
+            let session = KeyboardLearningSession()
+            for _ in 0..<repetitions {
+                for phrase in phrases { PersonalTrigramPhraseFixtures.train(phrase, mode: mode, session: session) }
+            }
+            let personal = session.personalBigrams
+            XCTAssertEqual(personal.pairCount, 3 * phrases.count, "\(mode): exactly the trusted pairs")
+            XCTAssertEqual(personal.followers(after: middle),
+                           Dictionary(uniqueKeysWithValues: phrases.map { ($0[2], repetitions) }), mode)
+            for phrase in phrases {
+                let pair = phrase[0] + " " + middle
+                XCTAssertEqual(personal.followers(after: phrase[0]), [middle: repetitions], "\(mode) \(pair)")
+                XCTAssertEqual(personal.followers(after: pair), [phrase[2]: repetitions], "\(mode) \(pair)")
+                // Held-out lead-in: the earlier word comes from the field, not from training order.
+                let context = model.context(before: "okay " + pair + " ", currentToken: nil)
+                XCTAssertEqual(context.earlier, phrase[0], "\(mode) \(pair)")
+                XCTAssertEqual(personal.select(after: context.previous, earlier: context.earlier).context, pair)
+                let top = model.suggestions(after: context.previous, weightDE: 0.5, personal: personal,
+                                            earlier: context.earlier).first?.key
+                XCTAssertEqual(top, phrase[2], "\(mode) \(pair)")
+            }
+            XCTAssertEqual(personal.select(after: middle, earlier: "euer").context, middle, "\(mode): untrained earlier word backs off")
+        }
+    }
+
     func testTrigramNextWordAndRerankWithBigramFallback() throws {
         let model = try XCTUnwrap(KeyboardContextModelTests.model)
         var personal = PersonalBigramModel()
@@ -69,7 +116,7 @@ final class PersonalTypingTrigramTests: XCTestCase {
                         "mittwoch", "updated", "reviewer", "standard", "tastaturen", "kollegen"]
         var queries = 0, unwanted = 0, differences = 0
         for language in ["de", "en", "mixed"] {
-            let phrases = try XCTUnwrap(PersonalTypingTrigramEvaluationTests.phrases[language])
+            let phrases = try XCTUnwrap(PersonalTrigramPhraseFixtures.phrases[language])
             let session = KeyboardLearningSession()
             for phrase in phrases {
                 for _ in 0..<8 { session.model.recordPair(phrase[2], after: phrase[1], earlier: phrase[0]) }

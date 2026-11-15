@@ -2,57 +2,23 @@ import Foundation
 import XCTest
 @testable import Typr
 
-/// Authored, disjoint-context phrases. Test prefixes include a held-out lead-in, not new
-/// target transitions: measures repeated personal associations, not language generalization.
+/// Test prefixes include a held-out lead-in, not new target transitions: measures repeated
+/// personal associations, not language generalization. Phrases and training paths live in
+/// `PersonalTrigramPhraseFixtures`; exact counts and earlier-context selection are gated by
+/// `PersonalTypingTrigramTests` in the default run. Run with:
+/// bash ios/tools/run-research-tests.sh <simulator destination>.
 @MainActor
 final class PersonalTypingTrigramEvaluationTests: XCTestCase {
-    static let phrases: [String: [[String]]] = [
-        "de": [["unser", "projekt", "tastatur"], ["mein", "projekt", "garten"],
-               ["dein", "projekt", "schule"], ["jedes", "projekt", "kaffee"]],
-        "en": [["our", "project", "keyboard"], ["my", "project", "garden"],
-               ["your", "project", "school"], ["every", "project", "coffee"]],
-        "mixed": [["unser", "release", "keyboard"], ["my", "release", "garten"],
-                  ["dein", "release", "school"], ["every", "release", "kaffee"]]
-    ]
-    private final class Checker: TextChecking {
-        func isWordValid(_ word: String) -> Bool { true }
-        func guesses(for word: String) -> [String] { [] }
-        func completions(for prefix: String) -> [String] { [] }
-    }
-    private func tap(_ text: String, engine: FullKeyboardEngine) {
-        for ch in text {
-            guard let key = engine.layout.key(ch == " " ? .space : .character(String(ch))) else {
-                XCTFail("Missing key"); return
-            }
-            let p = CGPoint(x: key.frame.midX, y: key.frame.midY)
-            engine.touchBegan(id: 1, at: p); engine.touchEnded(id: 1, at: p)
+    private typealias Fixtures = PersonalTrigramPhraseFixtures
+    private typealias Checker = PersonalTrigramPhraseFixtures.Checker
+    /// Own loader: the research target does not compile `KeyboardContextModelTests`.
+    private static let model: KeyboardContextModel? = {
+        let packs = ["de", "en"].map { lang in
+            Bundle.main.url(forResource: "keyboard-\(lang)", withExtension: "tbg", subdirectory: "WordData")
+                .flatMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }.flatMap(KeyboardContextModel.Pack.init)
         }
-    }
-    private func train(_ phrase: [String], mode: String, session: KeyboardLearningSession) {
-        session.breakWordSequence()
-        if mode == "settled" {
-            var before = ""
-            for word in phrase {
-                before += word + " "
-                session.settleTrustedWord(word, beforeInput: before)
-            }
-            return
-        }
-        let target = FixtureTextTarget()
-        target.autocapitalizationType = .some(.none)
-        let ac = AutocorrectEngine(checker: Checker(), learning: session, spatialDecoder: nil,
-                                   contextResources: .init(model: nil))
-        let engine = FullKeyboardEngine(target: target, autocorrect: ac)
-        engine.width = 393; engine.clock = { 100 }; engine.configureForField()
-        let prefix = mode == "completion" ? String(phrase[2].prefix(3)) : ""
-        tap(phrase[0] + " " + phrase[1] + " " + prefix, engine: engine)
-        var chip = KeyboardSuggestion(displayText: phrase[2], replacement: phrase[2],
-                                      kind: .primary(autoReplace: false), isCompletion: true)
-        chip.ownership = engine.suggestionOwnership
-        engine.acceptSuggestion(chip)
-        tap("n", engine: engine)
-        XCTAssertEqual(target.text, phrase.joined(separator: " ") + " n")
-    }
+        return KeyboardContextModel(de: packs[0], en: packs[1])
+    }()
     private func ranked(_ prefix: String, session: KeyboardLearningSession, model: KeyboardContextModel,
                         language: String) -> [String] {
         let ac = AutocorrectEngine(checker: Checker(), learning: session, spatialDecoder: nil,
@@ -64,17 +30,18 @@ final class PersonalTypingTrigramEvaluationTests: XCTestCase {
         let rest = chips.filter { $0 != best }
         return ([best].compactMap { $0 } + rest).map { KeyboardContextModel.key($0.replacement) }
     }
+    // Research-only (research.yml): recall is printed, not gated.
     func testRepeatedPersonalPhrasesAndAcceptedChoices() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(Self.model)
         for language in ["de", "en", "mixed"] {
-            let phrases = try XCTUnwrap(Self.phrases[language])
-            for mode in ["settled", "completion", "prediction"] {
+            let phrases = try XCTUnwrap(Fixtures.phrases[language])
+            for mode in Fixtures.trainingModes {
                 let session = KeyboardLearningSession()
                 var repetitions = 0
                 var line = "EVAL R2_2_learning_\(language)_\(mode) targets=8"
                 for n in [0, 1, 2, 4, 8] {
                     while repetitions < n {
-                        for phrase in phrases { train(phrase, mode: mode, session: session) }
+                        for phrase in phrases { Fixtures.train(phrase, mode: mode, session: session) }
                         repetitions += 1
                     }
                     var hit1 = 0, hit3 = 0
@@ -94,14 +61,14 @@ final class PersonalTypingTrigramEvaluationTests: XCTestCase {
     }
 
     func testPublicHeldoutWithTwoWordPrefixes() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(Self.model)
         let url = try XCTUnwrap(Bundle.main.url(forResource: "context-heldout-cc0", withExtension: "json", subdirectory: "WordData"))
         struct Fixture: Decodable { let sentences: [String: [[String]]] }
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
         let session = KeyboardLearningSession()
         for _ in 0..<8 {
             for language in ["de", "en", "mixed"] {
-                for phrase in try XCTUnwrap(Self.phrases[language]) { train(phrase, mode: "settled", session: session) }
+                for phrase in try XCTUnwrap(Fixtures.phrases[language]) { Fixtures.train(phrase, mode: "settled", session: session) }
             }
         }
         for language in ["de", "en", "mixed"] {

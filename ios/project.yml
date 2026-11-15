@@ -160,7 +160,8 @@ targets:
     sources:
       - path: TyprTests
         # Explicitly runnable through research.yml, not the routine simulator suite.
-        excludes: [DecoderStatisticsEvaluationTests.swift]
+        excludes: [DecoderStatisticsEvaluationTests.swift, KeyboardNeuralEvaluationTests.swift,
+                   PersonalTypingTrigramEvaluationTests.swift]
       - path: TestFixtures/term-hex-1.wav
         buildPhase: resources
     dependencies:
