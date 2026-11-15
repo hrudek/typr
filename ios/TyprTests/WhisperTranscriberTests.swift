@@ -283,6 +283,8 @@ final class WhisperTranscriberTests: XCTestCase {
         XCTAssertEqual(DictationLogASRFailure.classify(WhisperTranscriber.TranscriberError.silentAudio), .noSpeech)
         XCTAssertEqual(DictationLogASRFailure.classify(WhisperTranscriber.TranscriberError.emptyTranscript), .other)
         XCTAssertEqual(DictationLogASRFailure.classify(WhisperTranscriber.TranscriberError.corruptModel("x")), .other)
+        XCTAssertEqual(DictationLogASRFailure.classify(WhisperTranscriber.TranscriberError.preparationFailed("x")),
+                       .modelNotReady)
         XCTAssertEqual(DictationLogASRFailure.classify(WhisperTranscriber.TranscriberError.insufficientStorage(1)),
                        .modelNotReady)
         XCTAssertEqual(DictationLogASRFailure.classify(SpeechEngineError.notReady), .modelNotReady)

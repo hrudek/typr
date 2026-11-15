@@ -4,7 +4,9 @@
 
 Implementierung und Dokumentation vorhanden; lokale Linux-Prüfungen erfolgreich.
 Simulator-/Device-/Signaturprüfung auf diesem Linux-Rechner nicht ausgeführt.
-PR/Review werden nach dem ersten Push hier ergänzt.
+PR: https://github.com/hrudek/typr/pull/161 (feature/whisper-background), Labels
+`feature`, `infra`, `no-auto-merge`, `needs-human`. Linux-CI für 0618bf9e grün.
+Erstes Typr-Review: FIX mit einem nummerierten Befund; siehe Review-Verlauf unten.
 
 ## Vereinbartes Verhalten
 
@@ -108,3 +110,13 @@ Lokal ausgeführt:
 Offen: Swift/iOS-Build (kein Apple-SDK/Xcode hier), Simulatorlauf, signierter
 Gerätetest iOS 26/27+, UIKit-Fallback auf iOS 18–25, System-Live-Activity,
 Background App Refresh/Lock/Force-quit, echte Ressourcenablehnung und Profile.
+
+## Review-Verlauf
+
+- Commit `0618bf9e`: Typr review **FIX**, Befund 1: neue Enum-Case
+  `preparationFailed` fehlte im exhaustiven Switch von `DictationLogASRFailure`.
+  Behoben als `.modelNotReady`, neue Klassifikationsassertion in
+  `WhisperTranscriberTests`. Andere Enum-Nutzungen gezielt nachgeprüft.
+- Scope lokal mit `LABELS=infra bash .github/typr/scope.sh origin/main HEAD` grün
+  (17 Dateien beim ersten Commit). Linux-CI des PR ebenfalls grün.
+- Nächster Review-Lauf folgt automatisch auf den Korrektur-Push.
