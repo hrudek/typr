@@ -47,19 +47,19 @@ def runs(workflow: str, **filters: str) -> list[dict]:
 
 
 def last_testflight(repo: str) -> str:
-    for run in runs("typr-ci.yml", branch="main", event="push"):
+    for run in runs("typr-ci.yml", branch="main"):
         jobs = gh_json("api", f"repos/{repo}/actions/runs/{run['databaseId']}/jobs",
                        "--jq", "[.jobs[] | {name, conclusion}]") or []
         sign = next((j for j in jobs if j["name"].startswith("Sign (testflight")), None)
         if sign and sign["conclusion"] in ("success", "failure"):
             return f"{icon(sign['conclusion'])} [{ago(run['createdAt'])}]({run['url']})"
-    return "none in the last 30 pushes"
+    return "none in the last 30 release runs"
 
 
-def red_runs(push: dict | None) -> list[str]:
+def red_runs(push: dict | None, label: str = "main CI") -> list[str]:
     """Failed main CI runs the owner fixes locally (no repair agent in CI)."""
     if push and push["status"] == "completed" and push["conclusion"] == "failure":
-        return [f"- ❌ [main CI failed]({push['url']}) ({push['displayTitle']}): fix locally on a "
+        return [f"- ❌ [{label} failed]({push['url']}) ({push['displayTitle']}): fix locally on a "
                 "`fix/<name>` branch through a PR (`gh run view <id> --log-failed`)"]
     return []
 
@@ -97,9 +97,13 @@ def main() -> None:
         if days <= WARN_DAYS:
             attention.append(f"- 🔴 **{item['name']}** expires {item['expires']}: {item['renew']}")
 
-    ci = runs("typr-ci.yml", branch="main")
-    push = next((r for r in ci if r["event"] == "push"), None)
-    attention += red_runs(push)
+    lanes = {}
+    for label, workflow in (("Checks", "typr-checks.yml"),
+                            ("Simulator tests", "typr-simulator.yml"),
+                            ("TestFlight / device build", "typr-ci.yml")):
+        lanes[label] = next((r for r in runs(workflow, branch="main")
+                             if r["event"] in ("push", "workflow_dispatch")), None)
+        attention += red_runs(lanes[label], label)
 
     lines += ["### Needs you", *(attention or ["Nothing. ✅"]), ""]
 
@@ -109,7 +113,8 @@ def main() -> None:
             lines.append(f"| {name} | {icon(run['conclusion'], run['status'])} | [{ago(run['createdAt'])}]({run['url']}) |")
         else:
             lines.append(f"| {name} | – | never |")
-    row("main (last merge)", push)
+    for label, run in lanes.items():
+        row(label, run)
     lines.append(f"| TestFlight upload | {last_testflight(repo)} | |")
     lines.append("")
 

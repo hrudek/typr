@@ -26,6 +26,10 @@ class CapacityTests(unittest.TestCase):
 
     def test_only_failed_same_repo_allowlisted_runs_with_budget(self):
         self.assertTrue(capacity.eligible_run(self.run, REPO))
+        self.assertTrue(capacity.eligible_run(
+            {**self.run, 'path': '.github/workflows/typr-simulator.yml'}, REPO))
+        self.assertFalse(capacity.eligible_run(
+            {**self.run, 'path': '.github/workflows/typr-checks.yml'}, REPO))
         for change in (
             {'repository': {'full_name': 'other/repo'}}, {'head_repository': None},
             {'path': '.github/workflows/typr-retry.yml'}, {'event': 'workflow_run'},
@@ -118,7 +122,7 @@ class CapacityTests(unittest.TestCase):
 
     def test_workflow_uses_trusted_code_and_bounded_linux_wait(self):
         source = (ROOT / '.github/workflows/typr-retry.yml').read_text()
-        self.assertIn('workflows: ["Typr* CI", "Typr* PR to iPhone"]', source)
+        self.assertIn('workflows: ["TestFlight", "Simulator tests", "Typr* PR to iPhone"]', source)
         self.assertIn('ref: main', source)
         self.assertIn('runs-on: ubuntu-latest', source)
         self.assertIn('timeout-minutes: 25', source)

@@ -5,7 +5,7 @@ name: Typr auto-merge
 
 on:
   workflow_run:
-    workflows: [Typr CI, Typr review]
+    workflows: [Checks, Typr review]
     types: [completed]
 
 permissions:
@@ -22,7 +22,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       (github.event.workflow_run.event == 'pull_request' ||
        github.event.workflow_run.event == 'pull_request_target') &&
-      (github.event.workflow_run.path == '.github/workflows/typr-ci.yml' ||
+      (github.event.workflow_run.path == '.github/workflows/typr-checks.yml' ||
        github.event.workflow_run.path == '.github/workflows/typr-review.yml')
     runs-on: ubuntu-latest
     timeout-minutes: 5

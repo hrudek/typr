@@ -214,7 +214,7 @@ class InfraLabelTests(unittest.TestCase):
     WORKFLOWS = HERE.parent / 'workflows'
 
     def test_scope_reads_live_labels_not_the_event_payload(self):
-        ci = (self.WORKFLOWS / 'typr-ci.yml').read_text()
+        ci = (self.WORKFLOWS / 'typr-checks.yml').read_text()
         self.assertNotIn('github.event.pull_request.labels', ci)
         self.assertIn('gh api "repos/$GH_REPO/pulls/$PR"', ci)
         self.assertIn('pull-requests: read', ci)

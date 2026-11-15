@@ -56,7 +56,7 @@ def validate_run(run, pr, repo):
     require(run['repository']['full_name'] == repo
             and run['head_repository']['full_name'] == repo, 'Run must belong to this repository')
     require(run['event'] == 'workflow_dispatch'
-            and run['path'] == '.github/workflows/typr-ci.yml', 'Expected a manually dispatched Typr CI build')
+            and run['path'] == '.github/workflows/typr-ci.yml', 'Expected a manually dispatched Unsigned build (typr-ci.yml) build')
     require(run['head_sha'] == pr['head']['sha'] and run['head_branch'] == pr['head']['ref'],
             'PR changed since this run; wait for CI on the current commit')
     # Tests/screenshots may still run or fail; only the required jobs gate reuse.
@@ -77,7 +77,7 @@ def validate_artifact(artifacts, run):
     matching = [item for item in artifacts if item['name'] == f'typr-unsigned-{run["id"]}']
     require(len(matching) == 1, 'Expected exactly one unsigned archive artifact')
     artifact = matching[0]
-    require(not artifact['expired'], 'Archive expired; manually run Typr CI with distribution=unsigned on the PR branch')
+    require(not artifact['expired'], 'Archive expired; manually run Unsigned build (typr-ci.yml) with distribution=unsigned on the PR branch')
     require(artifact['workflow_run']['id'] == run['id']
             and artifact['workflow_run']['head_sha'] == run['head_sha'], 'Artifact run mismatch')
     require(re.fullmatch(r'sha256:[0-9a-f]{64}', artifact.get('digest') or ''),
@@ -131,7 +131,7 @@ def main():
         runs = pages(repo, 'actions/workflows/typr-ci.yml/runs'
                      f'?event=workflow_dispatch&head_sha={pr["head"]["sha"]}', 'workflow_runs')
         matching = [run for run in runs if run['head_branch'] == pr['head']['ref']]
-        require(matching, 'No manual build for the current commit; run Typr CI on the PR branch with distribution=unsigned')
+        require(matching, 'No manual build for the current commit; run Unsigned build (typr-ci.yml) on the PR branch with distribution=unsigned')
         # Never silently fall back to an older run when the latest lacks a passing archive.
         run = max(matching, key=lambda item: item['id'])
     validate_run(run, pr, repo)

@@ -1,5 +1,5 @@
 # Typr: sign a manually compiled feature PR archive, without rebuilding.
-# First dispatch Typr CI on the feature branch with distribution=unsigned.
+# First dispatch Unsigned build (typr-ci.yml) on the feature branch with distribution=unsigned.
 # Dispatch from main only. All control scripts come from main, never the PR.
 name: Typr PR to iPhone
 run-name: "Typr PR #${{ inputs.pr }} → iPhone (no rebuild)"
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: "Open feature PR number (first manually run Typr CI on its branch with distribution=unsigned)"
+        description: "Open feature PR number (first manually run Unsigned build (typr-ci.yml) on its branch with distribution=unsigned)"
         type: string
         required: true
 

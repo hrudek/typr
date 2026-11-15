@@ -1,6 +1,6 @@
 # Typr: the "infra" label approves a PR that changes Typr's own automation.
-# Adding it re-runs that commit's failed Typr CI jobs, whose Scope step reads the labels
-# live. Typr CI itself ignores label events, so no other label starts a macOS run.
+# Adding it re-runs that commit's failed Checks jobs, whose Scope step reads the labels
+# live. Checks itself ignores label events, so no other label starts a macOS run.
 # gh only: never checks out or runs PR code, so pull_request_target is safe here.
 name: Typr infra recheck
 run-name: "Typr infra recheck · PR #${{ github.event.pull_request.number }}"
@@ -29,12 +29,12 @@ jobs:
       GH_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      - name: Re-run this commit's failed Typr CI jobs if Linux checks failed
+      - name: Re-run this commit's failed Checks jobs if Linux checks failed
         run: |
-          query="repos/$GH_REPO/actions/workflows/typr-ci.yml/runs?event=pull_request&head_sha=$HEAD_SHA&per_page=1"
+          query="repos/$GH_REPO/actions/workflows/typr-checks.yml/runs?event=pull_request&head_sha=$HEAD_SHA&per_page=1"
           id=$(gh api "$query" --jq '.workflow_runs[0].id // empty')
           if [[ -z "$id" ]]; then
-            echo "No Typr CI run for ${HEAD_SHA:0:8} yet; when it runs, Scope reads the label itself."
+            echo "No Checks run for ${HEAD_SHA:0:8} yet; when it runs, Scope reads the label itself."
             exit 0
           fi
           # A run can be re-run only once it has completed (the PR archive takes a while).
@@ -44,13 +44,13 @@ jobs:
           done
           read -r status conclusion < <(gh api "repos/$GH_REPO/actions/runs/$id" --jq '"\(.status) \(.conclusion)"')
           if [[ "$status" != completed ]]; then
-            echo "::error::Typr CI run $id did not finish in time; re-run its failed jobs by hand."
+            echo "::error::Checks run $id did not finish in time; re-run its failed jobs by hand."
             exit 1
           fi
           linux=$(gh api "repos/$GH_REPO/actions/runs/$id/jobs" --jq '.jobs[] | select(.name == "Linux checks") | .conclusion')
           if [[ "$conclusion" == failure && "$linux" == failure ]]; then
             gh run rerun "$id" --failed
-            echo "Re-running the failed jobs of Typr CI run $id with the infra label."
+            echo "Re-running the failed jobs of Checks run $id with the infra label."
           else
-            echo "Typr CI run $id: $conclusion, Linux checks: ${linux:-none}; nothing to re-run."
+            echo "Checks run $id: $conclusion, Linux checks: ${linux:-none}; nothing to re-run."
           fi

@@ -56,11 +56,14 @@ class AutoMergeTests(unittest.TestCase):
 
     def test_merge_pins_sha_and_explicitly_dispatches_after_bot_merge(self):
         api, run = self.run_main([[self.pr], self.pr, {'merged': True}, self.merged,
-                                 {'workflow_runs': []}, {'parents': [{'sha': PARENT}]}])
+                                 {'workflow_runs': []}, {'workflow_runs': []},
+                                 {'parents': [{'sha': PARENT}]}, {'workflow_runs': []}])
         self.assertEqual(api.call_args_list[2].args,
                          ('pulls/7/merge', 'PUT'))
         self.assertEqual(api.call_args_list[2].kwargs,
                          {'sha': SHA, 'merge_method': 'squash'})
+        self.assertEqual([call.args[0][3] for call in run.call_args_list],
+                         ['typr-checks.yml', 'typr-simulator.yml', 'typr-ci.yml'])
         command = run.call_args.args[0]
         self.assertIn('distribution=automatic', command)
         self.assertIn(f'base_sha={PARENT}', command)
@@ -71,10 +74,11 @@ class AutoMergeTests(unittest.TestCase):
                         SOURCE_SHA='d' * 40,
                         SOURCE_TITLE=f'Typr review · PR #7 · {SHA}')
         api, run = self.run_main([self.pr, self.pr, {'merged': True}, self.merged,
-                                 {'workflow_runs': []}, {'parents': [{'sha': PARENT}]}])
+                                 {'workflow_runs': []}, {'workflow_runs': []},
+                                 {'parents': [{'sha': PARENT}]}, {'workflow_runs': []}])
         self.assertEqual(api.call_args_list[0].args, ('pulls/7',))
         self.assertEqual(api.call_args_list[2].kwargs['sha'], SHA)
-        run.assert_called_once()
+        self.assertEqual(run.call_count, 3)
         moved = copy.deepcopy(self.pr)
         moved['head']['sha'] = 'e' * 40
         api, run = self.run_main([moved])
@@ -102,13 +106,23 @@ class AutoMergeTests(unittest.TestCase):
 
     def test_dispatch_recovery_and_duplicate_suppression(self):
         _, run = self.run_main([[self.merged], self.merged,
-                               {'workflow_runs': []}, {'parents': [{'sha': PARENT}]}])
-        run.assert_called_once()
+                               {'workflow_runs': []}, {'workflow_runs': []},
+                                 {'parents': [{'sha': PARENT}]}, {'workflow_runs': []}])
+        self.assertEqual(run.call_count, 3)
         for event in ('push', 'workflow_dispatch'):
             api, run = self.run_main([[self.merged], self.merged,
-                                     {'workflow_runs': [{'event': event}]}])
-            self.assertEqual(api.call_count, 3)
+                                     *([{'workflow_runs': [{'event': event}]}] * 3)])
+            self.assertEqual(api.call_count, 5)
             run.assert_not_called()
+
+    def test_partial_dispatch_recovery_only_starts_missing_simulator(self):
+        _, run = self.run_main([[self.merged], self.merged,
+                               {'workflow_runs': [{'event': 'workflow_dispatch'}]},
+                               {'workflow_runs': []}, {'parents': [{'sha': PARENT}]},
+                               {'workflow_runs': [{'event': 'workflow_dispatch'}]}])
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][3], 'typr-simulator.yml')
+        self.assertIn(f'base_sha={PARENT}', run.call_args.args[0])
 
     def test_human_merge_does_not_dispatch_duplicate_push_ci(self):
         human = {**self.merged, 'merged_by': {'login': 'hrudek'}}
@@ -118,7 +132,7 @@ class AutoMergeTests(unittest.TestCase):
     def test_workflow_uses_trusted_code_and_completed_check_events(self):
         workflow = (ROOT / '.github/workflows/typr-auto-merge.yml').read_text()
         self.assertIn('workflow_run:', workflow)
-        self.assertIn('workflows: [Typr CI, Typr review]', workflow)
+        self.assertIn('workflows: [Checks, Typr review]', workflow)
         self.assertIn('types: [completed]', workflow)
         self.assertIn('ref: main', workflow)
         self.assertIn('persist-credentials: false', workflow)

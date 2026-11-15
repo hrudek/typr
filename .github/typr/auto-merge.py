@@ -46,13 +46,18 @@ def dispatch(pr):
     merge_sha = pr['merge_commit_sha']
     # Two workflow_run events may observe the same merge. Do not dispatch twice;
     # an existing failed CI is deliberately left to the normal retry/repair flow.
-    runs = api(f'actions/workflows/typr-ci.yml/runs?head_sha={merge_sha}&per_page=100')
-    if any(run['event'] in ('push', 'workflow_dispatch') for run in runs['workflow_runs']):
-        return
-    parent = api(f'git/commits/{merge_sha}')['parents'][0]['sha']
-    subprocess.run(['gh', 'workflow', 'run', 'typr-ci.yml', '--ref', 'main',
-                    '-f', 'distribution=automatic', '-f', f'base_sha={parent}'], check=True)
-    print(f'Dispatched main CI after PR #{pr["number"]}.')
+    parent = None
+    for workflow in ('typr-checks.yml', 'typr-simulator.yml', 'typr-ci.yml'):
+        runs = api(f'actions/workflows/{workflow}/runs?head_sha={merge_sha}&per_page=100')
+        if any(run['event'] in ('push', 'workflow_dispatch') for run in runs['workflow_runs']):
+            continue
+        command = ['gh', 'workflow', 'run', workflow, '--ref', 'main']
+        if workflow != 'typr-checks.yml':
+            if parent is None:
+                parent = api(f'git/commits/{merge_sha}')['parents'][0]['sha']
+            command += ['-f', 'distribution=automatic', '-f', f'base_sha={parent}']
+        subprocess.run(command, check=True)
+        print(f'Dispatched {workflow} after PR #{pr["number"]}.')
 
 
 def main():

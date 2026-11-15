@@ -1,14 +1,12 @@
 """Execute the workflow's real Decide shell against committed local Git trees."""
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
-import textwrap
 import unittest
 
 import test_fingerprint
-from test_ci_fast_lane import SOURCE, condition
+from test_ci_fast_lane import DECIDE, condition
 
 
 class RoutingTests(unittest.TestCase):
@@ -20,9 +18,7 @@ class RoutingTests(unittest.TestCase):
     fingerprint = test_fingerprint.FingerprintTests.fingerprint
 
     def decide(self, base, event='push', distribution='', baseline=True):
-        block = SOURCE.split('        id: decide\n', 1)[1]
-        script = textwrap.dedent(re.search(r'        run: \|\n(.*?)(?=\n  test:)',
-                                          block, re.S).group(1))
+        script = DECIDE
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'output'
             env = dict(os.environ, EVENT=event, REF='refs/heads/main', BEFORE=base,
