@@ -16,6 +16,33 @@ final class KeyboardBridgeTests: XCTestCase {
         XCTAssertTrue(transcribingAfterSessionEnd.isAvailable(at: now))
     }
 
+    func testAlwaysDurationPersistsAndUnknownValueFallsBack() {
+        let suite = "typr.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let bridge = KeyboardBridge(defaults: defaults)
+
+        bridge.warmDuration = .always
+        XCTAssertEqual(defaults.string(forKey: "settings.warmDuration"), "always")
+        XCTAssertEqual(KeyboardBridge(defaults: defaults).warmDuration, .always)
+
+        defaults.set("someFutureValue", forKey: "settings.warmDuration")
+        XCTAssertEqual(bridge.warmDuration, .fifteenMinutes)
+    }
+
+    func testAlwaysSnapshotSurvivesJSONAndShowsNoCountdown() throws {
+        let now = 1_000.0
+        let snap = snapshot(state: .ready, heartbeat: now, expiresAt: .greatestFiniteMagnitude)
+        let decoded = try JSONDecoder().decode(KeyboardSnapshot.self, from: JSONEncoder().encode(snap))
+
+        XCTAssertEqual(decoded, snap)
+        XCTAssertTrue(decoded.isAvailable(at: now))
+        XCTAssertEqual(TyprTheme.formatRemaining(decoded.expiresAt - now), "∞")
+        XCTAssertEqual(TyprTheme.formatRemaining(.infinity), "∞")
+        XCTAssertEqual(TyprTheme.formatRemaining(15 * 60), "15m")
+        XCTAssertEqual(WarmSessionDuration.always.shortLabel, "∞")
+    }
+
     func testDeliverableResultSurvivesWarmSessionShutdownUntilTTL() {
         let now = 5_000.0
         let closedWithResult = KeyboardSnapshot(

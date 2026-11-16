@@ -622,6 +622,41 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertFalse(audio.isKeepaliveRunning)
     }
 
+    func testAlwaysWarmSessionNeverExpiresAndPublishesNoCountdown() async throws {
+        var now = 13_000.0
+        let audio = FakeAudioManager()
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        let controller = DictationController(
+            audio: audio,
+            keyboardBridge: bridge,
+            transcriber: transcriber,
+            transcriberFactory: { transcriber },
+            now: { now },
+            autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+
+        controller.selectWarmDuration(.always)
+        try await activationSettled(controller)
+        XCTAssertEqual(bridge.warmDuration, .always)
+        XCTAssertTrue(controller.keyboardSessionEnabled)
+
+        now += 24 * 60 * 60
+        try await Task.sleep(for: .milliseconds(400))
+        XCTAssertTrue(controller.keyboardSessionEnabled)
+        XCTAssertTrue(audio.isKeepaliveRunning)
+        XCTAssertEqual(controller.keyboardSessionDisplayRemaining, "∞")
+
+        let snapshot = bridge.snapshot()
+        XCTAssertTrue(snapshot.isAvailable(at: now))
+        XCTAssertGreaterThan(snapshot.expiresAt, now + 365 * 24 * 60 * 60)
+
+        controller.selectWarmDuration(.off)
+        XCTAssertFalse(controller.keyboardSessionEnabled)
+    }
+
     func testMeterRecoversAfterCaptureStartsTemporarilyNotRecording() async throws {
         try await checkMeterRecovery(initiallyRecording: false)
     }
