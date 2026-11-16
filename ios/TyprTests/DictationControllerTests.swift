@@ -644,7 +644,7 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertTrue(controller.keyboardSessionEnabled)
 
         now += 24 * 60 * 60
-        try await Task.sleep(for: .milliseconds(400))
+        try await waitForState("loop published a heartbeat a day later") { bridge.snapshot().heartbeat == now }
         XCTAssertTrue(controller.keyboardSessionEnabled)
         XCTAssertTrue(audio.isKeepaliveRunning)
         XCTAssertEqual(controller.keyboardSessionDisplayRemaining, "∞")
