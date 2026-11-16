@@ -204,7 +204,7 @@ struct SettingsWarmDurationControl: View {
             Text(duration.shortLabel)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(duration == selected ? TyprTheme.textBase : TyprTheme.textMuted)
-                .frame(minWidth: 44, minHeight: 44)
+                .frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 44 : 36, minHeight: 44)
                 .background {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(duration == selected ? TyprTheme.layer02 : .clear)
@@ -213,7 +213,7 @@ struct SettingsWarmDurationControl: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(duration == .off ? "Microphone off" : (duration == .always ? "Keep microphone warm always" : "Keep microphone warm for \(duration.title)"))
+        .accessibilityLabel(duration == .off ? "Microphone off" : (duration == .always ? "Keep microphone warm until ended" : "Keep microphone warm for \(duration.title)"))
         .accessibilityAddTraits(duration == selected ? .isSelected : [])
     }
 }

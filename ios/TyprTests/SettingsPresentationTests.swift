@@ -193,14 +193,17 @@ final class SettingsPresentationTests: XCTestCase {
 
     @MainActor
     func testWarmDurationRowIsInlineWhenItFitsAndStacksWithoutClipping() {
-        func size(width: CGFloat, type: DynamicTypeSize = .large) -> CGSize {
+        func size(width: CGFloat, type: DynamicTypeSize = .large, selected: WarmSessionDuration = .fifteenMinutes) -> CGSize {
             let host = UIHostingController(rootView:
-                SettingsWarmDurationRow(selected: .fifteenMinutes, onSelect: { _ in })
+                SettingsWarmDurationRow(selected: selected, onSelect: { _ in })
                     .dynamicTypeSize(type)
             )
             return host.sizeThatFits(in: CGSize(width: width, height: 10_000))
         }
         XCTAssertEqual(size(width: 353).height, 50, accuracy: 0.5)
+        let always = size(width: 353, selected: .always)
+        XCTAssertGreaterThan(always.height, 50)
+        XCTAssertLessThan(always.height, 90)
         XCTAssertGreaterThan(size(width: 280).height, 50)
         let accessible = size(width: 320, type: .accessibility3)
         XCTAssertGreaterThan(accessible.height, 50)
