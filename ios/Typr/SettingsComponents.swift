@@ -204,7 +204,7 @@ struct SettingsWarmDurationControl: View {
             Text(duration.shortLabel)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(duration == selected ? TyprTheme.textBase : TyprTheme.textMuted)
-                .frame(minWidth: 44, minHeight: 44)
+                .frame(minWidth: dynamicTypeSize.isAccessibilitySize ? 44 : 36, minHeight: 44)
                 .background {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(duration == selected ? TyprTheme.layer02 : .clear)
@@ -213,7 +213,7 @@ struct SettingsWarmDurationControl: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(duration == .off ? "Microphone off" : "Keep microphone warm for \(duration.title)")
+        .accessibilityLabel(duration == .off ? "Microphone off" : (duration == .always ? "Keep microphone warm until ended" : "Keep microphone warm for \(duration.title)"))
         .accessibilityAddTraits(duration == selected ? .isSelected : [])
     }
 }
@@ -225,22 +225,31 @@ struct SettingsWarmDurationRow: View {
     let onSelect: (WarmSessionDuration) -> Void
 
     var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                stackedRow
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 0) {
-                        title.fixedSize()
-                        Spacer(minLength: 8)
-                        control.fixedSize(horizontal: true, vertical: false)
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
                     stackedRow
+                } else {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 0) {
+                            title.fixedSize()
+                            Spacer(minLength: 8)
+                            control.fixedSize(horizontal: true, vertical: false)
+                        }
+                        stackedRow
+                    }
                 }
+            }
+            .frame(minHeight: 50)
+
+            if selected == .always {
+                Text("Keeps the microphone session active and uses more battery.")
+                    .font(.footnote)
+                    .foregroundStyle(TyprTheme.textMuted)
+                    .padding(.bottom, 10)
             }
         }
         .padding(.horizontal, 16)
-        .frame(minHeight: 50)
     }
 
     private var title: some View {

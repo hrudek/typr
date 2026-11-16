@@ -34,6 +34,7 @@ enum TyprTheme {
     }
 
     static func formatRemaining(_ seconds: TimeInterval) -> String {
+        guard seconds < TimeInterval(Int32.max) else { return "∞" }
         let clamped = max(0, Int(ceil(seconds)))
         if clamped >= 3600 {
             let mins = (clamped % 3600) / 60
