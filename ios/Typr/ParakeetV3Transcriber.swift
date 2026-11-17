@@ -3,7 +3,6 @@ import FluidAudio
 import Foundation
 import OSLog
 
-/// The pinned model's sequential Core ML loads, largest last, not equally weighted percentages.
 nonisolated enum ParakeetV3PreparationComponent: String, CaseIterable, Sendable {
     case preprocessor = "Preprocessor"
     case decoder = "Decoder"
@@ -21,8 +20,6 @@ nonisolated enum ParakeetV3PreparationComponent: String, CaseIterable, Sendable 
         let encoder: Model
     }
 
-    /// Keep each load awaited before announcing or allocating the next component, in `allCases`
-    /// order. The closure lets tests verify ordering/failure without allocating real model weights.
     static func prepare<Model>(
         optimizing: Bool,
         progressHandler: @Sendable (ModelPreparationProgress) -> Void,
@@ -49,7 +46,6 @@ nonisolated enum ParakeetV3PreparationComponent: String, CaseIterable, Sendable 
         return try await load(component)
     }
 
-    // Four sequential loads and the final check: `ModelPreparationProgress.milestoneCount`.
     func progress(optimizing: Bool) -> ModelPreparationProgress {
         let step: Int
         let name: String
@@ -152,7 +148,6 @@ actor ParakeetV3Transcriber: LocalTranscribing {
         progressHandler: @escaping @Sendable (ModelPreparationProgress) -> Void
     ) async throws {
         guard manager == nil else { return }
-        // Exact files and marker, or stop: preparation never downloads.
         guard store.isInstalled else { throw TranscriberError.notInstalled }
         let record = store.preparationRecord
         let plan = ModelPreparationPlan.decide(record: record, environment: environment,
@@ -242,7 +237,6 @@ actor ParakeetV3Transcriber: LocalTranscribing {
         try await transcribe(audioURL, vocabulary: vocabulary, language: preparedLanguage)
     }
 
-    /// `vocabulary` is deliberately unused: Typr's spelling passes and cleanup apply it afterwards.
     func transcribe(_ audioURL: URL, vocabulary: [String], language: DictationLanguage) async throws -> String {
         guard let manager else { throw TranscriberError.notPrepared }
         var decoderState = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)

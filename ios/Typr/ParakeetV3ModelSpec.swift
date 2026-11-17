@@ -23,7 +23,6 @@ nonisolated enum ParakeetV3ModelSpec: DownloadableModelSpec {
 
     static let vocabularyFile = file("parakeet_vocab.json", bytes: 151_122)
 
-    /// The four Core ML models at `modelRevision` (Hugging Face tree API).
     static let modelFiles: [PinnedModelFile] = [
         file("Preprocessor.mlmodelc/analytics/coremldata.bin", bytes: 243),
         file("Preprocessor.mlmodelc/coremldata.bin", bytes: 486),
@@ -47,7 +46,6 @@ nonisolated enum ParakeetV3ModelSpec: DownloadableModelSpec {
         file("Encoder.mlmodelc/weights/weight.bin", bytes: 445_187_200),
     ]
 
-    /// Download order: the vocabulary first (small, parsed before the marker is written), then the models.
     static let allFiles: [PinnedModelFile] = [vocabularyFile] + modelFiles
     static var checkedFiles: [PinnedModelFile] { [vocabularyFile] }
 
