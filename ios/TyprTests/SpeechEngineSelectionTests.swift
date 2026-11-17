@@ -2050,4 +2050,48 @@ extension SpeechEngineSelectionTests {
         try provider.deleteModel(.appleSpeech)
         XCTAssertTrue(whisper.isInstalled)
     }
+
+    func testDeletingAfterAPausedPreparationWaitsForItsRunningLoad() async throws {
+        let background = FakeWhisperBackground()
+        let held = EngineASR(.parakeetV3)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3]
+        provider.queued[.parakeetV3] = [held]
+        let f = fixture(preferred: .parakeetV3, provider: provider, modelBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try XCTUnwrap(background.expirations.first)()
+        XCTAssertTrue(f.controller.phase.isFailure)
+        let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        await mainActorBarrier()
+        XCTAssertTrue(provider.deleted.isEmpty, "the paused load still holds the files")
+        await held.releasePrepare()
+        let result = await deletion.value
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(provider.deleted, [.parakeetV3])
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+    }
+
+    func testDeletingParakeetV2LeavesAnAutomaticAppleSpeechPreparationRunning() async throws {
+        let apple = EngineASR(.appleSpeech)
+        await apple.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.queued[.appleSpeech] = [apple]
+        let f = fixture(provider: provider)
+        f.controller.prepareModel()
+        try await f.waitUntil { f.controller.engineName == "Apple Speech" }
+        let result = await f.controller.deleteModel(.parakeetV2)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(f.controller.phase, .preparingModel)
+        await apple.releasePrepare()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .appleSpeech)
+        XCTAssertNil(f.controller.preferredEngine)
+    }
 }

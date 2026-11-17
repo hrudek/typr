@@ -438,8 +438,8 @@ final class DictationController {
         guard canChangeEngine else { return .busy }
         isDeletingModel = true
         defer { isDeletingModel = false }
-        let preparingEngine = preferredEngine ?? .parakeetV2
-        if currentEngine == engine || (phase == .preparingModel && preparingEngine == engine) {
+        let preparingEngine = preferredEngine ?? SpeechEngineChoice(displayName: engineName)
+        if currentEngine == engine || (!isModelReady && preparingEngine == engine) {
             if keyboardSessionEnabled { endWarmSession() }
             modelPrepGeneration &+= 1
             let previous = preparationTask
