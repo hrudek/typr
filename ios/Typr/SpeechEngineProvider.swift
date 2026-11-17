@@ -79,12 +79,18 @@ protocol SpeechEngineProviding: AnyObject {
 final class ProductionSpeechEngineProvider: SpeechEngineProviding {
     private let whisperStore: WhisperModelStore
     private let parakeetV3Store: ParakeetV3ModelStore
+    private let orukeetStore: OrukeetModelStore
     private let parakeetV2Cache: URL
 
-    init(whisperStore: WhisperModelStore = .production, parakeetV3Store: ParakeetV3ModelStore = .production,
-         parakeetV2Cache: URL = ParakeetTranscriber.cacheDirectory) {
+    init(
+        whisperStore: WhisperModelStore = .production,
+        parakeetV3Store: ParakeetV3ModelStore = .production,
+        orukeetStore: OrukeetModelStore = .production,
+        parakeetV2Cache: URL = ParakeetTranscriber.cacheDirectory
+    ) {
         self.whisperStore = whisperStore
         self.parakeetV3Store = parakeetV3Store
+        self.orukeetStore = orukeetStore
         self.parakeetV2Cache = parakeetV2Cache
     }
 
@@ -119,6 +125,9 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .parakeetV3:
             guard parakeetV3Store.isInstalled else { throw SpeechEngineError.notInstalled(engine) }
             return ParakeetV3Transcriber(store: parakeetV3Store, language: language)
+        case .orukeet:
+            guard orukeetStore.isInstalled else { throw SpeechEngineError.notInstalled(engine) }
+            return OrukeetTranscriber(store: orukeetStore, language: language)
         }
     }
 
@@ -128,6 +137,7 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .parakeetV2: ParakeetTranscriber.hasCachedModel
         case .whisperLargeV3Turbo: whisperStore.isInstalled
         case .parakeetV3: parakeetV3Store.isInstalled
+        case .orukeet: orukeetStore.isInstalled
         }
     }
 
@@ -148,6 +158,10 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
             return parakeetV3Store.isInstalled
                 ? .installed
                 : .downloadRequired("Not downloaded (\(ParakeetV3ModelSpec.downloadSizeLabel)).")
+        case .orukeet:
+            return orukeetStore.isInstalled
+                ? .installed
+                : .downloadRequired("Not downloaded (\(OrukeetModelSpec.downloadSizeLabel)).")
         }
     }
 
@@ -158,6 +172,7 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .parakeetV2: folder = parakeetV2Cache
         case .whisperLargeV3Turbo: folder = whisperStore.root
         case .parakeetV3: folder = parakeetV3Store.root
+        case .orukeet: folder = orukeetStore.root
         }
         guard FileManager.default.fileExists(atPath: folder.path) else { return }
         try FileManager.default.removeItem(at: folder)

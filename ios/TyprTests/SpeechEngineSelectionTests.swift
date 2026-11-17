@@ -578,9 +578,9 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
     func testStoredRawValuesNamesAndGermanSupportAreStable() throws {
         XCTAssertEqual(SpeechEngineChoice.allCases.map(\.rawValue),
-                       ["apple-speech", "parakeet-v2", "whisper-large-v3-turbo", "parakeet-v3"])
+                       ["apple-speech", "parakeet-v2", "whisper-large-v3-turbo", "parakeet-v3", "orukeet"])
         XCTAssertEqual(SpeechEngineChoice.allCases.map(\.displayName),
-                       ["Apple Speech", "Parakeet V2", "Whisper Large V3 Turbo", "Parakeet V3"])
+                       ["Apple Speech", "Parakeet V2", "Whisper Large V3 Turbo", "Parakeet V3", "Orukeet"])
         for choice in SpeechEngineChoice.allCases {
             XCTAssertEqual(SpeechEngineChoice(displayName: choice.displayName), choice)
             XCTAssertEqual(try JSONDecoder().decode(SpeechEngineChoice.self, from: JSONEncoder().encode(choice)), choice)
@@ -596,7 +596,11 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertTrue(SpeechEngineChoice.parakeetV3.recognizesGerman)
         XCTAssertTrue(SpeechEngineChoice.parakeetV3.summary.contains("only when you tap Download"))
         XCTAssertTrue(SpeechEngineChoice.parakeetV3.languageSummary.contains("German and English"))
-        XCTAssertEqual(SpeechEngineChoice.allCases.filter(\.requiresExplicitDownload), [.whisperLargeV3Turbo, .parakeetV3])
+        XCTAssertTrue(SpeechEngineChoice.orukeet.recognizesGerman)
+        XCTAssertTrue(SpeechEngineChoice.orukeet.summary.contains("only when you tap Download"))
+        XCTAssertTrue(SpeechEngineChoice.orukeet.languageSummary.contains("25 European languages"))
+        XCTAssertEqual(SpeechEngineChoice.allCases.filter(\.requiresExplicitDownload),
+                       [.whisperLargeV3Turbo, .parakeetV3, .orukeet])
     }
 
     // MARK: - Preference persistence (no migration)
@@ -2148,5 +2152,131 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(f.bridge.snapshot().message, notInstalled)
         XCTAssertTrue(f.audio.captures.isEmpty)
         XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+    }
+}
+
+extension SpeechEngineSelectionTests {
+    func testOrukeetRowOffersOnlyItsDownloadUntilInstalled() {
+        let missing = row(.orukeet, availability: .downloadRequired("Not downloaded"), install: .notInstalled)
+        XCTAssertEqual(missing.action, .download)
+        XCTAssertEqual(missing.actionTitle, "Download (\(OrukeetModelSpec.downloadSizeLabel))")
+        XCTAssertNotEqual(OrukeetModelSpec.downloadSizeLabel, ParakeetV3ModelSpec.downloadSizeLabel)
+        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
+        XCTAssertNil(row(.orukeet, language: .german).warning, "German is one of its languages")
+
+        let downloading = row(.orukeet, install: .downloading(ModelDownloadProgress(completedBytes: 25, totalBytes: 100)))
+        XCTAssertEqual(downloading.progress, 0.25)
+        XCTAssertEqual(downloading.action, .cancelDownload)
+        XCTAssertEqual(row(.orukeet, install: .cancelled).action, .retryDownload)
+        XCTAssertEqual(row(.orukeet, install: .failed("offline")).actionTitle, "Retry")
+        XCTAssertEqual(row(.orukeet, install: .installed).action, .use)
+        XCTAssertTrue(row(.orukeet, install: .installed).offersDelete)
+        XCTAssertFalse(missing.offersDelete)
+        XCTAssertFalse(downloading.offersDelete)
+        XCTAssertEqual(row(.orukeet, preferred: .orukeet, install: .notInstalled, failure: "Not downloaded").action,
+                       .retryDownload)
+    }
+
+    func testLaunchWithOrukeetChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
+        let root = WhisperTestFiles.makeRoot()
+        roots.append(root)
+        let store = OrukeetModelStore(root: root)
+        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), orukeetStore: store)
+        let background = FakeWhisperBackground()
+        let f = fixture(preferred: .orukeet, language: .german, autoPrepare: true, provider: provider,
+                        modelBackground: background)
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertEqual(f.controller.engineName, "Orukeet")
+        XCTAssertFalse(f.bridge.isModelInstalled)
+        f.controller.noteSceneDidBecomeActive()
+        XCTAssertTrue(background.engines.isEmpty)
+
+        let notInstalled = SpeechEngineError.notInstalled(.orukeet).localizedDescription
+        f.controller.performPrimaryAction()
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+        XCTAssertNil(f.controller.currentEngine)
+        XCTAssertEqual(f.controller.preferredEngine, .orukeet)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Orukeet")
+    }
+
+    func testSelectingAnUninstalledOrukeetChangesNothing() async throws {
+        let f = fixture(preferred: .parakeetV2)
+        try await f.ready()
+        XCTAssertEqual(f.controller.selectEngine(.orukeet), .notInstalled)
+        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v2")
+        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
+
+        f.fake.installed.insert(.orukeet)
+        XCTAssertEqual(f.controller.selectEngine(.orukeet), .selected)
+        XCTAssertEqual(f.storedPreferenceRaw, "orukeet")
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .orukeet)
+        XCTAssertTrue(f.bridge.isModelInstalled)
+    }
+
+    func testInstalledOrukeetPreparesOnOpeningWithTheBackgroundRuntime() async throws {
+        let background = FakeWhisperBackground()
+        let provider = FakeEngineProvider()
+        provider.installed = [.orukeet]
+        let f = fixture(preferred: .orukeet, autoPrepare: true, provider: provider,
+                        modelBackground: background, deferPreparationUntilActive: true)
+        XCTAssertTrue(provider.created.isEmpty)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(provider.explicitCalls, [.orukeet])
+        XCTAssertEqual(background.engines, [.orukeet])
+        XCTAssertEqual(background.finishes.last, true)
+        XCTAssertEqual(background.maintenance.last, true)
+        XCTAssertEqual(ModelBackgroundPreparation.taskTitle(for: .orukeet), "Preparing Orukeet")
+    }
+
+    func testDictationLogRecordsOrukeetWithItsAutomaticLanguage() async throws {
+        let env = LogTestEnvironment()
+        logEnvironments.append(env)
+        try await LogTestEnvironment.waitUntilLoaded(env.store)
+        let provider = FakeEngineProvider()
+        provider.installed = [.orukeet]
+        let f = fixture(preferred: .orukeet, language: .german, provider: provider, dictationLog: env.store)
+        try await f.ready()
+        _ = try await f.dictate(jobID: "orukeet-1")
+
+        let context = try XCTUnwrap(env.store.entries.first?.context)
+        XCTAssertEqual(context.speechEngine, "Orukeet")
+        XCTAssertEqual(context.speechLanguage, "Automatic (detected by Orukeet)")
+    }
+
+    func testProductionDeleteRemovesOrukeetsModelArchiveAndStagingButKeepsTheChoice() async throws {
+        let root = WhisperTestFiles.makeRoot()
+        roots.append(root)
+        let store = OrukeetModelStore(root: root)
+        let v3 = ParakeetV3ModelStore(root: root.appendingPathComponent("v3"))
+        try OrukeetTestFiles.populateCompiled(store)
+        try store.writeMarker()
+        try WhisperTestFiles.writeSparse(store.fileURL(for: OrukeetModelSpec.archive), bytes: 1_000)
+        try WhisperTestFiles.writeSparse(
+            store.repoFolder(OrukeetModelSpec.modelRepo).appending(path: "unpacking/packages/Encoder.mlpackage/Manifest.json"),
+            bytes: 10)
+        try ParakeetV3TestFiles.populate(v3, marker: true)
+        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), parakeetV3Store: v3, orukeetStore: store)
+        let installer = OrukeetModelInstaller(store: store, downloader: CountingDownloader(), availableCapacity: { .max })
+        XCTAssertEqual(installer.state, .installed)
+
+        let f = fixture(preferred: .orukeet, provider: provider)
+        let result = await f.controller.deleteModel(.orukeet)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.modelFolder.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.fileURL(for: OrukeetModelSpec.archive).path),
+                       "a partial archive download is gone too")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.markerURL.path))
+        XCTAssertFalse(provider.isInstalled(.orukeet))
+        installer.refresh()
+        XCTAssertEqual(installer.state, .notInstalled, "the row returns to Download")
+        XCTAssertFalse(f.bridge.isModelInstalled)
+        XCTAssertEqual(f.controller.preferredEngine, .orukeet)
+
+        let notInstalled = SpeechEngineError.notInstalled(.orukeet).localizedDescription
+        f.controller.performPrimaryAction()
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+        XCTAssertEqual(f.controller.preferredEngine, .orukeet)
     }
 }
