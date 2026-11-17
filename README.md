@@ -41,6 +41,12 @@ maintenance can also prepare it while charging. iOS may decline, pause or stop
 this work; there is no immediate post-update guarantee. Reopen Typr to retry.
 Preparation never starts the microphone or audio keepalive.
 
+Delete in Speech engine removes a downloaded model (Whisper, Parakeet V2 or
+Parakeet V3) with its partial downloads, after releasing it if it is loaded. The
+chosen engine stays chosen: Whisper and Parakeet V3 then need Download again,
+Parakeet V2 downloads again on next use. Apple Speech has no Delete; iOS manages
+its assets.
+
 Background Neural Engine access on iOS 27+ requires the Background Inference
 capability (`com.apple.developer.background-tasks.continued-processing.inference`)
 in the app's provisioning profiles; signing fails closed if it is missing.

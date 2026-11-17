@@ -31,6 +31,11 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         self == .whisperLargeV3Turbo || self == .parakeetV3
     }
 
+    /// Has model files on this iPhone that the user can delete; iOS manages Apple Speech's assets.
+    var hasDeletableModel: Bool {
+        self != .appleSpeech
+    }
+
     /// The engine behind a transcriber's display name; nil for test or unknown engines.
     init?(displayName: String) {
         guard let match = Self.allCases.first(where: { $0.displayName == displayName }) else { return nil }

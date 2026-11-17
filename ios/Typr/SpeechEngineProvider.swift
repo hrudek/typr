@@ -71,16 +71,21 @@ protocol SpeechEngineProviding: AnyObject {
     func isInstalled(_ engine: SpeechEngineChoice) -> Bool
     /// OS, device, language and asset status for the settings section. Never starts model work.
     func availability(of engine: SpeechEngineChoice, language: DictationLanguage) async -> SpeechEngineAvailability
+    /// Removes every file of the engine's model, including partial downloads.
+    func deleteModel(_ engine: SpeechEngineChoice) throws
 }
 
 @MainActor
 final class ProductionSpeechEngineProvider: SpeechEngineProviding {
     private let whisperStore: WhisperModelStore
     private let parakeetV3Store: ParakeetV3ModelStore
+    private let parakeetV2Cache: URL
 
-    init(whisperStore: WhisperModelStore = .production, parakeetV3Store: ParakeetV3ModelStore = .production) {
+    init(whisperStore: WhisperModelStore = .production, parakeetV3Store: ParakeetV3ModelStore = .production,
+         parakeetV2Cache: URL = ParakeetTranscriber.cacheDirectory) {
         self.whisperStore = whisperStore
         self.parakeetV3Store = parakeetV3Store
+        self.parakeetV2Cache = parakeetV2Cache
     }
 
     func automaticTranscriber(language: DictationLanguage) async -> any LocalTranscribing {
@@ -144,5 +149,17 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
                 ? .installed
                 : .downloadRequired("Not downloaded (\(ParakeetV3ModelSpec.downloadSizeLabel)).")
         }
+    }
+
+    func deleteModel(_ engine: SpeechEngineChoice) throws {
+        let folder: URL
+        switch engine {
+        case .appleSpeech: return
+        case .parakeetV2: folder = parakeetV2Cache
+        case .whisperLargeV3Turbo: folder = whisperStore.root
+        case .parakeetV3: folder = parakeetV3Store.root
+        }
+        guard FileManager.default.fileExists(atPath: folder.path) else { return }
+        try FileManager.default.removeItem(at: folder)
     }
 }

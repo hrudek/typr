@@ -48,6 +48,10 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
     let actionEnabled: Bool
     let warning: String?
     let note: String?
+    /// The model is on this iPhone and can be deleted (never Apple Speech).
+    let offersDelete: Bool
+    /// False while a dictation runs or another deletion is in progress.
+    let deleteEnabled: Bool
 
     static func languageWarning(engine: SpeechEngineChoice?, language: DictationLanguage) -> String? {
         engine == .parakeetV2 && language != .english
@@ -68,6 +72,8 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
         canChangeEngine: Bool
     ) -> SpeechEngineRowState {
         let downloadSizeLabel = DownloadableModels.downloadSizeLabel(for: engine)
+        let offersDelete = engine.hasDeletableModel
+            && (downloadSizeLabel == nil ? availability == .installed : install == .installed)
         let isChosen = preferred == engine
         let badge: String? = current == engine
             ? (preferred == nil ? "In use · automatic" : "In use")
@@ -89,7 +95,8 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
             return SpeechEngineRowState(engine: engine, badge: badge, status: status, progress: progress,
                                         isIndeterminate: isIndeterminate,
                                         action: action, actionTitle: title, actionEnabled: enabled,
-                                        warning: warning, note: note)
+                                        warning: warning, note: note,
+                                        offersDelete: offersDelete, deleteEnabled: canChangeEngine)
         }
 
         if downloadSizeLabel != nil {
@@ -150,6 +157,8 @@ struct SpeechEngineCard: View {
     let dictation: DictationController
     @State private var availability: [SpeechEngineChoice: SpeechEngineAvailability] = [:]
     @State private var availabilityGeneration: UInt64 = 0
+    @State private var pendingDeletion: SpeechEngineChoice?
+    @State private var deletionFailure: String?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -164,6 +173,24 @@ struct SpeechEngineCard: View {
                 .foregroundStyle(TyprTheme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 4)
+        }
+        .confirmationDialog(
+            pendingDeletion.map { "Delete \($0.displayName)?" } ?? "",
+            isPresented: Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDeletion
+        ) { engine in
+            Button("Delete", role: .destructive) { delete(engine) }
+            Button("Cancel", role: .cancel) {}
+        } message: { engine in
+            Text(Self.deletionMessage(for: engine))
+        }
+        .alert("The model could not be deleted", isPresented: Binding(
+            get: { deletionFailure != nil }, set: { if !$0 { deletionFailure = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionFailure ?? "")
         }
         .task(id: refreshKey) {
             refreshInstallers()
@@ -239,6 +266,22 @@ struct SpeechEngineCard: View {
         )
     }
 
+    static func deletionMessage(for engine: SpeechEngineChoice) -> String {
+        engine == .parakeetV2
+            ? "Removes the downloaded model from this iPhone. Typr downloads it again the next time you use it."
+            : "Removes the downloaded model from this iPhone. Download it again to use it. Your engine choice stays."
+    }
+
+    private func delete(_ engine: SpeechEngineChoice) {
+        Task {
+            if case .failed(let message) = await dictation.deleteModel(engine) {
+                deletionFailure = message
+            }
+            DownloadableModels.installer(for: engine)?.refresh()
+            await refreshAvailability()
+        }
+    }
+
     private func perform(_ state: SpeechEngineRowState) {
         switch state.action {
         case .none: break
@@ -302,6 +345,19 @@ struct SpeechEngineCard: View {
                     .buttonStyle(.plain)
                     .disabled(!state.actionEnabled)
                     .opacity(state.actionEnabled ? 1 : 0.4)
+            }
+            if state.offersDelete {
+                Button(role: .destructive) { pendingDeletion = state.engine } label: {
+                    Text("Delete")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(TyprTheme.warmMic)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                    .buttonStyle(.plain)
+                    .disabled(!state.deleteEnabled)
+                    .opacity(state.deleteEnabled ? 1 : 0.4)
             }
             Divider().overlay(TyprTheme.borderWeak)
             DisclosureGroup("Engine details") {
