@@ -284,8 +284,8 @@ final class PersonalTypingBigramTests: XCTestCase {
         // A proper distribution: followers' discounted mass plus the backed-off corpus mass is 1.
         let mass = (11.5 + 2.5 + 0.5) / 19 + personal.backoffWeight(after: "ich")
         XCTAssertEqual(mass, 1, accuracy: 1e-12)
-        let weight = 0.5
-        for (german, english) in [(true, true), (true, false), (false, true)] {
+        let selections = [(0.05, true, true), (0.5, true, true), (0.95, true, true), (0.5, true, false), (0.5, false, true)]
+        for (weight, german, english) in selections {
             let actual = model.suggestions(after: "ich", weightDE: weight, german: german, english: english, personal: personal)
             var keys = Set<String>()
             for pack in [german ? model.de : nil, english ? model.en : nil].compactMap({ $0 }) {
