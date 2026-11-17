@@ -277,7 +277,7 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let f = Fixture(); try await f.ready()
         var offer: DictationFeedbackOffer? = f.offer()
         let original = offer!
-        for _ in 0..<60 {
+        for _ in 0..<DictationLogStore.maximumEntries {
             let rec = f.store.begin(token: f.store.token(), context: .init())!
             rec.finish(text: "Other synthetic result.", beforeSpelling: "Other synthetic result.")
         }
@@ -330,9 +330,11 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let host = UIHostingController(rootView: KeyboardSurfaceView(model: model))
         // SwiftUI mounts UIViewRepresentable children as part of window presentation.
         // A detached hosting view can have no feedback panel in its UIKit hierarchy.
+        // Visible without becoming key: making a window key starts the system text input
+        // machinery, which takes seconds on a CI simulator.
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 140))
         window.rootViewController = host
-        window.makeKeyAndVisible()
+        window.isHidden = false
         defer {
             window.isHidden = true
             window.rootViewController = nil
