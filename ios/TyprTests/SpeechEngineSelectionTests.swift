@@ -1763,8 +1763,6 @@ extension SpeechEngineSelectionTests {
     }
 }
 
-// Parakeet V3 follows Whisper's path: explicit download only, local preparation with the same
-// background runtime, the keyboard's install flag and the dictation log.
 extension SpeechEngineSelectionTests {
     private func parakeetV3Root() -> ParakeetV3ModelStore {
         let root = WhisperTestFiles.makeRoot()

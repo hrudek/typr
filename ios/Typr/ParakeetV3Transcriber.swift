@@ -14,20 +14,39 @@ nonisolated enum ParakeetV3PreparationComponent: String, CaseIterable, Sendable 
         self == .preprocessor ? ParakeetV3ModelSpec.preprocessorComputeUnits : ParakeetV3ModelSpec.modelComputeUnits
     }
 
-    /// Keep each load awaited before announcing or allocating the next component. The closure
-    /// lets tests verify ordering/failure without allocating real model weights.
-    static func prepare(
+    struct Loaded<Model> {
+        let preprocessor: Model
+        let decoder: Model
+        let joint: Model
+        let encoder: Model
+    }
+
+    /// Keep each load awaited before announcing or allocating the next component, in `allCases`
+    /// order. The closure lets tests verify ordering/failure without allocating real model weights.
+    static func prepare<Model>(
         optimizing: Bool,
         progressHandler: @Sendable (ModelPreparationProgress) -> Void,
         isolation: isolated (any Actor)? = #isolation,
-        load: (ParakeetV3PreparationComponent) async throws -> Void
-    ) async throws {
-        for component in allCases {
-            try Task.checkCancellation()
-            progressHandler(component.progress(optimizing: optimizing))
-            try await load(component)
-        }
+        load: (ParakeetV3PreparationComponent) async throws -> Model
+    ) async throws -> Loaded<Model> {
+        let preprocessor = try await step(.preprocessor, optimizing: optimizing, progressHandler: progressHandler, load: load)
+        let decoder = try await step(.decoder, optimizing: optimizing, progressHandler: progressHandler, load: load)
+        let joint = try await step(.joint, optimizing: optimizing, progressHandler: progressHandler, load: load)
+        let encoder = try await step(.encoder, optimizing: optimizing, progressHandler: progressHandler, load: load)
         try Task.checkCancellation()
+        return Loaded(preprocessor: preprocessor, decoder: decoder, joint: joint, encoder: encoder)
+    }
+
+    private static func step<Model>(
+        _ component: ParakeetV3PreparationComponent,
+        optimizing: Bool,
+        progressHandler: @Sendable (ModelPreparationProgress) -> Void,
+        isolation: isolated (any Actor)? = #isolation,
+        load: (ParakeetV3PreparationComponent) async throws -> Model
+    ) async throws -> Model {
+        try Task.checkCancellation()
+        progressHandler(component.progress(optimizing: optimizing))
+        return try await load(component)
     }
 
     // Four sequential loads and the final check: `ModelPreparationProgress.milestoneCount`.
@@ -182,11 +201,10 @@ actor ParakeetV3Transcriber: LocalTranscribing {
         progressHandler: @escaping @Sendable (ModelPreparationProgress) -> Void
     ) async throws -> AsrManager {
         do {
-            var models: [ParakeetV3PreparationComponent: MLModel] = [:]
-            try await ParakeetV3PreparationComponent.prepare(
+            let models = try await ParakeetV3PreparationComponent.prepare(
                 optimizing: optimizing, progressHandler: progressHandler
             ) { component in
-                models[component] = try await MLModel.load(
+                try await MLModel.load(
                     contentsOf: store.modelFolder.appendingPathComponent("\(component.rawValue).mlmodelc"),
                     configuration: MLModelConfigurationUtils.defaultConfiguration(computeUnits: component.computeUnits)
                 )
@@ -194,12 +212,8 @@ actor ParakeetV3Transcriber: LocalTranscribing {
             progressHandler(ModelPreparationProgress(fractionCompleted: nil,
                 detail: "Checking the Parakeet V3 model",
                 stageProgress: (4, ModelPreparationProgress.milestoneCount)))
-            guard let preprocessor = models[.preprocessor], let decoder = models[.decoder],
-                  let joint = models[.joint], let encoder = models[.encoder] else {
-                throw TranscriberError.corruptModel("A Core ML model is missing.")
-            }
             let asrModels = AsrModels(
-                encoder: encoder, preprocessor: preprocessor, decoder: decoder, joint: joint,
+                encoder: models.encoder, preprocessor: models.preprocessor, decoder: models.decoder, joint: models.joint,
                 configuration: MLModelConfigurationUtils.defaultConfiguration(computeUnits: ParakeetV3ModelSpec.modelComputeUnits),
                 vocabulary: vocabulary, version: .v3)
             let manager = AsrManager(config: .default)
