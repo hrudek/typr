@@ -15,13 +15,7 @@ final class DecoderStatisticsEvaluationTests: XCTestCase {
     private let penalty = log(0.01)
 
     private func sources() throws -> [Decoder.Language: SpatialWordLexicon] {
-        var result: [Decoder.Language: SpatialWordLexicon] = [:]
-        for language in Decoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            result[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return result
+        try XCTUnwrap(BundledKeyboardData.lexicons)
     }
 
     private func logAdd(_ a: Double, _ b: Double) -> Double {

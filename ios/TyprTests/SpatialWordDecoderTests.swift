@@ -1110,11 +1110,9 @@ final class SpatialWordDecoderTests: XCTestCase {
     }
 
     func testBundledWordDataLoadsInAppAndHasExpectedUnicodeWords() throws {
-        for (language, word) in [("de", "straße"), ("en", "keyboard")] {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language)", withExtension: "words", subdirectory: "WordData"))
-            let source = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-            XCTAssertNotNil(source.logPrior(for: word))
-        }
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
+        XCTAssertNotNil(lexicons[.german]?.logPrior(for: "straße"))
+        XCTAssertNotNil(lexicons[.english]?.logPrior(for: "keyboard"))
     }
 }
 

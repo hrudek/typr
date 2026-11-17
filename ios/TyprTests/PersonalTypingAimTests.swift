@@ -254,11 +254,8 @@ final class PersonalTypingAimTests: XCTestCase {
         XCTAssertEqual(model.state.layouts.count, 1)
         print("EVAL P7_memory slowPayloadMaxBytes=\(slowPayload) fastPayloadMaxBytes=\(fastPayload) fourLayoutEncodedBytes=\(touchBytes) storeLimitBytes=\(KeyboardLearningStore.maximumLearningBytes) heapOverheadExcluded=true")
         var fileBytes = 0, nodes = 0
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            let data = try Data(contentsOf: url)
-            let lexicon = try XCTUnwrap(SpatialWordLexicon(data: data))
-            fileBytes += data.count; nodes += lexicon.nodeCount
+        for lexicon in try XCTUnwrap(BundledKeyboardData.lexicons).values {
+            fileBytes += lexicon.data.count; nodes += lexicon.nodeCount
         }
         let indexBytes = nodes * MemoryLayout<UInt32>.stride
         let lengthBytes = nodes * MemoryLayout<UInt16>.stride

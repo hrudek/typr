@@ -280,21 +280,23 @@ final class KeyboardLearningStoreTests: XCTestCase {
 
     func testWriteByteCeilingDropsOldLexiconEntries() throws {
         let fixture = try Fixture(); defer { fixture.clean() }
-        let model = PersonalTypingModel(now: { Date(timeIntervalSince1970: 1) })
+        var state = PersonalTypingModel.State()
         let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
+        let date = Date(timeIntervalSince1970: 1)
         for index in 0..<2000 {
             let suffix = String(alphabet[index / 676]) + String(alphabet[(index / 26) % 26]) + String(alphabet[index % 26])
             let word = String(repeating: "界", count: 29) + suffix
-            model.keep(word); model.recordWord(word)
+            state.kept[word] = date
+            state.counts[word] = .init(count: 1, lastUpdated: date)
         }
-        let before = model.summary
+        XCTAssertNotNil(state.validated())
         var diagnostics = KeyboardDiagnostics()
-        XCTAssertTrue(fixture.store().save(model: model.state, diagnostics: &diagnostics))
+        XCTAssertTrue(fixture.store().save(model: state, diagnostics: &diagnostics))
         let data = try Data(contentsOf: fixture.file("learning-v1.json"))
         XCTAssertLessThanOrEqual(data.count, KeyboardLearningStore.maximumLearningBytes)
         let loaded = try XCTUnwrap(fixture.store().load().0)
         XCTAssertNotNil(loaded.validated())
-        XCTAssertLessThan(loaded.kept.count + loaded.counts.count, before.keptWords + before.countedWords)
+        XCTAssertLessThan(loaded.kept.count + loaded.counts.count, state.kept.count + state.counts.count)
     }
 
     func testWriteFailureAndInvalidStateAreReported() throws {

@@ -9,13 +9,7 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
     typealias Language = SpatialWordDecoder.Language
     @MainActor struct Fixture {
         func resources() throws -> [Language: SpatialWordLexicon] {
-            var sources: [Language: SpatialWordLexicon] = [:]
-            for language in Language.allCases {
-                let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                        withExtension: "words", subdirectory: "WordData"))
-                sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-            }
-            return sources
+            try XCTUnwrap(BundledKeyboardData.lexicons)
         }
         func job(_ token: String, previous: String? = nil,
                  languages: Set<Language> = [.german, .english]) -> Boundary.Job {
