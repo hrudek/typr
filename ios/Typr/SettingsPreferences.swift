@@ -25,7 +25,6 @@ struct TextProcessingSettingsCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var aiCleanup = TyprSettings().aiCleanup
     @State private var cleanupReason = TranscriptCleanupProduction.unavailableReason
-    @State private var customPrompt = CleanupPromptPreferences().isCustom
     @State private var engine = CleanupEnginePreferences().engine
     @State private var hasAPIKey = AnthropicKeyStore().hasKey
     @State private var keyDraft = ""
@@ -55,12 +54,6 @@ struct TextProcessingSettingsCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 16).padding(.bottom, 14)
                 }
-                SettingsDivider()
-                NavigationLink(value: SettingsDestination.cleanupPrompt) {
-                    SettingsLink(title: "Cleanup prompt", detail: "Edit the instructions used for AI cleanup",
-                                 icon: "text.quote", value: customPrompt ? "Custom" : "Default")
-                }
-                .buttonStyle(.plain)
             }
             VocabularySettingsCard()
         }
@@ -72,7 +65,6 @@ struct TextProcessingSettingsCard: View {
         TranscriptCleanupProduction.invalidateAvailability()
         aiCleanup = TyprSettings().aiCleanup
         cleanupReason = TranscriptCleanupProduction.unavailableReason
-        customPrompt = CleanupPromptPreferences().isCustom
         engine = CleanupEnginePreferences().engine
         hasAPIKey = AnthropicKeyStore().hasKey
     }
@@ -112,7 +104,7 @@ struct TextProcessingSettingsCard: View {
                 .disabled(!AnthropicKeyStore.canSave(keyDraft))
                 .accessibilityIdentifier("save-anthropic-key")
             }
-            Text("Dictations, nearby text used as cleanup context and your vocabulary are sent to Anthropic. Requires internet; plain transcript if unavailable.")
+            Text("Dictations, the app you dictate in, the text around the cursor and your vocabulary are sent to Anthropic. Requires internet; plain transcript if unavailable.")
                 .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }

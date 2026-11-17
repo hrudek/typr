@@ -6,7 +6,7 @@ import XCTest
 private final class CancellationHonouringSession: CleanupSession {
     var gate: CheckedContinuation<Void, Never>?
     func prewarm() async {}
-    func clean(_ text: String, style: DictationStyle) async throws -> String {
+    func generate(_ prompt: String) async throws -> String {
         await withCheckedContinuation { gate = $0 }
         try Task.checkCancellation()
         return "Die Katze sitzt auf der Matte"
@@ -36,10 +36,8 @@ final class CleanupDiagnosticsTests: XCTestCase {
             XCTAssertEqual(diagnostics.lastSummary(), "Last dictation (just now): Apple Intelligence changed nothing (1.2 s)")
             diagnostics.record(CleanupObservation(outcome: .skipped(.off), latencyMilliseconds: 0))
             XCTAssertEqual(diagnostics.lastSummary(), "Last dictation (just now): Apple Intelligence changed nothing (1.2 s)")
-            diagnostics.record(CleanupObservation(outcome: .skipped(.tooShort), latencyMilliseconds: 0))
-            XCTAssertTrue(diagnostics.lastSummary()!.contains("fewer than 3 words"))
-            diagnostics.record(CleanupObservation(outcome: .skipped(.language), latencyMilliseconds: 0))
-            XCTAssertTrue(diagnostics.lastSummary()!.contains("a language Apple Intelligence doesn't support"))
+            diagnostics.record(CleanupObservation(outcome: .skipped(.numbersOnly), latencyMilliseconds: 0))
+            XCTAssertTrue(diagnostics.lastSummary()!.contains("numbers only"))
             let later = Date().addingTimeInterval(3 * 60)
             XCTAssertTrue(diagnostics.lastSummary(now: later)!.hasPrefix("Last dictation (3 min ago): "))
             let stored = defaults.dictionary(forKey: CleanupDiagnostics.key)!
@@ -65,27 +63,26 @@ final class CleanupDiagnosticsTests: XCTestCase {
             let diagnostics = CleanupDiagnostics(defaults: defaults)
             let session = CleanupTestSession()
             let bg = CleanupTestBackground(), sleeper = CleanupTestSleeper()
-            var deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-                background: bg, isEnabled: { true }, sleep: sleeper.sleep)
+            var deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true }, sleep: sleeper.sleep)
             deps.observer = diagnostics
             let coordinator = CleanupCoordinator()
             let raw = "Die Katze sitzt auf der Mathe"
 
             let a = CleanupJob(session: session, background: bg); a.begin()
-            let cleaned = await coordinator.clean(raw, style: .polished, job: a, dependencies: deps)
+            let cleaned = await coordinator.clean(raw, job: a, dependencies: deps)
             XCTAssertEqual(cleaned, session.result)
             XCTAssertTrue(diagnostics.lastSummary()!.contains("cleaned up by Apple Intelligence"))
             a.finish(); sleeper.fire(); await drain()
 
             session.result = raw
             let b = CleanupJob(session: session, background: bg); b.begin()
-            _ = await coordinator.clean(raw, style: .polished, job: b, dependencies: deps)
+            _ = await coordinator.clean(raw, job: b, dependencies: deps)
             XCTAssertTrue(diagnostics.lastSummary()!.contains("changed nothing"))
             b.finish(); sleeper.fire(); await drain()
 
             session.suspend = true
             let c = CleanupJob(session: session, background: bg); c.begin()
-            let task = Task { await coordinator.clean(raw, style: .polished, job: c, dependencies: deps) }
+            let task = Task { await coordinator.clean(raw, job: c, dependencies: deps) }
             await drain()
             sleeper.fire()
             let value = await task.value
@@ -104,12 +101,12 @@ final class CleanupDiagnosticsTests: XCTestCase {
             let session = CancellationHonouringSession()
             let bg = CleanupTestBackground(), sleeper = CleanupTestSleeper()
             var deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: CleanupTestSession()),
-                language: CleanupTestLanguage(), background: bg, isEnabled: { true }, sleep: sleeper.sleep)
+                background: bg, isEnabled: { true }, sleep: sleeper.sleep)
             deps.observer = diagnostics
             let coordinator = CleanupCoordinator()
             let raw = "Die Katze sitzt auf der Mathe"
             let job = CleanupJob(session: session, background: bg); job.begin()
-            let task = Task { await coordinator.clean(raw, style: .polished, job: job, dependencies: deps) }
+            let task = Task { await coordinator.clean(raw, job: job, dependencies: deps) }
             await drain()
             sleeper.fire()
             let value = await task.value

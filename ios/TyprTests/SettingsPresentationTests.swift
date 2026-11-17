@@ -12,12 +12,12 @@ final class SettingsPresentationTests: XCTestCase {
                 destination
             )
         }
-        // This external route name is a contract, not just a raw-value round trip.
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
-            ["Typr", "--snap-state", "settings-cleanup-prompt"]), .cleanupPrompt)
+        // The prompt editor is gone (Hex has none); its old route opens nothing.
+        XCTAssertNil(SettingsDestination.snapshotDestination(arguments:
+            ["Typr", "--snap-state", "settings-cleanup-prompt"]))
         XCTAssertEqual(Set(SettingsDestination.allCases.map(\.title)),
                        ["Keyboard", "Statistics", "Autocorrect languages",
-                        "Manage learned words", "AI & vocabulary", "History & feedback", "Speech engine", "Style", "Language", "Cleanup prompt"])
+                        "Manage learned words", "AI & vocabulary", "History & feedback", "Speech engine", "Style", "Language"])
     }
 
     @MainActor

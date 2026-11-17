@@ -1167,8 +1167,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         let sleeper = CleanupTestSleeper()
         defer { session.resume(); sleeper.fire() }
         let f = fixture(preferred: .whisperLargeV3Turbo, language: .german, cleanup: { _ in
-            TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-                                          background: CleanupTestBackground(), isEnabled: { true }, sleep: sleeper.sleep)
+            TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: CleanupTestBackground(), isEnabled: { true }, sleep: sleeper.sleep)
         })
         try await f.ready()
         let whisper = try XCTUnwrap(f.fake.instances(of: .whisperLargeV3Turbo).first)

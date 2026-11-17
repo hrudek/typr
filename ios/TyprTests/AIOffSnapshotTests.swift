@@ -143,7 +143,7 @@ final class AIOffSnapshotTests: XCTestCase {
         vocabulary.setSoundsLike(["Herder"], for: "herdr")
         let session = CleanupTestSession(), clock = CleanupTestSleeper()
         let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session),
-            language: CleanupTestLanguage(), background: CleanupTestBackground(), isEnabled: { false },
+            background: CleanupTestBackground(), isEnabled: { false },
             sleep: clock.sleep)
         let asr = SnapshotASR()
         let controller = DictationController(audio: SnapshotAudio(), keyboardBridge: KeyboardBridge(defaults: defaults),

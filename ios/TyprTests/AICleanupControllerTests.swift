@@ -85,8 +85,7 @@ final class AICleanupControllerTests: XCTestCase {
             let model = CleanupTestSession(), bg = CleanupTestBackground(), clock = CleanupTestSleeper(), observer = CleanupTestObserver()
             model.shouldThrow = mode == 4
             var enabled = mode != 1 && mode != 6
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), language: CleanupTestLanguage(),
-                background: bg, isEnabled: { enabled }, sleep: clock.sleep, observer: observer)
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), background: bg, isEnabled: { enabled }, sleep: clock.sleep, observer: observer)
             let asr = CleanupASR()
             if mode == 7 { await asr.fail() }
             let controller = DictationController(audio: CleanupAudio(), keyboardBridge: bridge, transcriber: asr,
@@ -127,8 +126,7 @@ final class AICleanupControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults), model = CleanupTestSession()
         model.suspend = true
         let bg = CleanupTestBackground(), clock = CleanupTestSleeper(), asr = CleanupASR(), observer = CleanupTestObserver()
-        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), language: CleanupTestLanguage(),
-            background: bg, isEnabled: { true }, sleep: clock.sleep, observer: observer)
+        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), background: bg, isEnabled: { true }, sleep: clock.sleep, observer: observer)
         let controller = DictationController(audio: CleanupAudio(), keyboardBridge: bridge, transcriber: asr,
             transcriberFactory: { asr }, autoPrepareOnInit: false, cleanup: deps)
         try await ready(controller)
@@ -164,8 +162,7 @@ final class AICleanupControllerTests: XCTestCase {
             model.suspend = !expire
             let bg = CleanupTestBackground(), clock = CleanupTestSleeper(), asr = CleanupASR()
             if expire { await asr.arm() }
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), language: CleanupTestLanguage(),
-                background: bg, isEnabled: { true }, sleep: clock.sleep)
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), background: bg, isEnabled: { true }, sleep: clock.sleep)
             let controller = DictationController(audio: CleanupAudio(), keyboardBridge: bridge, transcriber: asr,
                 transcriberFactory: { asr }, autoPrepareOnInit: false, cleanup: deps)
             try await ready(controller)
