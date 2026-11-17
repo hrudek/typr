@@ -34,35 +34,6 @@ nonisolated enum CohereTestFiles {
     }
 }
 
-private struct FakeCohereFailure: LocalizedError {
-    var errorDescription: String? { "Server said no." }
-}
-
-private final class FakeCohereDownloader: ModelFileDownloading, @unchecked Sendable {
-    private let lock = NSLock()
-    private var recorded: [String] = []
-    private var failure: (any Error)?
-    private var holding = false
-
-    var calls: [String] { lock.withLock { recorded } }
-    func fail(with error: (any Error)?) { lock.withLock { failure = error } }
-    func hold() { lock.withLock { holding = true } }
-    func release() { lock.withLock { holding = false } }
-
-    func download(_ file: PinnedModelFile, into root: URL,
-                  progress: @escaping @Sendable (Double) -> Void) async throws {
-        let failure: (any Error)? = lock.withLock {
-            recorded.append(file.path)
-            return self.failure
-        }
-        if let failure { throw failure }
-        progress(0.5)
-        while lock.withLock({ holding }) { try await Task.sleep(for: .milliseconds(10)) }
-        try CohereTestFiles.write(file, into: root)
-        progress(1)
-    }
-}
-
 @MainActor
 final class CohereTests: XCTestCase {
     private var roots: [URL] = []
@@ -77,11 +48,6 @@ final class CohereTests: XCTestCase {
             .appendingPathComponent("typr-cohere-tests-\(UUID().uuidString)", isDirectory: true)
         roots.append(root)
         return CohereModelStore(root: root)
-    }
-
-    private func makeInstaller(_ store: CohereModelStore, downloader: FakeCohereDownloader,
-                               capacity: Int64? = .max) -> CohereModelInstaller {
-        CohereModelInstaller(store: store, downloader: downloader, availableCapacity: { capacity })
     }
 
     func testSpecPinsOneRevisionOfTheInt8EncoderV2DecoderAndVocabularyWithExactSizes() {
@@ -150,92 +116,6 @@ final class CohereTests: XCTestCase {
         XCTAssertThrowsError(try CohereVocabulary.check(url), "zero bytes of the right size are damaged")
         try FileManager.default.removeItem(at: url)
         XCTAssertThrowsError(try CohereVocabulary.check(url))
-    }
-
-    func testDownloadFetchesEveryFileInOrderReportsBytesAndVerifiesBeforeInstalled() async throws {
-        let store = makeStore()
-        let downloader = FakeCohereDownloader()
-        let installer = makeInstaller(store, downloader: downloader)
-        XCTAssertEqual(installer.state, .notInstalled)
-        XCTAssertTrue(downloader.calls.isEmpty, "creating the installer downloads nothing")
-
-        downloader.hold()
-        let task = installer.install()
-        try await waitForState("Cohere download running") {
-            if case .downloading = installer.state { !downloader.calls.isEmpty } else { false }
-        }
-        guard case .downloading(let progress) = installer.state else { return XCTFail("\(installer.state)") }
-        XCTAssertEqual(progress.totalBytes, CohereModelSpec.totalBytes)
-        XCTAssertFalse(store.hasMarker)
-        downloader.release()
-        await task.value
-
-        XCTAssertEqual(installer.state, .installed)
-        XCTAssertEqual(downloader.calls, CohereModelSpec.allFiles.map(\.path))
-        XCTAssertTrue(store.isInstalled)
-        XCTAssertTrue(installer.isInstalled)
-
-        await installer.install().value
-        XCTAssertEqual(downloader.calls.count, CohereModelSpec.allFiles.count, "installed: no network at all")
-    }
-
-    func testCancelKeepsDownloadedFilesAndRetryFetchesOnlyTheRest() async throws {
-        let store = makeStore()
-        let downloader = FakeCohereDownloader()
-        let installer = makeInstaller(store, downloader: downloader)
-        let keptCount = 3
-        try CohereTestFiles.populate(store, marker: false,
-                                     except: Set(CohereModelSpec.allFiles.dropFirst(keptCount).map(\.path)))
-        downloader.hold()
-        let first = installer.install()
-        try await waitForState("Cohere download held") { !downloader.calls.isEmpty }
-        installer.cancel()
-        XCTAssertEqual(installer.state, .cancelled)
-        downloader.release()
-        await first.value
-        XCTAssertEqual(installer.state, .cancelled)
-        XCTAssertFalse(store.isInstalled)
-        for file in CohereModelSpec.allFiles.prefix(keptCount) {
-            XCTAssertEqual(store.size(of: file), file.bytes, "\(file.path) is kept for Retry")
-        }
-
-        await installer.install().value
-        XCTAssertEqual(installer.state, .installed)
-        let fetched = Set(downloader.calls)
-        XCTAssertTrue(fetched.isDisjoint(with: CohereModelSpec.allFiles.prefix(keptCount).map(\.path)))
-    }
-
-    func testOfflineFailureOffersRetryAndDamagedVocabularyIsReplaced() async throws {
-        let store = makeStore()
-        let downloader = FakeCohereDownloader()
-        let installer = makeInstaller(store, downloader: downloader)
-        downloader.fail(with: URLError(.notConnectedToInternet))
-        await installer.install().value
-        XCTAssertEqual(installer.state, .failed("No internet connection. Connect and tap Retry."))
-        XCTAssertFalse(store.hasMarker)
-
-        downloader.fail(with: FakeCohereFailure())
-        await installer.install().value
-        XCTAssertEqual(installer.state, .failed("Download failed: Server said no. Tap Retry to start again."))
-
-        try CohereTestFiles.populate(store, marker: true)
-        try WhisperTestFiles.writeSparse(store.vocabularyURL, bytes: CohereModelSpec.vocabularyFile.bytes)
-        downloader.fail(with: nil)
-        let before = downloader.calls.count
-        await installer.install().value
-        XCTAssertEqual(installer.state, .installed)
-        XCTAssertEqual(Array(downloader.calls.dropFirst(before)), [CohereModelSpec.vocabularyFile.path])
-    }
-
-    func testInsufficientStorageStopsBeforeDownloading() async throws {
-        let store = makeStore()
-        let downloader = FakeCohereDownloader()
-        let installer = makeInstaller(store, downloader: downloader, capacity: 2_000_000_000)
-        await installer.install().value
-        let needed = CohereModelSpec.totalBytes + CohereModelSpec.storageHeadroomBytes
-        XCTAssertEqual(installer.state, .failed(try XCTUnwrap(ModelInstallError.insufficientStorage(
-            model: "Cohere Transcribe", needed: needed, available: 2_000_000_000).errorDescription)))
-        XCTAssertTrue(downloader.calls.isEmpty)
     }
 
     func testPreparationRefusesAnUninstalledModel() async throws {

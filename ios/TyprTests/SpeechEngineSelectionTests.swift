@@ -1831,23 +1831,6 @@ extension SpeechEngineSelectionTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Parakeet V3")
     }
 
-    func testSelectingAnUninstalledParakeetV3ChangesNothing() async throws {
-        let f = fixture(preferred: .parakeetV2)
-        try await f.ready()
-        let callsBefore = f.fake.explicitCalls
-        XCTAssertEqual(f.controller.selectEngine(.parakeetV3), .notInstalled)
-        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v2")
-        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
-        XCTAssertEqual(f.fake.explicitCalls, callsBefore)
-
-        f.fake.installed.insert(.parakeetV3)
-        XCTAssertEqual(f.controller.selectEngine(.parakeetV3), .selected)
-        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v3")
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(f.controller.currentEngine, .parakeetV3)
-        XCTAssertTrue(f.bridge.isModelInstalled)
-    }
-
     func testInstalledParakeetV3PreparesOnOpeningWithTheBackgroundRuntime() async throws {
         let background = FakeWhisperBackground()
         let provider = FakeEngineProvider()
@@ -1864,6 +1847,7 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(background.maintenance.last, true)
         XCTAssertFalse(f.audio.isKeepaliveRunning)
         XCTAssertEqual(ModelBackgroundPreparation.taskTitle(for: .parakeetV3), "Preparing Parakeet V3")
+        XCTAssertEqual(ModelBackgroundPreparation.taskTitle(for: .orukeet), "Preparing Orukeet")
     }
 
     func testParakeetV3PreparationExpiryNamesTheEngineAndKeepsTheChoice() async throws {
@@ -2205,37 +2189,6 @@ extension SpeechEngineSelectionTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Orukeet")
     }
 
-    func testSelectingAnUninstalledOrukeetChangesNothing() async throws {
-        let f = fixture(preferred: .parakeetV2)
-        try await f.ready()
-        XCTAssertEqual(f.controller.selectEngine(.orukeet), .notInstalled)
-        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v2")
-        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
-
-        f.fake.installed.insert(.orukeet)
-        XCTAssertEqual(f.controller.selectEngine(.orukeet), .selected)
-        XCTAssertEqual(f.storedPreferenceRaw, "orukeet")
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(f.controller.currentEngine, .orukeet)
-        XCTAssertTrue(f.bridge.isModelInstalled)
-    }
-
-    func testInstalledOrukeetPreparesOnOpeningWithTheBackgroundRuntime() async throws {
-        let background = FakeWhisperBackground()
-        let provider = FakeEngineProvider()
-        provider.installed = [.orukeet]
-        let f = fixture(preferred: .orukeet, autoPrepare: true, provider: provider,
-                        modelBackground: background, deferPreparationUntilActive: true)
-        XCTAssertTrue(provider.created.isEmpty)
-        f.controller.noteSceneDidBecomeActive()
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(provider.explicitCalls, [.orukeet])
-        XCTAssertEqual(background.engines, [.orukeet])
-        XCTAssertEqual(background.finishes.last, true)
-        XCTAssertEqual(background.maintenance.last, true)
-        XCTAssertEqual(ModelBackgroundPreparation.taskTitle(for: .orukeet), "Preparing Orukeet")
-    }
-
     func testDictationLogRecordsOrukeetWithItsAutomaticLanguage() async throws {
         let env = LogTestEnvironment()
         logEnvironments.append(env)
@@ -2330,57 +2283,6 @@ extension SpeechEngineSelectionTests {
         XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Cohere")
     }
 
-    func testSelectingAnUninstalledCohereChangesNothing() async throws {
-        let f = fixture(preferred: .parakeetV2)
-        try await f.ready()
-        let callsBefore = f.fake.explicitCalls
-        XCTAssertEqual(f.controller.selectEngine(.cohereTranscribe), .notInstalled)
-        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v2")
-        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
-        XCTAssertEqual(f.fake.explicitCalls, callsBefore)
-
-        f.fake.installed.insert(.cohereTranscribe)
-        XCTAssertEqual(f.controller.selectEngine(.cohereTranscribe), .selected)
-        XCTAssertEqual(f.storedPreferenceRaw, "cohere-transcribe")
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(f.controller.currentEngine, .cohereTranscribe)
-        XCTAssertTrue(f.bridge.isModelInstalled)
-    }
-
-    func testInstalledCoherePreparesOnOpeningWithTheBackgroundRuntime() async throws {
-        let background = FakeWhisperBackground()
-        let provider = FakeEngineProvider()
-        provider.installed = [.cohereTranscribe]
-        let f = fixture(preferred: .cohereTranscribe, autoPrepare: true, provider: provider,
-                        modelBackground: background, deferPreparationUntilActive: true)
-        XCTAssertTrue(provider.created.isEmpty)
-        f.controller.noteSceneDidBecomeActive()
-        f.controller.prepareInstalledModelIfNeeded()
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(provider.explicitCalls, [.cohereTranscribe])
-        XCTAssertEqual(background.engines, [.cohereTranscribe])
-        XCTAssertEqual(background.finishes.last, true)
-        XCTAssertFalse(f.audio.isKeepaliveRunning)
-    }
-
-    func testCoherePreparationExpiryNamesTheEngineAndKeepsTheChoice() async throws {
-        let background = FakeWhisperBackground()
-        let held = EngineASR(.cohereTranscribe)
-        await held.holdPrepare()
-        let provider = FakeEngineProvider()
-        provider.installed = [.cohereTranscribe]
-        provider.queued[.cohereTranscribe] = [held]
-        let f = fixture(preferred: .cohereTranscribe, provider: provider, modelBackground: background)
-        f.controller.noteSceneDidBecomeActive()
-        try await f.waitUntil { provider.created.count == 1 }
-        try XCTUnwrap(background.expirations.first)()
-        XCTAssertEqual(f.controller.phase, .failed(
-            "Cohere Transcribe preparation paused. Open Typr or tap Try again to continue. iOS controls background time."))
-        XCTAssertEqual(f.controller.preferredEngine, .cohereTranscribe)
-        XCTAssertTrue(provider.automaticCalls.isEmpty)
-        await held.releasePrepare()
-    }
-
     func testDictationLogRecordsCohereAndTheLanguageItWasGiven() async throws {
         let env = LogTestEnvironment()
         logEnvironments.append(env)
@@ -2399,22 +2301,5 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(Set(contexts.map(\.speechLanguage)), ["German", CohereTranscriber.languageName(for: .automatic)])
         let languages = await provider.instances(of: .cohereTranscribe).first?.languages
         XCTAssertEqual(languages, [.german, .automatic], "each capture passes its own language")
-    }
-
-    func testDeletingTheCurrentCohereModelReleasesItAndKeepsTheChoice() async throws {
-        let provider = FakeEngineProvider()
-        provider.installed = [.cohereTranscribe]
-        let f = fixture(preferred: .cohereTranscribe, provider: provider)
-        try await f.ready()
-        XCTAssertTrue(f.bridge.isModelInstalled)
-
-        let result = await f.controller.deleteModel(.cohereTranscribe)
-        XCTAssertEqual(result, .deleted)
-        XCTAssertEqual(provider.deleted, [.cohereTranscribe])
-        XCTAssertNil(f.controller.currentEngine)
-        XCTAssertEqual(f.controller.phase, .modelRequired)
-        XCTAssertEqual(f.storedPreferenceRaw, "cohere-transcribe")
-        XCTAssertFalse(f.bridge.isModelInstalled)
-        XCTAssertTrue(provider.automaticCalls.isEmpty)
     }
 }

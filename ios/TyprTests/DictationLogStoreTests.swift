@@ -74,16 +74,17 @@ final class DictationLogStoreTests: XCTestCase {
     }
     func testArchiveRetainsMoreThanTwentyAndStartupDoesNotOverwriteNewCapture() async throws {
         let env = LogTestEnvironment()
-        for index in 0..<75 { env.begin().finish(text: "synthetic \(index)", beforeSpelling: "synthetic \(index)") }
+        let count = DictationLogStore.maximumEntries + 5
+        for index in 0..<count { env.begin().finish(text: "synthetic \(index)", beforeSpelling: "synthetic \(index)") }
         try await settle(env.store)
-        XCTAssertEqual(env.store.metadata.count, 75)
-        XCTAssertLessThanOrEqual(env.store.entries.count, 50)
+        XCTAssertEqual(env.store.metadata.count, count)
+        XCTAssertLessThanOrEqual(env.store.entries.count, DictationLogStore.maximumEntries)
         let disk = DictationLogStorage(url: env.storage.url)
         let loaded = DictationLogStore(storage: disk, settings: env.settings)
         let fresh = loaded.begin(token: loaded.token(), context: .init())!
         fresh.finish(text: "fresh", beforeSpelling: "fresh")
         try await settle(loaded)
-        XCTAssertEqual(loaded.metadata.count, 76)
+        XCTAssertEqual(loaded.metadata.count, count + 1)
         XCTAssertEqual(loaded.entry(fresh.entryID)?.finalText?.text, "fresh")
         let values = try disk.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
         XCTAssertEqual(values.isExcludedFromBackup, true)
@@ -225,13 +226,14 @@ final class DictationLogStoreTests: XCTestCase {
     }
     func testWholeArchiveJSONAndIndexRebuild() async throws {
         let env = LogTestEnvironment()
-        for index in 0..<65 { env.begin().finish(text: "synthetic \(index)", beforeSpelling: "synthetic \(index)") }
+        let count = DictationLogStore.maximumEntries + 5
+        for index in 0..<count { env.begin().finish(text: "synthetic \(index)", beforeSpelling: "synthetic \(index)") }
         try await settle(env.store)
         try Data("stale index".utf8).write(to: env.storage.root.appendingPathComponent("index.json"))
         let disk = DictationLogStorage(url: env.storage.url)
         let loaded = DictationLogStore(storage: disk, settings: env.settings)
         try await settle(loaded)
-        XCTAssertEqual(loaded.metadata.count, 65)
+        XCTAssertEqual(loaded.metadata.count, count)
         let result: Result<URL, any Error> = await withCheckedContinuation { continuation in
             disk.export(ids: nil, build: "synthetic-test") { continuation.resume(returning: $0) }
         }
@@ -239,7 +241,7 @@ final class DictationLogStoreTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         XCTAssertEqual(object["format"] as? String, "typr.dictation-log")
         XCTAssertEqual(object["exportVersion"] as? Int, 1)
-        XCTAssertEqual((object["entries"] as? [Any])?.count, 65)
+        XCTAssertEqual((object["entries"] as? [Any])?.count, count)
         let entries = try XCTUnwrap(object["entries"] as? [[String: Any]])
         XCTAssertTrue(entries.allSatisfy { $0["schemaVersion"] as? Int == 2 })
         loaded.clear(); try await settle(loaded)
