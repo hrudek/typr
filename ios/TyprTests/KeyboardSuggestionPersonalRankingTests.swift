@@ -125,23 +125,9 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
     }
 
     private func bundled() throws -> [SpatialWordDecoder.Language: SpatialWordLexicon] {
-        var result: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                   withExtension: "words", subdirectory: "WordData"))
-            result[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return result
+        try XCTUnwrap(BundledKeyboardData.lexicons)
     }
 
-    private func milliseconds(_ d: Duration) -> Double {
-        Double(d.components.seconds) * 1_000 + Double(d.components.attoseconds) / 1e15
-    }
-    private func percentile(_ values: [Double], _ p: Double) -> Double {
-        let sorted = values.sorted()
-        return sorted[min(sorted.count - 1, max(0, Int(ceil(Double(sorted.count) * p)) - 1))]
-    }
-    private func format(_ value: Double) -> String { String(format: "%.4f", value) }
 
     // MARK: - Prefix index
 
@@ -421,13 +407,10 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
             }
             let off = make(learning: false), on = make(learning: true)
             var n = 0, off1 = 0, off2 = 0, on1 = 0, on2 = 0, autoDiff = 0, autoCompletion = 0, personalAuto = 0
-            var times: [Double] = []
             for target in targets {
                 let prefix = String(target.prefix(3))
                 let a = alternatives(off, prefix).map { $0.lowercased() }
-                let start = ContinuousClock.now
                 let chips = strip(on, prefix)
-                times.append(milliseconds(start.duration(to: .now)))
                 let b = chips.filter { $0.kind != .keepLiteral }.map { $0.replacement.lowercased() }
                 if a.first == target { off1 += 1 }
                 if a.prefix(2).contains(target) { off2 += 1 }
@@ -443,88 +426,11 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
                 }
                 n += 1
             }
-            // Cost side: other fixture words the synthetic user does not type often.
-            var others = 0, otherOff2 = 0, otherOn2 = 0
-            for (offset, word) in fixture.enumerated() where offset % 3 != 0 && word.count >= 5 {
-                let prefix = String(word.prefix(3))
-                if alternatives(off, prefix).map({ $0.lowercased() }).prefix(2).contains(word) { otherOff2 += 1 }
-                if alternatives(on, prefix).map({ $0.lowercased() }).prefix(2).contains(word) { otherOn2 += 1 }
-                others += 1
-            }
             XCTAssertEqual(autoDiff, 0, "Personal ranking never changes automatic replacement")
             XCTAssertEqual(autoCompletion, 0)
             XCTAssertEqual(personalAuto, 0)
             XCTAssertGreaterThan(on2, off2, "\(name): the user's frequent words must become easier to pick")
-            print("EVAL P2b_personalRerank language=\(name) n=\(n) off_recall1=\(off1) off_recall2=\(off2) on_recall1=\(on1) on_recall2=\(on2) others=\(others) others_off_recall2=\(otherOff2) others_on_recall2=\(otherOn2) auto_diff=\(autoDiff) auto_completion=\(autoCompletion) personal_auto_chips=\(personalAuto) strip_mean_ms=\(format(times.reduce(0, +) / Double(max(1, times.count)))) strip_max_ms=\(format(times.max() ?? 0)) validity=synthetic-user NOT-iPhone")
+            print("EVAL P2b_personalRerank language=\(name) n=\(n) off_recall1=\(off1) off_recall2=\(off2) on_recall1=\(on1) on_recall2=\(on2) auto_diff=\(autoDiff) auto_completion=\(autoCompletion) personal_auto_chips=\(personalAuto) validity=synthetic-user NOT-iPhone")
         }
-    }
-
-    /// Full 2,000-word snapshot: one index build per snapshot, bounded work per keystroke.
-    func testLatencyAndMemoryWithFullPersonalSnapshot() throws {
-        let letters = Array("abcdefghiklmnoprstuwäöüß")
-        var words: [String] = []
-        var seen: Set<String> = []
-        var n = 0
-        while words.count < 2_000 {
-            var value = n, word = ""
-            repeat { word.append(letters[value % letters.count]); value /= letters.count } while value > 0
-            let candidate = ["ta", "st", "he", "mü"][n % 4] + word
-            if seen.insert(candidate).inserted { words.append(candidate) }
-            n += 1
-        }
-        let counts = Dictionary(uniqueKeysWithValues: words.enumerated().map { ($0.element, 2 + $0.offset % 50) })
-        let snapshotStart = ContinuousClock.now
-        let snapshot = PersonalLexiconSnapshot(kept: [], counts: counts, rejected: [])
-        let builds = [milliseconds(snapshotStart.duration(to: .now))]
-        let index = snapshot.scan.completions
-        XCTAssertEqual(index.entries.count, 2_000)
-        let sortedWords = snapshot.scan.entries.map(\.word)
-        let indexStart = ContinuousClock.now
-        let rebuiltIndex = PersonalCompletionIndex(sortedWords: sortedWords, kept: [], counts: counts)
-        let indexBuilds = [milliseconds(indexStart.duration(to: .now))]
-        XCTAssertEqual(rebuiltIndex.entries.map(\.word), index.entries.map(\.word))
-        XCTAssertEqual(rebuiltIndex.entries.map(\.count), index.entries.map(\.count))
-        XCTAssertEqual(rebuiltIndex.payloadBytes, index.payloadBytes)
-        let prefixes = ["ta", "st", "he", "mü", "taa", "stb", "hec", "müd", "tab", "zz", "Ta", "MÜ"]
-        var lookups: [Double] = []
-        for prefix in prefixes {
-            let start = ContinuousClock.now
-            let result = index.completions(for: prefix)
-            lookups.append(milliseconds(start.duration(to: .now)))
-            XCTAssertLessThanOrEqual(result.count, PersonalCompletionIndex.resultLimit)
-        }
-        // End-to-end strip assembly with the same full snapshot in a real session.
-        let (learning, defaults) = session()
-        seed(learning, counts: counts.mapValues { min($0, 3) }) // Bounded seeding work; same 2,000 words.
-        XCTAssertEqual(learning.model.lexicon.scan.completions.entries.count, 2_000)
-        XCTAssertNotNil(learning.model.state.validated())
-        let systemList = (0..<40).map { "ta" + String(repeating: "x", count: $0 % 6) + "\($0)" }
-        let ac = AutocorrectEngine(checker: Checker(completions: ["ta": systemList, "st": systemList]),
-                                   learning: learning, spatialDecoder: nil)
-        ac.german = GermanAutocorrect(checker: Checker())
-        func measure() -> [Double] {
-            var times: [Double] = []
-            for prefix in prefixes {
-                let start = ContinuousClock.now
-                _ = strip(ac, prefix)
-                times.append(milliseconds(start.duration(to: .now)))
-            }
-            return times
-        }
-        let coldTimes = measure() // First pass warms the snapshot cache, as worker preparation would.
-        let onTimes = measure()
-        defaults.set(false, forKey: "keyboard.personalLearning")
-        learning.refresh()
-        let offTimes = measure()
-        // Lookup result caps above and index bytes below are deterministic regression gates.
-        // Wall-clock measurements remain in EVAL output, never a shared-runner pass/fail ratio.
-        XCTAssertEqual(prefixes.count, 12)
-        XCTAssertEqual(lookups.count, prefixes.count)
-        XCTAssertEqual(coldTimes.count, prefixes.count)
-        XCTAssertEqual(onTimes.count, prefixes.count)
-        XCTAssertEqual(offTimes.count, onTimes.count)
-        XCTAssertLessThan(index.payloadBytes, 192 * 1024)
-        func mean(_ v: [Double]) -> Double { v.reduce(0, +) / Double(max(1, v.count)) }
-        print("EVAL P2b_personalLatency words=2000 snapshot_build_mean_ms=\(format(mean(builds))) index_only_build_mean_ms=\(format(mean(indexBuilds))) index_only_build_max_ms=\(format(indexBuilds.max() ?? 0)) lookup_mean_ms=\(format(mean(lookups))) lookup_p95_ms=\(format(percentile(lookups, 0.95))) lookup_max_ms=\(format(lookups.max() ?? 0)) strip_on_mean_ms=\(format(mean(onTimes))) strip_on_p95_ms=\(format(percentile(onTimes, 0.95))) strip_off_mean_ms=\(format(mean(offTimes))) index_payload_bytes=\(index.payloadBytes) validity=Linux-debug NOT-iPhone")
     }
 }

@@ -67,13 +67,7 @@ final class SpatialPrefixSearchTests: XCTestCase {
     }
 
     private func bundled() throws -> [SpatialWordDecoder.Language: SpatialWordLexicon] {
-        var result: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                   withExtension: "words", subdirectory: "WordData"))
-            result[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return result
+        try XCTUnwrap(BundledKeyboardData.lexicons)
     }
 
     func testExactFrequencyOrderNFCAndDeterminism() {
