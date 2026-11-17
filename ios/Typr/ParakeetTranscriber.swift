@@ -7,6 +7,10 @@ struct ModelPreparationProgress: Sendable {
     let detail: String
     /// Discrete completed work, not a measured fraction of elapsed time or Core ML work.
     var stageProgress: (completed: Int64, total: Int64)? = nil
+
+    /// `stageProgress.total` of every downloaded engine's preparation: the background runtime
+    /// counts these milestones.
+    static let milestoneCount: Int64 = 5
 }
 
 protocol LocalTranscribing: Actor {

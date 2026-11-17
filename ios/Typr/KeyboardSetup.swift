@@ -142,7 +142,7 @@ struct KeyboardSetupCard: View {
     private var modelStatus: String {
         // Preparation or failure (also while switching engines) wins over an earlier ready state.
         switch dictation.phase {
-        case .modelRequired where dictation.preferredEngine == .whisperLargeV3Turbo:
+        case .modelRequired where dictation.preferredEngine?.requiresExplicitDownload == true:
             return "Download required"
         case .preparingModel:
             guard let fraction = dictation.modelPreparation.fractionCompleted else { return "Preparing" }

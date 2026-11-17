@@ -14,7 +14,7 @@ private struct FakeDownloadFailure: LocalizedError {
 
 /// Records every download call; each path can write its exact size, a wrong size, fail, or hold
 /// until released (cancellable: the hold sleeps, which throws `CancellationError` on cancel).
-private final class FakeWhisperDownloader: WhisperFileDownloading, @unchecked Sendable {
+private final class FakeWhisperDownloader: ModelFileDownloading, @unchecked Sendable {
     enum Behavior {
         case write
         case writeBytes(Int64)
@@ -52,7 +52,7 @@ private final class FakeWhisperDownloader: WhisperFileDownloading, @unchecked Se
     }
 
     func download(
-        _ file: WhisperModelSpec.PinnedFile,
+        _ file: PinnedModelFile,
         into root: URL,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws {
@@ -269,20 +269,20 @@ final class WhisperInstallerTests: XCTestCase {
     // MARK: - Byte-weighted progress
 
     func testProgressIsWeightedByBytesNotFiles() {
-        let half = WhisperDownloadProgress.weighted(finishedBytes: 100, currentFileBytes: 800,
+        let half = ModelDownloadProgress.weighted(finishedBytes: 100, currentFileBytes: 800,
                                                     currentFileFraction: 0.5, totalBytes: 1_000)
-        XCTAssertEqual(half, WhisperDownloadProgress(completedBytes: 500, totalBytes: 1_000))
+        XCTAssertEqual(half, ModelDownloadProgress(completedBytes: 500, totalBytes: 1_000))
         XCTAssertEqual(half.fraction, 0.5, accuracy: 1e-9)
 
         // Clamped: NaN, negative and >1 fractions; never above the total.
-        XCTAssertEqual(WhisperDownloadProgress.weighted(finishedBytes: 100, currentFileBytes: 800,
+        XCTAssertEqual(ModelDownloadProgress.weighted(finishedBytes: 100, currentFileBytes: 800,
                                                         currentFileFraction: .nan, totalBytes: 1_000).completedBytes, 100)
-        XCTAssertEqual(WhisperDownloadProgress.weighted(finishedBytes: 100, currentFileBytes: 800,
+        XCTAssertEqual(ModelDownloadProgress.weighted(finishedBytes: 100, currentFileBytes: 800,
                                                         currentFileFraction: -3, totalBytes: 1_000).completedBytes, 100)
-        XCTAssertEqual(WhisperDownloadProgress.weighted(finishedBytes: 900, currentFileBytes: 800,
+        XCTAssertEqual(ModelDownloadProgress.weighted(finishedBytes: 900, currentFileBytes: 800,
                                                         currentFileFraction: 4, totalBytes: 1_000).completedBytes, 1_000)
-        XCTAssertEqual(WhisperDownloadProgress(completedBytes: 5, totalBytes: 0).fraction, 0)
-        XCTAssertEqual(WhisperDownloadProgress(completedBytes: 2_000, totalBytes: 1_000).fraction, 1)
+        XCTAssertEqual(ModelDownloadProgress(completedBytes: 5, totalBytes: 0).fraction, 0)
+        XCTAssertEqual(ModelDownloadProgress(completedBytes: 2_000, totalBytes: 1_000).fraction, 1)
     }
 
     func testFailureMessagesSayRetryNeverResume() {
@@ -294,7 +294,7 @@ final class WhisperInstallerTests: XCTestCase {
         XCTAssertEqual(WhisperModelInstaller.message(for: FakeDownloadFailure(message: "Repository not available locally")), offline)
         XCTAssertEqual(WhisperModelInstaller.message(for: FakeDownloadFailure(message: "HTTP 500")),
                        "Download failed: HTTP 500 Tap Retry to start again.")
-        let storage = WhisperInstallError.insufficientStorage(needed: 2_000_000_000, available: 1_000)
+        let storage = ModelInstallError.insufficientStorage(model: "Whisper", needed: 2_000_000_000, available: 1_000)
         XCTAssertEqual(WhisperModelInstaller.message(for: storage), storage.errorDescription)
         for message in [offline, WhisperModelInstaller.message(for: FakeDownloadFailure(message: "x"))] {
             XCTAssertFalse(message.localizedCaseInsensitiveContains("resume"), message)
@@ -423,7 +423,7 @@ final class WhisperInstallerTests: XCTestCase {
 
         let weight = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.weightPath })
         let expected = bytes(before: Self.weightPath) + weight.bytes / 2
-        try await waitUntil { installer.state == .downloading(WhisperDownloadProgress(completedBytes: expected,
+        try await waitUntil { installer.state == .downloading(ModelDownloadProgress(completedBytes: expected,
                                                                                          totalBytes: WhisperModelSpec.totalBytes)) }
         XCTAssertFalse(store.hasMarker)
         XCTAssertFalse(installer.isInstalled)
@@ -440,7 +440,7 @@ final class WhisperInstallerTests: XCTestCase {
         let task = install(installer)
         try await waitUntil { self.downloader.calls.last == Self.weightPath }
         let file = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.weightPath })
-        let advanced = WhisperDownloadProgress.weighted(finishedBytes: bytes(before: file.path),
+        let advanced = ModelDownloadProgress.weighted(finishedBytes: bytes(before: file.path),
             currentFileBytes: file.bytes, currentFileFraction: 0.8, totalBytes: WhisperModelSpec.totalBytes)
         downloader.emit(0.8, for: file.path)
         try await waitUntil { installer.state == .downloading(advanced) }
@@ -564,7 +564,7 @@ final class WhisperInstallerTests: XCTestCase {
         downloader.set(.writeBytes(file.bytes - 7), for: file.path)
         let installer = makeInstaller()
         await install(installer).value
-        let expected = WhisperInstallError.sizeMismatch(path: file.path, expected: file.bytes, actual: file.bytes - 7)
+        let expected = ModelInstallError.sizeMismatch(model: "Whisper", path: file.path, expected: file.bytes, actual: file.bytes - 7)
         XCTAssertEqual(installer.state, .failed(try XCTUnwrap(expected.errorDescription)))
         XCTAssertFalse(store.hasMarker)
         XCTAssertFalse(installer.isInstalled)
@@ -586,7 +586,7 @@ final class WhisperInstallerTests: XCTestCase {
         await install(installer).value
         guard case .failed(let message) = installer.state else { return XCTFail("expected failure, got \(installer.state)") }
         let needed = WhisperModelSpec.totalBytes + WhisperModelSpec.storageHeadroomBytes
-        XCTAssertEqual(message, WhisperInstallError.insufficientStorage(needed: needed, available: 1_000_000).errorDescription)
+        XCTAssertEqual(message, ModelInstallError.insufficientStorage(model: "Whisper", needed: needed, available: 1_000_000).errorDescription)
         XCTAssertTrue(downloader.calls.isEmpty)
     }
 

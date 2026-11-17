@@ -12,7 +12,7 @@ protocol WhisperTokenLookup: Sendable {
 
 extension TokenizerWrapper: WhisperTokenLookup {}
 
-nonisolated enum WhisperTokenizerError: LocalizedError, Equatable {
+nonisolated enum WhisperTokenizerError: ModelFileCheckError, Equatable {
     case unresolvedToken(String)
 
     var errorDescription: String? {
@@ -98,6 +98,12 @@ final class TyprWhisperTokenizer: WhisperTokenizer, @unchecked Sendable {
     }
 }
 
+/// Parses the downloaded tokenizer locally (no network) and resolves Whisper's special tokens.
+/// Production: `WhisperKitTokenizerChecker` (`TyprWhisperTokenizer.load(from:)`).
+protocol WhisperTokenizerChecking: Sendable {
+    func check(tokenizerFolder: URL) async throws
+}
+
 /// Production tokenizer check for the installer: a full local parse plus special-token resolution.
 struct WhisperKitTokenizerChecker: WhisperTokenizerChecking {
     func check(tokenizerFolder: URL) async throws {
@@ -105,21 +111,18 @@ struct WhisperKitTokenizerChecker: WhisperTokenizerChecking {
     }
 }
 
-/// Production downloader: one exact file at the pinned revision through WhisperKit's Hub client,
-/// into Typr's Application Support root. Cancelling the task throws `CancellationError`.
-struct HubWhisperFileDownloader: WhisperFileDownloading {
-    func download(
-        _ file: WhisperModelSpec.PinnedFile,
-        into root: URL,
-        progress: @escaping @Sendable (Double) -> Void
-    ) async throws {
-        let hub = HubApiWrapper(downloadBase: root)
-        _ = try await hub.snapshot(
-            from: HubApiWrapper.Repo(id: file.repo),
-            revision: file.revision,
-            matching: [file.path]
-        ) { value in
-            progress(value.fractionCompleted)
-        }
+typealias WhisperModelInstaller = ModelInstaller<WhisperModelSpec>
+
+extension ModelInstaller where Spec == WhisperModelSpec {
+    /// Whisper's checked files are its tokenizer.
+    convenience init(
+        store: WhisperModelStore,
+        downloader: any ModelFileDownloading,
+        tokenizerChecker: any WhisperTokenizerChecking,
+        availableCapacity: (() -> Int64?)? = nil
+    ) {
+        self.init(store: store, downloader: downloader,
+                  checkFiles: { try await tokenizerChecker.check(tokenizerFolder: store.tokenizerFolder) },
+                  availableCapacity: availableCapacity)
     }
 }

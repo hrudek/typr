@@ -2,10 +2,11 @@ import BackgroundTasks
 import OSLog
 import UIKit
 
-/// Only the app's existing preparation uses this runtime; it never owns or creates a model.
+/// Background runtime for preparing a downloaded engine's model. Only the app's existing
+/// preparation uses this runtime; it never owns or creates a model.
 @MainActor
-protocol WhisperPreparationScheduling: AnyObject {
-    func begin(expiration: @escaping @MainActor () -> Void)
+protocol ModelPreparationScheduling: AnyObject {
+    func begin(_ engine: SpeechEngineChoice, expiration: @escaping @MainActor () -> Void)
     func update(_ progress: ModelPreparationProgress)
     func sceneDidBecomeActive()
     func finish(success: Bool)
@@ -13,8 +14,9 @@ protocol WhisperPreparationScheduling: AnyObject {
 }
 
 @MainActor
-final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
-    static let shared = WhisperBackgroundPreparation()
+final class ModelBackgroundPreparation: ModelPreparationScheduling {
+    static let shared = ModelBackgroundPreparation()
+    // Registered in Info.plist; the identifiers stay stable for every downloaded engine.
     static let maintenanceIdentifier = "dev.rudek.typr.whisper-maintenance"
     static let continuedPrefix = "dev.rudek.typr.whisper-prepare"
 
@@ -24,6 +26,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     private var maintenanceRegistered = false
     private var maintenanceSubmitted = false
     private var operation: UUID?
+    private var engine: SpeechEngineChoice?
     private var shownSubtitle: String?
     private var expiration: (@MainActor () -> Void)?
     private var continued: BGTask?
@@ -54,14 +57,15 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
     }
 
-    func begin(expiration: @escaping @MainActor () -> Void) {
+    func begin(_ engine: SpeechEngineChoice, expiration: @escaping @MainActor () -> Void) {
         finish(success: false)
         let token = UUID()
         operation = token
+        self.engine = engine
         self.expiration = expiration
         // Covers the handoff to the continued task, and is the entire (bounded) fallback on
         // older iOS or rejected requests. No microphone, audio session or network is involved.
-        grace = UIApplication.shared.beginBackgroundTask(withName: "Prepare Whisper") { [weak self] in
+        grace = UIApplication.shared.beginBackgroundTask(withName: "Prepare \(engine.shortName)") { [weak self] in
             // UIKit invokes this synchronously on the main thread. End the assertion before
             // returning; enqueueing a Task here could outlive the expiration deadline.
             MainActor.assumeIsolated { self?.expire(token) }
@@ -81,7 +85,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
 
     private func submitContinued(for token: UUID, attempt: Int) {
         guard #available(iOS 26.0, *), operation == token, continued == nil,
-              UIApplication.shared.applicationState == .active else { return }
+              let engine, UIApplication.shared.applicationState == .active else { return }
         pendingSubmission?.cancel()
         pendingSubmission = nil
         let identifier = "\(Self.continuedPrefix).\(UUID().uuidString)"
@@ -97,7 +101,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         guard accepted else { return }
         let request = BGContinuedProcessingTaskRequest(
-            identifier: identifier, title: Self.taskTitle, subtitle: Self.taskSubtitle(for: latestProgress)
+            identifier: identifier, title: Self.taskTitle(for: engine), subtitle: Self.taskSubtitle(for: latestProgress)
         )
         request.strategy = .fail // Never queue a second, stale preparation.
         // Default is zero, not "all supported resources". ANE access uses the separate
@@ -172,7 +176,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     /// System progress counts stages. Each finished milestone jumps to its stage boundary;
     /// heartbeats fill sub-units inside the current stage only. No percent is shown in the app.
     static func updateTaskProgress(_ progress: Progress, from update: ModelPreparationProgress?) {
-        let stages = WhisperPreparationComponent.totalPreparationStages
+        let stages = ModelPreparationProgress.milestoneCount
         progress.totalUnitCount = stages * unitsPerStage
         guard let stage = update?.stageProgress, stage.total == stages else { return }
         // Success is committed only by finish(), not a possibly queued "ready" callback.
@@ -183,7 +187,7 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     /// Advances one sub-unit, stopping one unit short of the next milestone (and of completion).
     @discardableResult
     static func advanceHeartbeat(_ progress: Progress) -> Bool {
-        let total = WhisperPreparationComponent.totalPreparationStages * unitsPerStage
+        let total = ModelPreparationProgress.milestoneCount * unitsPerStage
         guard progress.totalUnitCount == total else { return false }
         let completed = progress.completedUnitCount
         let ceiling = min((completed / unitsPerStage + 1) * unitsPerStage - 1, total - 1)
@@ -202,7 +206,9 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
 
     /// Succinct title and a short, informative subtitle (Apple's guidance). The system bar
     /// shows how far it is; detailed stage names and step counts stay in the app.
-    static let taskTitle = "Preparing Whisper"
+    static func taskTitle(for engine: SpeechEngineChoice) -> String {
+        "Preparing \(engine.shortName)"
+    }
 
     static func taskSubtitle(for progress: ModelPreparationProgress?) -> String {
         guard let progress, let stage = progress.stageProgress else { return "Starting" }
@@ -215,13 +221,14 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
     @available(iOS 26.0, *)
     private func updateSubtitle(of task: BGContinuedProcessingTask) {
         let subtitle = Self.taskSubtitle(for: latestProgress)
-        guard subtitle != shownSubtitle else { return }
+        guard let engine, subtitle != shownSubtitle else { return }
         shownSubtitle = subtitle
-        task.updateTitle(Self.taskTitle, subtitle: subtitle)
+        task.updateTitle(Self.taskTitle(for: engine), subtitle: subtitle)
     }
 
     func finish(success: Bool) {
         operation = nil
+        engine = nil
         shownSubtitle = nil
         expiration = nil
         latestProgress = nil
@@ -273,19 +280,19 @@ final class WhisperBackgroundPreparation: WhisperPreparationScheduling {
         }
         // A stale request can outlive a changed preference or removed install. Check before
         // constructing the shared controller: its normal launch path can prepare other engines.
-        guard TyprSettings().preferredSpeechEngine == .whisperLargeV3Turbo,
-              WhisperModelStore.production.isInstalled else {
+        guard let engine = TyprSettings().preferredSpeechEngine, engine.requiresExplicitDownload,
+              ProductionSpeechEngineProvider().isInstalled(engine) else {
             task.setTaskCompleted(success: true)
             return
         }
         let controller = DictationController.shared
-        guard controller.needsWhisperPreparation else {
+        guard controller.needsDownloadedModelPreparation else {
             task.setTaskCompleted(success: true)
             return
         }
         if operation == nil {
             // Starting uses the same serial controller loader as foreground preparation.
-            controller.prepareInstalledWhisperIfNeeded()
+            controller.prepareInstalledModelIfNeeded()
         }
         guard let token = operation else {
             task.setTaskCompleted(success: false)
@@ -320,7 +327,7 @@ final class TyprAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil {
-            WhisperBackgroundPreparation.shared.register()
+            ModelBackgroundPreparation.shared.register()
         }
         return true
     }
