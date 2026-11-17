@@ -11,14 +11,6 @@ import XCTest
 final class PersonalTypingTrigramEvaluationTests: XCTestCase {
     private typealias Fixtures = PersonalTrigramPhraseFixtures
     private typealias Checker = PersonalTrigramPhraseFixtures.Checker
-    /// Own loader: the research target does not compile `KeyboardContextModelTests`.
-    private static let model: KeyboardContextModel? = {
-        let packs = ["de", "en"].map { lang in
-            Bundle.main.url(forResource: "keyboard-\(lang)", withExtension: "tbg", subdirectory: "WordData")
-                .flatMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }.flatMap(KeyboardContextModel.Pack.init)
-        }
-        return KeyboardContextModel(de: packs[0], en: packs[1])
-    }()
     private func ranked(_ prefix: String, session: KeyboardLearningSession, model: KeyboardContextModel,
                         language: String) -> [String] {
         let ac = AutocorrectEngine(checker: Checker(), learning: session, spatialDecoder: nil,
@@ -32,7 +24,7 @@ final class PersonalTypingTrigramEvaluationTests: XCTestCase {
     }
     // Research-only (research.yml): recall is printed, not gated.
     func testRepeatedPersonalPhrasesAndAcceptedChoices() throws {
-        let model = try XCTUnwrap(Self.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         for language in ["de", "en", "mixed"] {
             let phrases = try XCTUnwrap(Fixtures.phrases[language])
             for mode in Fixtures.trainingModes {
@@ -61,7 +53,7 @@ final class PersonalTypingTrigramEvaluationTests: XCTestCase {
     }
 
     func testPublicHeldoutWithTwoWordPrefixes() throws {
-        let model = try XCTUnwrap(Self.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let url = try XCTUnwrap(Bundle.main.url(forResource: "context-heldout-cc0", withExtension: "json", subdirectory: "WordData"))
         struct Fixture: Decodable { let sentences: [String: [[String]]] }
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))

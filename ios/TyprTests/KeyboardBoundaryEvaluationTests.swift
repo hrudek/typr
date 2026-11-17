@@ -62,7 +62,7 @@ extension KeyboardBoundaryDecoderTests {
             var autoSplits = 0, autoCorrect = 0, autoWrong = 0, wholeCorpus = 0, weakened = 0
             var maxQueries = 0, maxContextQueries = 0
             var times: [Double] = []
-            for (ordinal, phrase) in phrases.enumerated() {
+            for (ordinal, phrase) in phrases.enumerated() where EvaluationSample.includes(ordinal, every: 4) {
                 let typed = phrase.replacingOccurrences(of: " ", with: "").lowercased()
                 let expected = phrase.lowercased()
                 for seed: UInt64 in [0x50355f54554e45, 0x50355f484f4c44] {
@@ -128,7 +128,9 @@ extension KeyboardBoundaryDecoderTests {
             XCTAssertGreaterThanOrEqual(recall3, lexicalRecall3, name)
             XCTAssertGreaterThanOrEqual(strip3[0], strip3[2], name)
             XCTAssertGreaterThanOrEqual(strip3[1], strip3[3], name)
-            if name == "EN" { XCTAssertGreaterThan(strip3[0], strip3[2], "Merge-noise weakening helps English") }
+            if name == "EN", EvaluationSample.isFull {
+                XCTAssertGreaterThan(strip3[0], strip3[2], "Merge-noise weakening helps English")
+            }
             XCTAssertEqual(autoSplits, 0)
             XCTAssertEqual(autoCorrect + autoWrong, 0)
             XCTAssertLessThanOrEqual(maxQueries, Boundary.maximumLexicalQueries)
@@ -144,7 +146,7 @@ extension KeyboardBoundaryDecoderTests {
         let model = try contextModel()
         let ac = engine(sources, trusted: Set(controls.map { $0.lowercased() }), model: model)
         var unwanted = 0, boundaryAuto = 0, splitChips = 0
-        for (index, token) in controls.enumerated() {
+        for (index, token) in controls.enumerated() where EvaluationSample.includes(index, every: 5) {
             let context = (index % 2 == 0 ? "the " : "die ") + token
             let suggestions = strip(ac, context)
             splitChips += suggestions.filter { $0.boundary?.kind == .split }.count
@@ -159,7 +161,8 @@ extension KeyboardBoundaryDecoderTests {
         let unknown = engine(sources, model: model), lexical = engine(sources)
         var oovSplitSuggestions = 0, lexicalOOVSplitSuggestions = 0
         var oovTokens: [String] = []
-        for token in SpatialTypoEvaluationFixtures.absent {
+        for (index, token) in SpatialTypoEvaluationFixtures.absent.enumerated()
+            where EvaluationSample.includes(index, every: 5) {
             let chips = strip(unknown, token).filter { $0.boundary?.kind == .split }
             oovSplitSuggestions += chips.count
             if !chips.isEmpty { oovTokens.append(token) }
@@ -167,7 +170,7 @@ extension KeyboardBoundaryDecoderTests {
         }
         XCTAssertLessThanOrEqual(oovSplitSuggestions, lexicalOOVSplitSuggestions, "Context adds no OOV chips")
         XCTAssertLessThanOrEqual(oovSplitSuggestions, 3, "P5 OOV chip baseline")
-        print("EVAL P5_controls n=\(controls.count) unique=\(Set(controls).count) unwanted=\(unwanted) boundary_auto=\(boundaryAuto) valid_split_chips=\(splitChips) oov_controls=\(SpatialTypoEvaluationFixtures.absent.count) oov_split_chips=\(oovSplitSuggestions) lexical_oov_split_chips=\(lexicalOOVSplitSuggestions) oov_split_tokens=\(oovTokens.joined(separator: ",")) false_auto_bound=0 validity=synthetic_valid_checker NOT-iPhone")
+        print("EVAL P5_controls unique=\(Set(controls).count) unwanted=\(unwanted) boundary_auto=\(boundaryAuto) valid_split_chips=\(splitChips) oov_split_chips=\(oovSplitSuggestions) lexical_oov_split_chips=\(lexicalOOVSplitSuggestions) oov_split_tokens=\(oovTokens.joined(separator: ",")) false_auto_bound=0 validity=synthetic_valid_checker NOT-iPhone")
     }
 
     func testEvaluationExactJoinsAndPlausiblePairAbstention() throws {
@@ -198,6 +201,7 @@ extension KeyboardBoundaryDecoderTests {
         print("EVAL P5_join n=\(fixtures.count) recall1=\(recall1) recall3=\(recall3) strip3=\(strip3) auto=\(auto) plausible_pairs=\(pairs.count) unwanted_join_chips=\(wrong) mean_ms=\(fmt(times.reduce(0,+)/Double(times.count))) max_ms=\(fmt(times.max() ?? 0)) policy=exact_suggestion_only NOT-iPhone")
     }
 
+#if TYPR_RESEARCH
     /// Rejected policy experiment, NOT production authority. A threshold grid over
     /// retained-bigram evidence, whole margin, runner margin and corpus-noise origin is
     /// evaluated on invalid lowercase literals only. Useful variants also split OOV
@@ -318,6 +322,7 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertEqual(actualFalse, 0)
         print("EVAL P5b_auto_gate personal_lexicon=\(imported) modes=3 variants=\(gates.count) valid_controls=\(3 * (Self.validControls.count + products.count)) oov_controls=\(3 * SpatialTypoEvaluationFixtures.absent.count) product_controls=\(3 * products.count) corpus_name_controls=\(3 * corpusNames.count) actual_false=\(actualFalse) actual_recall=0 actual_precision=NA_suggestion_only decision=rejected NOT-iPhone")
     }
+#endif
 
     func testEvaluationBoundsAtMaximumPersonalCapacityAndAdversarialLengths() throws {
         let sources = try resources()
@@ -332,7 +337,7 @@ extension KeyboardBoundaryDecoderTests {
         let model = try contextModel()
         var times: [Double] = []
         var maxQueries = 0, maxContextQueries = 0
-        for length in 1...64 {
+        for length in 1...64 where EvaluationSample.includes(length - 1, every: 7) {
             for token in [String(repeating: "a", count: length), String(repeating: "i", count: length)] {
                 let start = ContinuousClock.now
                 var input = job(token, previous: "the", personal: personal)

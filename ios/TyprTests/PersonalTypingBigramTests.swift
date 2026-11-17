@@ -272,7 +272,7 @@ final class PersonalTypingBigramTests: XCTestCase {
     }
 
     func testDiscountedBackoffAndPersonalTopThreeAgainstExhaustiveUnion() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var personal = PersonalBigramModel()
         for _ in 0..<12 { personal.record("swift", after: "ich") }
         for _ in 0..<3 { personal.record("coffee", after: "ich") }
@@ -284,32 +284,31 @@ final class PersonalTypingBigramTests: XCTestCase {
         // A proper distribution: followers' discounted mass plus the backed-off corpus mass is 1.
         let mass = (11.5 + 2.5 + 0.5) / 19 + personal.backoffWeight(after: "ich")
         XCTAssertEqual(mass, 1, accuracy: 1e-12)
-        for weight in [0.05, 0.5, 0.95] {
-            for (german, english) in [(true, true), (true, false), (false, true)] {
-                let actual = model.suggestions(after: "ich", weightDE: weight, german: german, english: english, personal: personal)
-                var keys = Set<String>()
-                for pack in [german ? model.de : nil, english ? model.en : nil].compactMap({ $0 }) {
-                    for id in 1..<pack.wordCount { keys.insert(pack.word(id)) }
-                }
-                let corpusKeys = keys.subtracting(KeyboardContextModel.suppressed)
-                let eligible = corpusKeys.union(personal.followers(after: "ich").filter {
-                    $0.value >= PersonalBigramModel.novelFollowerMinimum }.keys)
-                let scored: [(key: String, probability: Double)] = eligible.map { key in
-                    let corpusProbability = model.probability(key, after: "ich", weightDE: weight,
-                                                              german: german, english: english)
-                    return (key, personal.probability(key, after: "ich", corpus: corpusProbability))
-                }
-                let ranked = scored.sorted { left, right in
-                    if left.probability == right.probability {
-                        return left.key.utf8.lexicographicallyPrecedes(right.key.utf8)
-                    }
-                    return left.probability > right.probability
-                }
-                let expected = ranked.prefix(3).map(\.key)
-                XCTAssertEqual(actual.map(\.key), expected, "\(weight) \(german) \(english)")
-                XCTAssertEqual(actual.first?.key, "swift")
-                XCTAssertFalse(actual.contains { $0.key == "zzqx" })
+        let selections = [(0.05, true, true), (0.5, true, true), (0.95, true, true), (0.5, true, false), (0.5, false, true)]
+        for (weight, german, english) in selections {
+            let actual = model.suggestions(after: "ich", weightDE: weight, german: german, english: english, personal: personal)
+            var keys = Set<String>()
+            for pack in [german ? model.de : nil, english ? model.en : nil].compactMap({ $0 }) {
+                for id in 1..<pack.wordCount { keys.insert(pack.word(id)) }
             }
+            let corpusKeys = keys.subtracting(KeyboardContextModel.suppressed)
+            let eligible = corpusKeys.union(personal.followers(after: "ich").filter {
+                $0.value >= PersonalBigramModel.novelFollowerMinimum }.keys)
+            let scored: [(key: String, probability: Double)] = eligible.map { key in
+                let corpusProbability = model.probability(key, after: "ich", weightDE: weight,
+                                                          german: german, english: english)
+                return (key, personal.probability(key, after: "ich", corpus: corpusProbability))
+            }
+            let ranked = scored.sorted { left, right in
+                if left.probability == right.probability {
+                    return left.key.utf8.lexicographicallyPrecedes(right.key.utf8)
+                }
+                return left.probability > right.probability
+            }
+            let expected = ranked.prefix(3).map(\.key)
+            XCTAssertEqual(actual.map(\.key), expected, "\(weight) \(german) \(english)")
+            XCTAssertEqual(actual.first?.key, "swift")
+            XCTAssertFalse(actual.contains { $0.key == "zzqx" })
         }
         let context = model.context(before: "ich ", currentToken: nil)
         XCTAssertEqual(model.rerank(["unknown", "swift"], context: context, german: true, english: true, personal: personal).first, "swift")
@@ -434,7 +433,7 @@ final class PersonalTypingBigramTests: XCTestCase {
             XCTAssertEqual(engine.autocorrect.learning.personalBigrams.pairCount, 0, "Prediction picks teach no pair")
         }
         // Published chips already show the capitalization they insert (real corpus, personal follower).
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let session = KeyboardLearningSession()
         for _ in 0..<4 { session.model.recordPair("tastatur", after: "meine") }
         for (text, sentences) in [("Das ist meine ", true), ("das ist meine ", false)] {

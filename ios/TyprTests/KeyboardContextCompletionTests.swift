@@ -72,7 +72,7 @@ final class KeyboardContextCompletionTests: XCTestCase {
     }
 
     func testWorkerContextScoresSystemTrieAndPersonalCompletionUnion() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var promoted = 0
         for source in ["system", "trie", "personal", "union"] {
             let (baseline, _) = try make(source: source, model: nil)
@@ -100,7 +100,7 @@ final class KeyboardContextCompletionTests: XCTestCase {
     }
 
     func testLearningOffRemovesPersonalInfluenceButKeepsCorpusContext() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         for source in ["system", "trie", "personal", "union"] {
             let (off, defaults) = try make(source: source, model: model, learningOn: true)
             defaults.set(false, forKey: "keyboard.personalLearning")
@@ -118,7 +118,7 @@ final class KeyboardContextCompletionTests: XCTestCase {
     }
 
     func testContextPreservesContactPrecedenceInWorker() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let (ac, _) = try make(source: "union", model: model)
         ac.loadLexiconEntries([(userInput: "Hanna", documentText: "Hanna")])
         let chips = await ranked(ac)
@@ -130,7 +130,7 @@ final class KeyboardContextCompletionTests: XCTestCase {
     }
 
     func testContextLeavesTextReplacementAuthorityAndHighlightIntactInWorker() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let (ac, _) = try make(source: "union", model: model)
         ac.loadLexiconEntries([(userInput: "ha", documentText: "hallo welt")])
         let chips = await ranked(ac)

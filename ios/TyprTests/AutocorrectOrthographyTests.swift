@@ -21,7 +21,7 @@ final class AutocorrectOrthographyTests: XCTestCase {
 
     @MainActor
     private func engine() throws -> AutocorrectEngine {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let english: Set<String> = ["were", "well", "ill", "wont", "shell", "hell", "its", "cant", "house", "gift"]
         let german: Set<String> = ["Haus", "Buch", "Arbeit", "Essen", "essen", "Laut", "laut", "Masse", "Maße", "Steuer", "Mauer", "Israel", "Michael", "Strasse", "strasse", "weiss", "im", "die", "am", "war", "will", "also", "Gift", "Chef", "schon"]
         let result = AutocorrectEngine(checker: Checker(english), spatialDecoder: nil,
@@ -54,7 +54,7 @@ final class AutocorrectOrthographyTests: XCTestCase {
         XCTAssertEqual(falseAutos, 0)
         print("EVAL R2_5_controls n=\(controls.count) false_automatic=\(falseAutos)")
         let english = AutocorrectEngine(checker: Checker(["shan't", "who'd"]), spatialDecoder: nil,
-                                       contextResources: .init(model: KeyboardContextModelTests.model))
+                                       contextResources: .init(model: BundledKeyboardData.contextModel))
         let missing = [("shant", "shan't"), ("whod", "who'd")]
         var hits = 0
         for (input, target) in missing {
@@ -152,7 +152,7 @@ final class AutocorrectOrthographyTests: XCTestCase {
         let session = KeyboardLearningSession(store: KeyboardLearningStore(directory: nil, defaults: defaults),
                                               defaults: defaults, allowsPersistence: { false })
         let english = Checker(["shan't", "who'd", "were", "wont", "cant"])
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let apostrophe = AutocorrectEngine(checker: english, learning: session, spatialDecoder: nil,
                                            contextResources: .init(model: model))
         func manual(_ engine: AutocorrectEngine, _ input: String, _ target: String) -> Bool {

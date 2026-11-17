@@ -2,17 +2,6 @@ import Foundation
 import XCTest
 @testable import Typr
 
-/// Older transaction tests inject explicit strip choices rather than waiting for real dictionary
-/// output. Bind those fixture choices to the CURRENT field exactly as a freshly rendered chip is.
-@MainActor
-extension FullKeyboardEngine {
-    func acceptOwnedFixtureSuggestion(_ suggestion: KeyboardSuggestion) {
-        var owned = suggestion
-        owned.ownership = suggestionOwnership
-        acceptSuggestion(owned)
-    }
-}
-
 @MainActor
 final class KeyboardSuggestionWorkerTests: XCTestCase {
     private final class Checker: TextChecking {
@@ -358,7 +347,7 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
     }
 
     func testBoundaryQueuesPredictionsWithoutWaitingAndPreservesImmediateUndo() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let gate = Gate()
         let worker = KeyboardSuggestionWorker(rank: { await gate.rank($0) })
         let (engine, target, _) = keyboard(worker: worker, context: .init(model: model))

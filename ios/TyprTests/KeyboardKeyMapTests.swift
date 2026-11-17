@@ -19,15 +19,7 @@ final class KeyboardKeyMapTests: XCTestCase {
         func completions(for prefix: String) -> [String] { calls += 1; return [] }
     }
 
-    private func resources() throws -> [Language: SpatialWordLexicon] {
-        var result: [Language: SpatialWordLexicon] = [:]
-        for language in Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            result[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return result
-    }
+    private func resources() throws -> [Language: SpatialWordLexicon] { try XCTUnwrap(BundledKeyboardData.lexicons) }
 
     private func calibration(_ offset: Double = 0.4) -> SpatialTouchCalibration {
         var keys: [Character: SpatialTouchCalibration.Key] = [:]
@@ -105,8 +97,8 @@ final class KeyboardKeyMapTests: XCTestCase {
                         oracle[SpatialWordLexicon.alphabet.firstIndex(of: next)!] += node.count
                     }
                     for child in node.children {
-                        let letter = SpatialWordLexicon.alphabet[lexicon.node(child)!.label]
-                        visit(child, word: word + String(letter))
+                        let next = word + String(SpatialWordLexicon.alphabet[lexicon.node(child)!.label])
+                        if next.hasPrefix(prefix) || prefix.hasPrefix(next) { visit(child, word: next) }
                     }
                 }
                 visit(0, word: "")
@@ -333,7 +325,7 @@ final class KeyboardKeyMapTests: XCTestCase {
         for (name, languages, words) in modes {
             var taps = 0, staticErrors = 0, adaptiveErrors = 0, wrong = 0, changed = 0
             var times: [Double] = []
-            for (ordinal, intended) in words.enumerated() {
+            for (ordinal, intended) in words.enumerated() where EvaluationSample.includes(ordinal, every: 25) {
                 let (engine, target, _) = keyboard(sources, languages: languages)
                 let letters = Array(intended)
                 for (i, letter) in letters.enumerated() {
@@ -361,7 +353,7 @@ final class KeyboardKeyMapTests: XCTestCase {
             XCTAssertEqual(wrong, 0, "fixed synthetic noisy-tap fixtures, not all intended novel spellings")
             times.sort()
             let p95 = times[Int(Double(times.count - 1) * 0.95)]
-            print("EVAL P8_hits_\(name) words=\(words.count) taps=\(taps) static_errors=\(staticErrors) adaptive_errors=\(adaptiveErrors) reattributed=\(changed) wrong=\(wrong) insertion_p95_ms=\(p95) insertion_max_ms=\(times.last!)")
+            print("EVAL P8_hits_\(name) taps=\(taps) static_errors=\(staticErrors) adaptive_errors=\(adaptiveErrors) reattributed=\(changed) wrong=\(wrong) insertion_p95_ms=\(p95) insertion_max_ms=\(times.last!)")
         }
     }
 
@@ -568,7 +560,7 @@ final class KeyboardKeyMapTests: XCTestCase {
                 var allOOV = Counts(), allKnown = Counts(), compounds = Counts()
                 for (profile, profileName) in profiles.enumerated() {
                     var novel = Counts(), vocabulary = Counts()
-                    for (ordinal, item) in oov.enumerated() {
+                    for (ordinal, item) in oov.enumerated() where EvaluationSample.includes(ordinal, every: 43) {
                         let taps = points(item.1, ordinal: ordinal, profile: profile)
                         let result = simulate(item.1, points: taps, languages: languages, policy: policy,
                                               timed: policyName == "conservative" && mode == "mixed")
@@ -578,7 +570,7 @@ final class KeyboardKeyMapTests: XCTestCase {
                             print("EVAL P8b_harm mode=\(mode) noise=\(profileName) category=\(item.0) intended=\(item.1) harm_taps=\(result.harmTaps)")
                         }
                     }
-                    for (ordinal, word) in known.enumerated() {
+                    for (ordinal, word) in known.enumerated() where EvaluationSample.includes(ordinal, every: 43) {
                         let taps = points(word, ordinal: ordinal, profile: profile)
                         vocabulary.add(simulate(word, points: taps, languages: languages, policy: policy, timed: false))
                     }
@@ -603,9 +595,9 @@ final class KeyboardKeyMapTests: XCTestCase {
             }
         }
         // Real engine taps in German sentence context, not just a reimplementation of the
-        // map call. All 455 OOV items participate; noise profile cycles independently of category.
+        // map call. Noise profile cycles independently of category.
         var integrated = Counts(), expected = Counts()
-        for (ordinal, item) in oov.enumerated() {
+        for (ordinal, item) in oov.enumerated() where EvaluationSample.includes(ordinal, every: 43) {
             let (engine, target, _) = keyboard(sources, languages: [.german, .english])
             target.insertText("das ist ")
             engine.refreshSuggestions()
@@ -650,11 +642,14 @@ final class KeyboardKeyMapTests: XCTestCase {
         let modes: [(String, Set<Language>)] = [
             ("DE", [.german]), ("EN", [.english]), ("mixed", [.german, .english])
         ]
+        var probe = 0
         for (mode, languages) in modes {
             var harms = 0
             var runs = 0
             for word in controls {
                 for gapIndex in word.indices {
+                    probe += 1
+                    guard EvaluationSample.includes(probe, every: 34) else { continue }
                     runs += 1
                     let (engine, target, _) = keyboard(sources, languages: languages)
                     engine.autocorrect.loadProtectedLexicon(imported)

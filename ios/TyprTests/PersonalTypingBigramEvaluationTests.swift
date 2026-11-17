@@ -78,9 +78,10 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
 
     /// Recall@1/@3 and MRR@3 of the personal follower after 0, 1, 2, 4 and 8 typed repetitions.
     func testPersonalNextWordRecallGrowsWithRepeatedTrustedSessions() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var times: [Double] = []
-        for (name, pairs) in Self.fixtures {
+        for (name, fixtures) in Self.fixtures {
+            let pairs = fixtures.enumerated().filter { EvaluationSample.includes($0.offset, every: 2) }.map(\.element)
             let session = KeyboardLearningSession()
             var typed = 0, previousRecall3 = -1
             var line = "EVAL P4_learning_\(name) pairs=\(pairs.count)"
@@ -112,7 +113,7 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
     /// Public CC0 held-out sentences: corpus-only versus a bilingual user's trained personal layer.
     /// Shared contexts (e.g. `das`, `the`) can be overridden by design; the bound states the cost.
     func testHeldoutCorpusPredictionsStayCloseWithPersonalPairs() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let url = try XCTUnwrap(Bundle.main.url(forResource: "context-heldout-cc0", withExtension: "json", subdirectory: "WordData"))
         struct Fixture: Decodable { let sentences: [String: [[String]]] }
         let sentences = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url)).sentences
@@ -150,12 +151,8 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
     /// full words (spatial alternatives). Variants: corpus-only, personal pairs, learning off
     /// with retained pairs. Automatic decisions must be identical in all three.
     func testNoisyTouchRankingWithPersonalPairsAndNoAddedAutomaticChanges() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
-        var lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            lexicons[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url, options: .mappedIfSafe)))
-        }
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
         let decoder = SpatialWordDecoder(lexicons: lexicons)
         let grid = KeyboardLayout(width: 393, orientation: .portrait, layer: .letters, field: .text, showsGlobe: false, showsStrip: true)
         let controls = ["Lena", "Donaudampfschiff", "WeChat", "camelCase", "meeting", "tasche", "mittwoch", "updated",
@@ -175,7 +172,8 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
         for (name, pairs) in Self.fixtures {
             let engines = (0...2).map { engine($0, name: name, pairs: pairs) }
             var top1 = [0, 0, 0], top3 = [0, 0, 0], n = 0, changedAuto = 0, offDiffers = 0, wins = 0, losses = 0
-            for (h, w) in pairs {
+            let sampled = pairs.enumerated().filter { EvaluationSample.includes($0.offset, every: 2) }.map(\.element)
+            for (h, w) in sampled {
                 // Prefix of ≥3 letters (clean and one neighbour slip) and the full word (one/two slips).
                 let prefix = String(w.prefix(max(3, w.count / 2)))
                 let cases: [(String, SpatialTypoEvaluationEvidence.ErrorClass?)] = [
@@ -211,7 +209,7 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
             // Clean valid words, names, compounds and code-switches typed after a personal context
             // whose learned follower is a different word: never an automatic change.
             var unwanted = 0
-            for (h, _) in pairs {
+            for (h, _) in sampled {
                 for literal in controls {
                     for ac in engines {
                         ac.discardEvidence()
@@ -219,13 +217,13 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
                     }
                 }
             }
-            print("EVAL P4_noisy_\(name) cases=\(n) corpus_recall1=\(top1[0]) personal_recall1=\(top1[1]) off_recall1=\(top1[2]) corpus_recall3=\(top3[0]) personal_recall3=\(top3[1]) off_recall3=\(top3[2]) first_slot_wins=\(wins) first_slot_losses=\(losses) changed_auto=\(changedAuto) off_strips_differ=\(offDiffers) controls=\(controls.count * pairs.count * 3) unwanted_auto=\(unwanted) validity=injected_not_Apple")
+            print("EVAL P4_noisy_\(name) cases=\(n) corpus_recall1=\(top1[0]) personal_recall1=\(top1[1]) off_recall1=\(top1[2]) corpus_recall3=\(top3[0]) personal_recall3=\(top3[1]) off_recall3=\(top3[2]) first_slot_wins=\(wins) first_slot_losses=\(losses) changed_auto=\(changedAuto) off_strips_differ=\(offDiffers) controls=\(controls.count * sampled.count * 3) unwanted_auto=\(unwanted) validity=injected_not_Apple")
             XCTAssertEqual(changedAuto, 0, name)
             XCTAssertEqual(offDiffers, 0, "\(name): learning off equals no personal data")
             XCTAssertEqual(unwanted, 0, name)
             XCTAssertGreaterThanOrEqual(top3[1], top3[0], name)
             XCTAssertGreaterThan(top1[1], top1[0], name)
-            XCTAssertEqual(n, pairs.count * 4)
+            XCTAssertEqual(n, sampled.count * 4)
         }
         print("EVAL P4_noisy_cost \(Self.summary(times)) timing=\(Self.timing)")
     }
@@ -233,7 +231,7 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
     /// Deterministic event-count ageing: unused pairs fade under unrelated traffic, a phrase
     /// still in use survives, and the caps hold throughout.
     func testAgeingForgetsUnusedPairsAndKeepsUsedOnes() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let pairs = try XCTUnwrap(Self.fixtures.first { $0.name == "de" }).pairs
         var personal = PersonalBigramModel()
         for _ in 0..<8 { for (h, w) in pairs { personal.record(w, after: h) } }

@@ -73,12 +73,7 @@ final class SpatialTypoEvaluationTests: XCTestCase {
     }
 
     private func evaluate(seed: UInt64, sigma: Double, half: Int) throws {
-        var sources: [Decoder.Language: SpatialWordLexicon] = [:]
-        for language in Decoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
+        let sources = try XCTUnwrap(BundledKeyboardData.lexicons)
         let decoder = Decoder(lexicons: sources)
         let germanWords: [String] = SpatialTypoEvaluationFixtures.german
         let englishWords: [String] = SpatialTypoEvaluationFixtures.english
@@ -104,7 +99,7 @@ final class SpatialTypoEvaluationTests: XCTestCase {
                 for (position, word) in words.enumerated() {
                     // Ordinals run over the full list, so each half keeps its words' samples.
                     defer { ordinal += 1 }
-                    guard position % 2 == half else { continue }
+                    guard position % 2 == half, EvaluationSample.includes(position / 2, every: 18) else { continue }
                     let samples = try evidence(word, error: error, ordinal: ordinal, seed: seed, sigma: sigma)
                     observe(samples, intended: word, decoder: decoder, edits: false, metrics: &a)
                     observe(samples, intended: word, decoder: decoder, edits: true, metrics: &b)
@@ -150,7 +145,7 @@ final class SpatialTypoEvaluationTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(controls.count, 600)
         for edits in [false, true] {
             var known = Metrics(), unknown = Metrics()
-            for (index, word) in controls.enumerated() {
+            for (index, word) in controls.enumerated() where EvaluationSample.includes(index, every: 18) {
                 let sample = try evidence(word, ordinal: 50_000 + index, seed: seed, sigma: sigma)
                 let inLexicon = sources.values.contains { $0.logPrior(for: word.lowercased()) != nil }
                 if inLexicon { observe(sample, intended: word, decoder: decoder, edits: edits, metrics: &known) }
@@ -162,7 +157,7 @@ final class SpatialTypoEvaluationTests: XCTestCase {
             XCTAssertEqual(known.wrongAuto, 0, "no unwanted auto replacements on in-lexicon controls")
             XCTAssertEqual(unknown.wrongAuto, 0, "no unwanted auto replacements on out-of-lexicon controls")
             let failed = known.incomplete + unknown.incomplete + known.unavailable + unknown.unavailable
-            XCTAssertLessThanOrEqual(Double(failed) / Double(controls.count), 0.05, "control evidence/search availability")
+            XCTAssertLessThanOrEqual(Double(failed) / Double(known.count + unknown.count), 0.05, "control evidence/search availability")
         }
         // Keep real noisy-touch decoder prefix sentinels from four fixed control words, with both
         // edit modes and both seeds/sigmas. Lexical SpatialPrefixSearch is a different path.

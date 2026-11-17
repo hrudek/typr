@@ -13,7 +13,6 @@ import XCTest
 @MainActor
 final class PersonalTypingAimEvaluationTests: XCTestCase {
     private let grid = KeyboardLayout(width: 393)
-    private let checkpoints = [0, 5, 10, 20, 30, 60, 120]
     private static let matureLabels = 3_000
 
     private struct SplitMix64 {
@@ -83,26 +82,6 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
                        y: frame.midY + CGFloat((a.y + a.sigma * random.normal()) * pitch.y))
     }
 
-    /// Static attribution: the hit-tested letter, else the nearest letter centre.
-    private func hit(_ point: CGPoint) -> KeyboardKey {
-        if let key = grid.hitTest(point), key.character.map({ letterKeys.map(\.character).contains($0) }) == true {
-            return key
-        }
-        return letterKeys.min {
-            hypot(Double($0.frame.midX - point.x) / pitch.x, Double($0.frame.midY - point.y) / pitch.y)
-                < hypot(Double($1.frame.midX - point.x) / pitch.x, Double($1.frame.midY - point.y) / pitch.y)
-        }!
-    }
-
-    private func evidence(_ word: String, _ grip: Grip, seed: UInt64) -> KeyboardTouchWord {
-        var random = SplitMix64(state: seed)
-        return KeyboardTouchWord(layout: grid, samples: word.map { letter in
-            let point = tap(letter, grip, &random)
-            let key = hit(point)
-            return KeyboardTouchWord.Sample(text: key.character!, point: point, key: key)
-        })
-    }
-
     /// Independently trusted labels for intended letters, from a word stream disjoint from the
     /// evaluated words. Offered labels are counted; the model's own outlier gate still applies.
     private struct LabelStream {
@@ -131,6 +110,15 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
         return offered
     }
 
+    private func decoder(usesLegacySearch: Bool = false) throws -> SpatialWordDecoder {
+        SpatialWordDecoder(lexicons: try XCTUnwrap(BundledKeyboardData.lexicons), usesLegacySearch: usesLegacySearch)
+    }
+
+    private var trainingWords: [String] {
+        (SpatialTypoEvaluationFixtures.rare + SpatialTypoEvaluationFixtures.absent).map { $0.lowercased() }
+    }
+
+#if TYPR_RESEARCH
     /// Exact origin/main inference contract, recomputed from the SAME slow per-key aggregates
     /// (whose update rule is unchanged): diagonal, per-key n >= 20, centres clamped to ±.25.
     private func originMainCalibration(_ state: PersonalTypingModel.State) -> SpatialTouchCalibration? {
@@ -148,14 +136,26 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
         }
         return keys.isEmpty ? nil : SpatialTouchCalibration(keys: keys)
     }
+    private let checkpoints = [0, 5, 10, 20, 30, 60, 120]
 
-    private func decoder(usesLegacySearch: Bool = false) throws -> SpatialWordDecoder {
-        var sources: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
+    /// Static attribution: the hit-tested letter, else the nearest letter centre.
+    private func hit(_ point: CGPoint) -> KeyboardKey {
+        if let key = grid.hitTest(point), key.character.map({ letterKeys.map(\.character).contains($0) }) == true {
+            return key
         }
-        return SpatialWordDecoder(lexicons: sources, usesLegacySearch: usesLegacySearch)
+        return letterKeys.min {
+            hypot(Double($0.frame.midX - point.x) / pitch.x, Double($0.frame.midY - point.y) / pitch.y)
+                < hypot(Double($1.frame.midX - point.x) / pitch.x, Double($1.frame.midY - point.y) / pitch.y)
+        }!
+    }
+
+    private func evidence(_ word: String, _ grip: Grip, seed: UInt64) -> KeyboardTouchWord {
+        var random = SplitMix64(state: seed)
+        return KeyboardTouchWord(layout: grid, samples: word.map { letter in
+            let point = tap(letter, grip, &random)
+            let key = hit(point)
+            return KeyboardTouchWord.Sample(text: key.character!, point: point, key: key)
+        })
     }
 
     // MARK: - Metrics
@@ -217,10 +217,6 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
         let mixed = zip(de.enumerated().filter { $0.offset % 2 == 1 }.map(\.element),
                         en.enumerated().filter { $0.offset % 2 == 0 }.map(\.element)).flatMap { [$0, $1] }
         return [("DE", de), ("EN", en), ("mixed", mixed)]
-    }
-
-    private var trainingWords: [String] {
-        (SpatialTypoEvaluationFixtures.rare + SpatialTypoEvaluationFixtures.absent).map { $0.lowercased() }
     }
 
     private func matureModel() -> (PersonalTypingModel, LabelStream) {
@@ -435,6 +431,7 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
             }
         }
     }
+#endif
 
     private func point(_ letter: Character, x: Double, y: Double) -> CGPoint {
         let frame = grid.key(.character(String(letter)))!.frame

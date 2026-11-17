@@ -31,24 +31,9 @@ final class KeyboardBoundaryDecoderTests: XCTestCase {
 
     let grid = KeyboardLayout(width: 393)
 
-    func resources() throws -> [Language: SpatialWordLexicon] {
-        var sources: [Language: SpatialWordLexicon] = [:]
-        for language in Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return sources
-    }
+    func resources() throws -> [Language: SpatialWordLexicon] { try XCTUnwrap(BundledKeyboardData.lexicons) }
 
-    func contextModel() throws -> KeyboardContextModel {
-        let packs = try ["de", "en"].map { language in
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language)",
-                                                    withExtension: "tbg", subdirectory: "WordData"))
-            return try XCTUnwrap(KeyboardContextModel.Pack(contentsOf: url))
-        }
-        return try XCTUnwrap(KeyboardContextModel(de: packs[0], en: packs[1]))
-    }
+    func contextModel() throws -> KeyboardContextModel { try XCTUnwrap(BundledKeyboardData.contextModel) }
 
     func engine(_ sources: [Language: SpatialWordLexicon], languages: Set<Language> = [.german, .english],
                 trusted: Set<String> = [], rejected: Set<String> = [],

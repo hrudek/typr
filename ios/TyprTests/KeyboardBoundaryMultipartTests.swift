@@ -43,7 +43,8 @@ extension KeyboardBoundaryDecoderTests {
             "a": "s", "d": "s", "e": "w", "g": "f", "h": "g", "m": "n",
             "n": "b", "r": "t", "s": "a", "t": "r", "u": "y", "y": "u"
         ]
-        for (name, languages, phrases) in modes {
+        for (name, languages, fixtures) in modes {
+            let phrases = fixtures.enumerated().filter { EvaluationSample.includes($0.offset, every: 2) }.map(\.element)
             let ac = engine(sources, languages: languages)
             var recall1 = 0, recall3 = 0, strip3 = 0, autos = 0
             var visits = 0, cells = 0, cached = 0, exhausted = 0
@@ -91,7 +92,7 @@ extension KeyboardBoundaryDecoderTests {
             XCTAssertEqual(autos, 0)
             XCTAssertEqual(recall3, phrases.count)
             XCTAssertEqual(strip3, phrases.count)
-            XCTAssertGreaterThanOrEqual(recall1, name == "EN" ? 5 : 6)
+            XCTAssertGreaterThanOrEqual(recall1, EvaluationSample.isFull && name == "EN" ? 5 : phrases.count)
             print("EVAL R2_6_multipart_work language=\(name) visits_max=\(visits) visit_cap=\(KeyboardMultipartSegmenter.maximumVisits) cells_max=\(cells) cached_readings_max=\(cached) exhausted_calls=\(exhausted) payload_cap=\(KeyboardMultipartSegmenter.maximumPayloadBytes) mean_ms=\(timings.reduce(0,+)/Double(timings.count)) max_ms=\(timings.max() ?? 0) memory=payload_NOT_RSS")
             print("EVAL R2_6_multipart language=\(name) n=\(phrases.count) recall1=\(recall1) recall3=\(recall3) strip3=\(strip3) autos=\(autos) errors=one_substitution_per_part NOT-iPhone")
         }
@@ -159,7 +160,7 @@ extension KeyboardBoundaryDecoderTests {
         let controls = SpatialTypoEvaluationFixtures.absent.filter { Boundary.isEligible($0) }
         var falseChips = 0, falseAutos = 0, visits = 0, exhausted = 0
         let ac = engine(sources)
-        for text in controls {
+        for (index, text) in controls.enumerated() where EvaluationSample.includes(index, every: 10) {
             let lower = text.lowercased()
             let touch = try multipartTouch(lower, aimed: lower)
             installMultipart(touch, in: ac)
@@ -189,6 +190,6 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertEqual(falseChips, 0)
         XCTAssertEqual(falseAutos, 0)
         XCTAssertLessThan(KeyboardMultipartSegmenter.maximumPayloadBytes, 512 * 1_024)
-        print("EVAL R2_6_literal_controls n=\(controls.count) false_multipart_chips=\(falseChips) false_autos=\(falseAutos) adversarial_visits_max=\(visits) exhausted_calls=\(exhausted) payload_cap=\(KeyboardMultipartSegmenter.maximumPayloadBytes)")
+        print("EVAL R2_6_literal_controls false_multipart_chips=\(falseChips) false_autos=\(falseAutos) adversarial_visits_max=\(visits) exhausted_calls=\(exhausted) payload_cap=\(KeyboardMultipartSegmenter.maximumPayloadBytes)")
     }
 }

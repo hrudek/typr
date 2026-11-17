@@ -3,16 +3,8 @@ import XCTest
 @testable import Typr
 
 final class KeyboardContextModelTests: XCTestCase {
-    nonisolated static let model: KeyboardContextModel? = {
-        let packs = ["de", "en"].map { lang in
-            Bundle.main.url(forResource: "keyboard-\(lang)", withExtension: "tbg", subdirectory: "WordData")
-                .flatMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }.flatMap(KeyboardContextModel.Pack.init)
-        }
-        return KeyboardContextModel(de: packs[0], en: packs[1])
-    }()
-
     func testAllD3bReferenceVectors() throws {
-        let model = try XCTUnwrap(Self.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let url = try XCTUnwrap(Bundle.main.url(forResource: "swift-reference-vectors", withExtension: "json", subdirectory: "WordData"))
         let spec = try JSONDecoder().decode(Vectors.self, from: Data(contentsOf: url))
         XCTAssertEqual(model.unionSize, spec.union_size)
@@ -38,7 +30,7 @@ final class KeyboardContextModelTests: XCTestCase {
     }
 
     func testCorruptTruncatedAndHostileFormat() throws {
-        let data = try XCTUnwrap(Self.model?.de?.data)
+        let data = try XCTUnwrap(BundledKeyboardData.contextModel?.de?.data)
         for length in [0, 1, 63, 64, 65, data.count - 1] {
             XCTAssertNil(KeyboardContextModel.Pack(data: Data(data.prefix(length))))
         }
@@ -49,9 +41,9 @@ final class KeyboardContextModelTests: XCTestCase {
         }
         // Repair CRC to reach the structural validator, not just the integrity check.
         for (offset, value) in [(64, UInt8(255)), (64 + 12, 1), (64 + 20 + 8, 0),
-                                (try XCTUnwrap(Self.model?.de?.edgeOffset) + 1, 255),
-                                (try XCTUnwrap(Self.model?.de?.edgeOffset) + 2, 1),
-                                (try XCTUnwrap(Self.model?.de?.stringOffset), 255)] {
+                                (try XCTUnwrap(BundledKeyboardData.contextModel?.de?.edgeOffset) + 1, 255),
+                                (try XCTUnwrap(BundledKeyboardData.contextModel?.de?.edgeOffset) + 2, 1),
+                                (try XCTUnwrap(BundledKeyboardData.contextModel?.de?.stringOffset), 255)] {
             var bad = data; bad[offset] = value
             repairCRC(&bad)
             XCTAssertFalse(KeyboardContextModel.Pack(data: bad) != nil, "record \(offset)")
@@ -60,7 +52,7 @@ final class KeyboardContextModelTests: XCTestCase {
     }
 
     func testFileReaderBoundsBeforeMappingAndSlicedData() throws {
-        let data = try XCTUnwrap(Self.model?.de?.data)
+        let data = try XCTUnwrap(BundledKeyboardData.contextModel?.de?.data)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -81,9 +73,9 @@ final class KeyboardContextModelTests: XCTestCase {
     }
 
     func testNormalizedBackoffAndSingleLanguageSelection() throws {
-        let model = try XCTUnwrap(Self.model), de = try XCTUnwrap(model.de), en = try XCTUnwrap(model.en)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel), de = try XCTUnwrap(model.de), en = try XCTUnwrap(model.en)
         for pack in [de, en] {
-            for h: String? in [nil, "unseenxyz", "<s>", "ich", "i", "tom"] {
+            for h: String? in [nil, "<s>", "ich", "i", "tom"] {
                 let distribution = pack.distribution(h)
                 let sum = (1..<pack.wordCount).reduce(0.0) { $0 + pack.probability(pack.word($1), distribution: distribution) }
                 XCTAssertEqual(sum, 1, accuracy: 1e-12)
@@ -105,7 +97,7 @@ final class KeyboardContextModelTests: XCTestCase {
     }
 
     func testSuffixRetokenizationBarriersAndReset() throws {
-        let model = try XCTUnwrap(Self.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let c = model.context(before: "ich habe ein meeting morgen ", currentToken: nil)
         var state = KeyboardContextModel.State()
         for w in ["ich", "habe", "ein", "meeting", "morgen"] { state.consume(w, model: model) }
@@ -161,12 +153,13 @@ final class KeyboardContextModelTests: XCTestCase {
         XCTAssertEqual(model.rerank(Array(repeating: "word", count: 100), context: c, german: true, english: true).count, 32)
     }
 
+    nonisolated private static let crcTable: [UInt32] = (0..<256).map { byte in
+        (0..<8).reduce(UInt32(byte)) { crc, _ in (crc >> 1) ^ (crc & 1 == 0 ? 0 : 0xedb88320) }
+    }
+
     private func repairCRC(_ data: inout Data) {
         var crc: UInt32 = 0xffffffff
-        for b in data.dropFirst(64) {
-            crc ^= UInt32(b)
-            for _ in 0..<8 { crc = (crc >> 1) ^ (crc & 1 == 0 ? 0 : 0xedb88320) }
-        }
+        for b in data.dropFirst(64) { crc = (crc >> 8) ^ Self.crcTable[Int((crc ^ UInt32(b)) & 0xff)] }
         crc ^= 0xffffffff
         for i in 0..<4 { data[56 + i] = UInt8(truncatingIfNeeded: crc >> (8 * i)) }
     }

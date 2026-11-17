@@ -9,12 +9,16 @@ final class KeyboardContextCorpusTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.main.url(
             forResource: "context-heldout-r2", withExtension: "json", subdirectory: "WordData"))
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         // Pin quality as deterministic integer hits, not wall-clock thresholds.
-        let expected: [String: (pairs: Int, hit1: Int, hit3: Int)] = [
+        let expected: [String: (pairs: Int, hit1: Int, hit3: Int)] = EvaluationSample.isFull ? [
             "de_news": (701, 52, 95), "de_opus": (434, 41, 74),
             "de_wiki": (712, 39, 80), "en_news": (835, 86, 142),
             "en_opus": (447, 47, 88), "en_wiki": (811, 92, 168)
+        ] : [
+            "de_news": (188, 13, 22), "de_opus": (100, 6, 19),
+            "de_wiki": (172, 10, 15), "en_news": (193, 17, 27),
+            "en_opus": (111, 10, 15), "en_wiki": (182, 20, 38)
         ]
         for name in fixture.sentences.keys.sorted() {
             let sentences = try XCTUnwrap(fixture.sentences[name])
@@ -22,7 +26,7 @@ final class KeyboardContextCorpusTests: XCTestCase {
             let german = name.hasPrefix("de_")
             var pairs = 0, hit1 = 0, hit3 = 0, wrong = 0
             var mixedHit1 = 0, mixedHit3 = 0, mixedWrong = 0
-            for words in sentences {
+            for (index, words) in sentences.enumerated() where EvaluationSample.includes(index, every: 4) {
                 var state = KeyboardContextModel.State()
                 for i in 0..<(words.count - 1) {
                     let previous = KeyboardContextModel.key(words[i])
@@ -65,12 +69,12 @@ final class KeyboardContextCorpusTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.main.url(
             forResource: "context-heldout-r2", withExtension: "json", subdirectory: "WordData"))
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         for source in ["news", "wiki", "opus"] {
             let de = try XCTUnwrap(fixture.sentences["de_" + source])
             let en = try XCTUnwrap(fixture.sentences["en_" + source])
             var pairs = 0, hit1 = 0, hit3 = 0, wrong = 0
-            for k in 0..<min(de.count, en.count) {
+            for k in 0..<min(de.count, en.count) where EvaluationSample.includes(k, every: 4) {
                 let first: [String] = k % 2 == 0 ? de[k] : en[k]
                 let second: [String] = k % 2 == 0 ? en[k] : de[k]
                 let targetGerman: Bool = k % 2 != 0
@@ -100,7 +104,7 @@ final class KeyboardContextCorpusTests: XCTestCase {
     }
 
     func testCompiledPackDeterministicLoadWork() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let de = try XCTUnwrap(model.de)
         let en = try XCTUnwrap(model.en)
         XCTAssertEqual(de.wordCount, 8_001)

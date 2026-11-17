@@ -12,7 +12,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
     }
 
     func testSyntheticNextWordsMixtureLatencyAndPayload() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         // Independently authored synthetic sequences, not private text or a claim of
         // corpus-disjoint natural messaging. Predictions are measured before the target.
         let sets = [
@@ -66,7 +66,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
     }
 
     func testCC0HeldoutNextWordEvaluation() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let url = try XCTUnwrap(Bundle.main.url(forResource: "context-heldout-cc0", withExtension: "json", subdirectory: "WordData"))
         struct Fixture: Decodable { let sentences: [String: [[String]]] }
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
@@ -104,7 +104,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
     /// both languages selected. Compares the exact decaying posterior with naive 50/50 and
     /// a hard language switch on identical rankers; the target is never consumed early.
     func testHeldoutAlternatingMixedWrongLanguageRate() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let sentences = try Self.heldout()
         let de = try XCTUnwrap(sentences["de"]), en = try XCTUnwrap(sentences["en"])
         var pairs = 0, switchPairs = 0
@@ -145,13 +145,9 @@ final class KeyboardContextEvaluationTests: XCTestCase {
     /// the context resources differ. Automatic decisions must be identical.
     @MainActor
     func testHeldoutNoisyTouchSuggestionsAndAutomaticNonregression() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let sentences = try Self.heldout()
-        var lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for l in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(l.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            lexicons[l] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url, options: .mappedIfSafe)))
-        }
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
         let decoder = SpatialWordDecoder(lexicons: lexicons)
         let grid = KeyboardLayout(width: 393, orientation: .portrait, layer: .letters, field: .text, showsGlobe: false, showsStrip: true)
         let de = try XCTUnwrap(sentences["de"]), en = try XCTUnwrap(sentences["en"])
@@ -179,6 +175,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
                           target.allSatisfy({ "abcdefghijklmnopqrstuvwxyz".contains($0) }) else { continue }
                     let prefix = words[..<i].joined(separator: " ").replacingOccurrences(of: " .", with: ".") + " "
                     ordinal += 1
+                    guard EvaluationSample.includes(ordinal, every: 61) else { continue }
                     // One and two neighbour substitutions, plus the correctly typed control.
                     for error in [SpatialTypoEvaluationEvidence.ErrorClass.neighbour1, .neighbour2, nil] {
                         let word = try SpatialTypoEvaluationEvidence.evidence(target, grid: grid, error: error, ordinal: ordinal,
@@ -235,18 +232,14 @@ final class KeyboardContextEvaluationTests: XCTestCase {
                           sorted[Int(Double(sorted.count - 1) * 0.95)], sorted.last!)
         }
         print("EVAL context_noisy_heldout_latency calls=\(milliseconds[1].count) baseline_\(summary(milliseconds[0])) context_\(summary(milliseconds[1])) timing=\(Self.timingPlatform)")
-        XCTAssertEqual(milliseconds[1].count, 2_154) // Same bounded fixture calls in both variants.
+        XCTAssertEqual(milliseconds[1].count, EvaluationSample.isFull ? 2_154 : 34) // Same bounded fixture calls in both variants.
         XCTAssertEqual(milliseconds[0].count, milliseconds[1].count)
     }
 
     @MainActor
     func testIntegratedNoisyTouchAndZeroAddedAutomaticChanges() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
-        var lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for l in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(l.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            lexicons[l] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url, options: .mappedIfSafe)))
-        }
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
         let cases = [("de", "ich bin ", "heute"), ("de", "wir haben ", "arbeit"), ("de", "das ist ", "gut"),
                      ("en", "this is ", "good"), ("en", "i am ", "going"), ("en", "good ", "morning"),
                      ("mixed", "ich habe ein ", "meeting"), ("mixed", "i have a ", "hund"), ("mixed", "das ist ", "good")]
@@ -295,7 +288,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
 
     @MainActor
     func testEngineAfterSpaceAcceptAndSettings() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let guessChecker = Checker(valid: [], guesses: ["hallo", "habe"])
         let ranked = AutocorrectEngine(checker: guessChecker, spatialDecoder: nil, contextResources: .init(model: model))
         ranked.englishEnabled = false; ranked.german = GermanAutocorrect(checker: guessChecker)
@@ -370,7 +363,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
 
     @MainActor
     func testPredictionOwnershipRejectsChangedContextLanguageAndField() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let ac = AutocorrectEngine(checker: Checker(valid: [], guesses: []), spatialDecoder: nil,
                                    contextResources: .init(model: model))
         let target = FixtureTextTarget(text: "i am ")
@@ -406,7 +399,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
 
     @MainActor
     func testNoContextKeepsOriginalCheckerWork() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let checker = Checker(valid: [], guesses: ["glaube", "bin", "habe"])
         let ac = AutocorrectEngine(checker: checker, spatialDecoder: nil, contextResources: .init(model: model))
         for text in ["ha", "123 ha"] {
