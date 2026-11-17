@@ -211,6 +211,16 @@ final class DictationController {
     private(set) var preferredEngine: SpeechEngineChoice?
     /// The engine of the ready transcriber; nil while none is ready or while switching.
     private(set) var currentEngine: SpeechEngineChoice?
+    private(set) var isDeletingModel = false
+    @ObservationIgnored private var loadingEngine: SpeechEngineChoice? {
+        didSet {
+            guard loadingEngine == nil else { return }
+            let waiters = loadFinishedWaiters
+            loadFinishedWaiters = []
+            waiters.forEach { $0.resume() }
+        }
+    }
+    @ObservationIgnored private var loadFinishedWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var modelPreparation = ModelPreparationProgress(
         fractionCompleted: 0,
         detail: "Checking model files"
@@ -408,15 +418,65 @@ final class DictationController {
         case notInstalled
     }
 
-    /// False from the microphone permission request until transcription and cleanup finish.
+    enum ModelDeletion: Equatable {
+        case deleted
+        /// A dictation or another deletion is running.
+        case busy
+        /// Apple Speech: iOS manages its assets.
+        case notDeletable
+        case failed(String)
+    }
+
+    /// False from the microphone permission request until transcription and cleanup finish, and
+    /// while a model is being deleted.
     var canChangeEngine: Bool {
         switch phase {
         case .requestingPermission, .recording, .transcribing:
             return false
         case .modelRequired, .preparingModel, .ready, .failed:
             return activeCapture == nil && pendingCleanupJob == nil && transcribingLog == nil
-                && inFlightTranscriptions.isEmpty && inFlightPermissionRequests == 0
+                && inFlightTranscriptions.isEmpty && inFlightPermissionRequests == 0 && !isDeletingModel
         }
+    }
+
+    /// Deletes the engine's model files. A loaded or preparing model of that engine is released
+    /// first (ending a warm session); the chosen engine stays chosen and is never replaced.
+    @discardableResult
+    func deleteModel(_ engine: SpeechEngineChoice) async -> ModelDeletion {
+        guard engine.hasDeletableModel else { return .notDeletable }
+        guard canChangeEngine else { return .busy }
+        isDeletingModel = true
+        let preparingEngine = preferredEngine ?? SpeechEngineChoice(displayName: engineName)
+        if currentEngine == engine || (!isModelReady && preparingEngine == engine) {
+            if keyboardSessionEnabled { endWarmSession() }
+            modelPrepGeneration &+= 1
+            preparationTask?.cancel()
+            modelBackground?.finish(success: false)
+            transcriber = UnpreparedTranscriber(displayName: engineName)
+            currentEngine = nil
+            isModelReady = false
+            phase = .modelRequired
+        }
+        // A Core ML load cannot be interrupted, also one superseded by another engine's choice.
+        while loadingEngine == engine {
+            await withCheckedContinuation { loadFinishedWaiters.append($0) }
+        }
+        let result: ModelDeletion
+        do {
+            try engineProvider.deleteModel(engine)
+            result = .deleted
+        } catch {
+            result = .failed(error.localizedDescription)
+        }
+        if !isModelReady {
+            keyboardBridge.setModelInstalled(
+                preferredEngine.map { engineProvider.isInstalled($0) } ?? ParakeetTranscriber.hasCachedModel)
+        }
+        publishKeyboardSnapshot()
+        scheduleModelMaintenance()
+        isDeletingModel = false
+        fulfillPendingHandoffOrPrepare()
+        return result
     }
 
     /// OS, device, language and install status for the settings section. Starts no model work.
@@ -921,6 +981,8 @@ final class DictationController {
                 }
                 guard self.modelPrepGeneration == prepGen else { return }
                 engineName = candidate.displayName
+                loadingEngine = SpeechEngineChoice(displayName: candidate.displayName)
+                defer { loadingEngine = nil }
                 try await candidate.prepare { [weak self] progress in
                     Task { @MainActor [weak self] in
                         guard let self, self.modelPrepGeneration == prepGen else { return }

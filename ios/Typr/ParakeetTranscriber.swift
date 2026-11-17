@@ -80,9 +80,14 @@ actor ParakeetTranscriber: LocalTranscribing {
 
     nonisolated static var hasCachedModel: Bool {
         AsrModels.modelsExist(
-            at: AsrModels.defaultCacheDirectory(for: .v2),
+            at: cacheDirectory,
             version: .v2
         )
+    }
+
+    /// FluidAudio's folder for this model, including its partial downloads.
+    nonisolated static var cacheDirectory: URL {
+        AsrModels.defaultCacheDirectory(for: .v2)
     }
 
     func prepare(

@@ -213,6 +213,15 @@ private final class FakeEngineProvider: SpeechEngineProviding {
         availabilities[engine] ?? .installed
     }
 
+    private(set) var deleted: [SpeechEngineChoice] = []
+    var deleteFailure: (any Error)?
+
+    func deleteModel(_ engine: SpeechEngineChoice) throws {
+        if let deleteFailure { throw deleteFailure }
+        deleted.append(engine)
+        installed.remove(engine)
+    }
+
     func note(_ event: String) { events.append(event) }
 }
 
@@ -1897,5 +1906,247 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(Set(contexts.map(\.speechLanguage)), ["German", "Automatic (detected by Parakeet V3)"])
         let languages = await provider.instances(of: .parakeetV3).first?.languages
         XCTAssertEqual(languages, [.german, .automatic], "each capture passes its own language")
+    }
+}
+
+extension SpeechEngineSelectionTests {
+    func testRowsOfferDeleteOnlyForModelsOnThisIPhone() {
+        XCTAssertTrue(row(.parakeetV3, install: .installed).offersDelete)
+        XCTAssertTrue(row(.whisperLargeV3Turbo, install: .installed).offersDelete)
+        XCTAssertFalse(row(.parakeetV3, availability: .downloadRequired("Not downloaded"), install: .notInstalled).offersDelete)
+        XCTAssertFalse(row(.whisperLargeV3Turbo, install: .downloading(ModelDownloadProgress(completedBytes: 1, totalBytes: 2)))
+            .offersDelete)
+        XCTAssertFalse(row(.whisperLargeV3Turbo, install: .cancelled).offersDelete)
+        XCTAssertTrue(row(.parakeetV2, availability: .installed).offersDelete)
+        XCTAssertFalse(row(.parakeetV2, availability: .downloadRequired("Not downloaded")).offersDelete)
+        XCTAssertFalse(row(.appleSpeech, availability: .installed).offersDelete, "iOS manages Apple Speech's assets")
+        XCTAssertTrue(row(.parakeetV3, current: .parakeetV3, install: .installed).offersDelete)
+        XCTAssertTrue(row(.parakeetV3, install: .installed).deleteEnabled)
+        XCTAssertFalse(row(.parakeetV3, install: .installed, canChange: false).deleteEnabled)
+        XCTAssertTrue(SpeechEngineCard.deletionMessage(for: .parakeetV2).contains("downloads it again the next time you use it"))
+        XCTAssertTrue(SpeechEngineCard.deletionMessage(for: .parakeetV3).contains("Your engine choice stays"))
+    }
+
+    func testDeletingTheCurrentModelReleasesItEndsTheWarmSessionAndKeepsTheChoice() async throws {
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3]
+        let f = fixture(preferred: .parakeetV3, provider: provider)
+        try await f.ready()
+        f.controller.toggleWarmSession()
+        try await f.waitUntil { f.controller.phase != .requestingPermission }
+        XCTAssertTrue(f.controller.keyboardSessionEnabled)
+        XCTAssertTrue(f.bridge.isModelInstalled)
+
+        let result = await f.controller.deleteModel(.parakeetV3)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(provider.deleted, [.parakeetV3])
+        XCTAssertFalse(f.controller.keyboardSessionEnabled)
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+        XCTAssertNil(f.controller.currentEngine)
+        XCTAssertFalse(f.controller.isModelReady)
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v3")
+        XCTAssertFalse(f.bridge.isModelInstalled)
+        XCTAssertTrue(provider.automaticCalls.isEmpty)
+        XCTAssertEqual(provider.explicitCalls, [.parakeetV3], "nothing else is prepared")
+    }
+
+    func testDeletingAnotherEnginesModelKeepsTheReadyEngine() async throws {
+        let f = fixture(preferred: .parakeetV2)
+        try await f.ready()
+        let result = await f.controller.deleteModel(.whisperLargeV3Turbo)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(f.fake.deleted, [.whisperLargeV3Turbo])
+        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
+        XCTAssertEqual(f.controller.phase, .ready)
+        XCTAssertTrue(f.bridge.isModelInstalled)
+        let text = try await f.dictate()
+        XCTAssertFalse(text.isEmpty)
+    }
+
+    func testDeletingWaitsForThatEnginesPreparationAndNeverPublishesItReady() async throws {
+        let held = EngineASR(.parakeetV2)
+        await held.holdPrepare()
+        let f = fixture(preferred: .parakeetV2)
+        f.fake.queued[.parakeetV2] = [held]
+        f.controller.prepareModel()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let deletion = Task { await f.controller.deleteModel(.parakeetV2) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        XCTAssertFalse(f.controller.canChangeEngine)
+        XCTAssertTrue(f.fake.deleted.isEmpty, "files stay until the running load returns")
+        await held.releasePrepare()
+        let result = await deletion.value
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(f.fake.deleted, [.parakeetV2])
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertNil(f.controller.currentEngine)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV2)
+        XCTAssertTrue(f.controller.canChangeEngine)
+    }
+
+    func testDeleteIsRefusedDuringDictationAndForAppleSpeech() async throws {
+        let f = fixture(preferred: .parakeetV3)
+        f.fake.installed.insert(.parakeetV3)
+        try await f.ready()
+        f.controller.startRecording(keyboardJobID: "busy")
+        try await f.waitUntil { f.controller.phase == .recording }
+        let busy = await f.controller.deleteModel(.parakeetV3)
+        XCTAssertEqual(busy, .busy)
+        f.controller.finishRecording()
+        try await f.waitUntil { f.controller.phase != .transcribing && f.controller.canChangeEngine }
+        let apple = await f.controller.deleteModel(.appleSpeech)
+        XCTAssertEqual(apple, .notDeletable)
+        XCTAssertTrue(f.fake.deleted.isEmpty)
+        XCTAssertEqual(f.controller.currentEngine, .parakeetV3)
+    }
+
+    func testFailedDeletionIsReportedAndKeepsTheChoice() async throws {
+        struct Locked: LocalizedError { var errorDescription: String? { "File is locked." } }
+        let f = fixture(preferred: .whisperLargeV3Turbo)
+        try await f.ready()
+        f.fake.deleteFailure = Locked()
+        let result = await f.controller.deleteModel(.whisperLargeV3Turbo)
+        XCTAssertEqual(result, .failed("File is locked."))
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+        XCTAssertFalse(f.controller.isDeletingModel)
+    }
+
+    func testProductionDeleteRemovesOnlyThatEnginesFilesAndTheChoiceThenFailsAsNotDownloaded() async throws {
+        let v3 = ParakeetV3ModelStore(root: WhisperTestFiles.makeRoot())
+        let whisper = whisperRoot()
+        let v2Cache = WhisperTestFiles.makeRoot().appendingPathComponent("parakeet-tdt-0.6b-v2-coreml")
+        roots += [v3.root, v2Cache.deletingLastPathComponent()]
+        try ParakeetV3TestFiles.populate(v3, marker: true)
+        let partial = v3.repoFolder(ParakeetV3ModelSpec.modelRepo).appendingPathComponent("Encoder.mlmodelc/weights/weight.bin.incomplete")
+        try WhisperTestFiles.writeSparse(partial, bytes: 1_000)
+        try WhisperTestFiles.populate(whisper, marker: true)
+        try WhisperTestFiles.writeSparse(v2Cache.appendingPathComponent("Encoder.mlmodelc/weights/weight.bin.partial"), bytes: 10)
+        let provider = ProductionSpeechEngineProvider(whisperStore: whisper, parakeetV3Store: v3, parakeetV2Cache: v2Cache)
+        let installer = ParakeetV3ModelInstaller(store: v3, downloader: CountingDownloader(), availableCapacity: { .max })
+        XCTAssertEqual(installer.state, .installed)
+
+        let f = fixture(preferred: .parakeetV3, provider: provider)
+        let result = await f.controller.deleteModel(.parakeetV3)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: v3.root.path), "files and partial downloads are gone")
+        XCTAssertFalse(provider.isInstalled(.parakeetV3))
+        XCTAssertTrue(whisper.isInstalled, "another engine's model is untouched")
+        installer.refresh()
+        XCTAssertEqual(installer.state, .notInstalled, "the row returns to Download")
+        XCTAssertFalse(f.bridge.isModelInstalled)
+
+        let notInstalled = SpeechEngineError.notInstalled(.parakeetV3).localizedDescription
+        f.controller.performPrimaryAction()
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+
+        try provider.deleteModel(.parakeetV2)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: v2Cache.path))
+        try provider.deleteModel(.appleSpeech)
+        XCTAssertTrue(whisper.isInstalled)
+    }
+
+    func testDeletingAfterAPausedPreparationWaitsForItsRunningLoad() async throws {
+        let background = FakeWhisperBackground()
+        let held = EngineASR(.parakeetV3)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3]
+        provider.queued[.parakeetV3] = [held]
+        let f = fixture(preferred: .parakeetV3, provider: provider, modelBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try XCTUnwrap(background.expirations.first)()
+        XCTAssertTrue(f.controller.phase.isFailure)
+        let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        await mainActorBarrier()
+        XCTAssertTrue(provider.deleted.isEmpty, "the paused load still holds the files")
+        await held.releasePrepare()
+        let result = await deletion.value
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(provider.deleted, [.parakeetV3])
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+    }
+
+    func testDeletingParakeetV2LeavesAnAutomaticAppleSpeechPreparationRunning() async throws {
+        let apple = EngineASR(.appleSpeech)
+        await apple.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.queued[.appleSpeech] = [apple]
+        let f = fixture(provider: provider)
+        f.controller.prepareModel()
+        try await f.waitUntil { f.controller.engineName == "Apple Speech" }
+        let result = await f.controller.deleteModel(.parakeetV2)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(f.controller.phase, .preparingModel)
+        await apple.releasePrepare()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .appleSpeech)
+        XCTAssertNil(f.controller.preferredEngine)
+    }
+
+    func testDeletingWaitsForASupersededLoadOfThatEngine() async throws {
+        let held = EngineASR(.parakeetV3)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3, .whisperLargeV3Turbo]
+        provider.queued[.parakeetV3] = [held]
+        let f = fixture(preferred: .parakeetV3, provider: provider)
+        f.controller.prepareModel()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(f.controller.selectEngine(.whisperLargeV3Turbo), .selected)
+        let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        await mainActorBarrier()
+        XCTAssertTrue(provider.deleted.isEmpty, "the superseded load still holds the files")
+        await held.releasePrepare()
+        let result = await deletion.value
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(provider.deleted, [.parakeetV3])
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo)
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+    }
+
+    func testKeyboardLaunchDuringDeletionIsAnsweredWhenItEnds() async throws {
+        let held = EngineASR(.parakeetV3)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3]
+        provider.queued[.parakeetV3] = [held]
+        let f = fixture(preferred: .parakeetV3, provider: provider)
+        f.controller.prepareModel()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        f.controller.handleKeyboardLaunch(.startRecording(jobID: "kb-delete", requestedAt: f.now, style: .polished, host: nil))
+        XCTAssertEqual(provider.explicitCalls, [.parakeetV3], "no preparation starts during the deletion")
+        provider.errors[.parakeetV3] = .notInstalled(.parakeetV3)
+        await held.releasePrepare()
+        _ = await deletion.value
+
+        let notInstalled = SpeechEngineError.notInstalled(.parakeetV3).localizedDescription
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+        XCTAssertEqual(provider.explicitCalls, [.parakeetV3, .parakeetV3])
+        XCTAssertEqual(f.bridge.snapshot().state, .failed)
+        XCTAssertEqual(f.bridge.snapshot().message, notInstalled)
+        XCTAssertTrue(f.audio.captures.isEmpty)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
     }
 }
