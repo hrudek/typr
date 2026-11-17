@@ -294,7 +294,7 @@ final class DictationController {
             switch preferred {
             case .appleSpeech:
                 prepareModel()
-            case .parakeetV2, .whisperLargeV3Turbo:
+            case .parakeetV2, .whisperLargeV3Turbo, .parakeetV3:
                 if engineProvider.isInstalled(preferred) {
                     prepareModel()
                 }
@@ -997,8 +997,11 @@ final class DictationController {
         endCleanupJob()
         let captureTranscriber = transcriber
         let captureLanguage = dictationLanguage
-        let captureLanguageName = SpeechEngineChoice(displayName: captureTranscriber.displayName) == .whisperLargeV3Turbo
-            ? WhisperTranscriber.languageName(for: captureLanguage) : transcriptionLanguage
+        let captureLanguageName = switch SpeechEngineChoice(displayName: captureTranscriber.displayName) {
+        case .whisperLargeV3Turbo: WhisperTranscriber.languageName(for: captureLanguage)
+        case .parakeetV3: ParakeetV3Transcriber.languageName(for: captureLanguage)
+        default: transcriptionLanguage
+        }
         let effectiveStyle = styleOverride ?? style
         let vocabularyEnabled = customVocabularySettings.isEnabled
         let savedVocabularyTerms = customVocabularySettings.terms
