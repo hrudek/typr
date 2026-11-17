@@ -13,7 +13,6 @@ nonisolated enum OrukeetTestFiles {
         try ParakeetV3TestFiles.vocabulary().write(to: store.vocabularyURL)
     }
 
-    /// A fake for `MLModel.compileModel`: copies the package into a temporary `.mlmodelc` folder.
     static func compile(_ package: URL) throws -> URL {
         let output = FileManager.default.temporaryDirectory
             .appending(component: "typr-orukeet-compiled-\(UUID().uuidString).mlmodelc")
@@ -21,7 +20,6 @@ nonisolated enum OrukeetTestFiles {
         return output
     }
 
-    /// A small archive with `files` below `folder`, plus `extra` entries at their own paths.
     static func writeArchive(to url: URL, folder: String, files: [String: Data], extra: [String: Data] = [:]) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let archive = try Archive(url: url, accessMode: .create)
@@ -58,7 +56,6 @@ private final class FakeOrukeetDownloader: ModelFileDownloading, @unchecked Send
     }
 }
 
-/// Stands in for `OrukeetArchive.unpack`: writes the compiled files and deletes the archive.
 private final class FakeOrukeetUnpacker: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0

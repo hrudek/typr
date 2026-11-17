@@ -88,8 +88,6 @@ final class ModelInstaller<Spec: DownloadableModelSpec>: ModelInstalling {
     private let downloader: any ModelFileDownloading
     /// Parses `Spec.checkedFiles` locally; throws when they are damaged.
     private let checkFiles: @Sendable () async throws -> Void
-    /// Turns the verified downloads into the files the engine loads (an archive into compiled
-    /// models), before `checkFiles`. Its space is `Spec.storageHeadroomBytes`.
     private let unpack: (@Sendable () async throws -> Void)?
     private let availableCapacity: () -> Int64?
 
