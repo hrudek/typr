@@ -63,13 +63,6 @@ private final class FakeCohereDownloader: ModelFileDownloading, @unchecked Senda
     }
 }
 
-private final class CohereProgressLog: @unchecked Sendable {
-    private let lock = NSLock()
-    private var recorded: [ModelPreparationProgress] = []
-    var values: [ModelPreparationProgress] { lock.withLock { recorded } }
-    func append(_ progress: ModelPreparationProgress) { lock.withLock { recorded.append(progress) } }
-}
-
 @MainActor
 final class CohereTests: XCTestCase {
     private var roots: [URL] = []
@@ -260,7 +253,7 @@ final class CohereTests: XCTestCase {
     func testPreparationStopsBeforeModelWorkWithoutOptimizationStorage() async throws {
         let store = makeStore()
         try CohereTestFiles.populate(store, marker: true)
-        let log = CohereProgressLog()
+        let log = PreparationProgressLog()
         let free = WhisperModelSpec.optimizationStorageBytes
         let transcriber = CohereTranscriber(store: store, language: .german,
                                             availableCapacity: { free }, environment: "env")
@@ -293,7 +286,7 @@ final class CohereTests: XCTestCase {
     func testSparseModelsFailAsPreparationWithoutDownloadAdviceAndClearTheInProgressMark() async throws {
         let store = makeStore()
         try CohereTestFiles.populate(store, marker: true)
-        let log = CohereProgressLog()
+        let log = PreparationProgressLog()
         let transcriber = CohereTranscriber(store: store, language: .english,
                                             availableCapacity: { .max }, environment: "env")
         do {
