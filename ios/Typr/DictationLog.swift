@@ -87,6 +87,13 @@ enum DictationLogASRFailure: String, Codable, Sendable {
         if let error = error as? OrukeetTranscriber.TranscriberError {
             return error.asrFailure
         }
+        if let error = error as? CohereTranscriber.TranscriberError {
+            switch error {
+            case .notInstalled, .notPrepared, .insufficientStorage, .preparationFailed: return .modelNotReady
+            case .emptyTranscript: return .noSpeech
+            case .corruptModel: return .other
+            }
+        }
         if let error = error as? SpeechEngineError {
             switch error {
             case .notReady, .notInstalled: return .modelNotReady

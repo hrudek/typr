@@ -295,12 +295,14 @@ enum DownloadableModels {
     )
     static let parakeetV3 = ParakeetV3ModelInstaller(store: .production, downloader: HubModelFileDownloader())
     static let orukeet = OrukeetModelInstaller(store: .production, downloader: HubModelFileDownloader())
+    static let cohere = CohereModelInstaller(store: .production, downloader: HubModelFileDownloader())
 
     static func installer(for engine: SpeechEngineChoice) -> (any ModelInstalling)? {
         switch engine {
         case .whisperLargeV3Turbo: whisper
         case .parakeetV3: parakeetV3
         case .orukeet: orukeet
+        case .cohereTranscribe: cohere
         case .appleSpeech, .parakeetV2: nil
         }
     }
@@ -311,6 +313,7 @@ enum DownloadableModels {
         case .whisperLargeV3Turbo: WhisperModelSpec.downloadSizeLabel
         case .parakeetV3: ParakeetV3ModelSpec.downloadSizeLabel
         case .orukeet: OrukeetModelSpec.downloadSizeLabel
+        case .cohereTranscribe: CohereModelSpec.downloadSizeLabel
         case .appleSpeech, .parakeetV2: nil
         }
     }
