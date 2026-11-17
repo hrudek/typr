@@ -6,7 +6,7 @@ nonisolated enum SpeechEngineAvailability: Equatable, Sendable {
     /// Ready to prepare without any download.
     case installed
     /// Usable after a download: Parakeet V2 on first preparation, Apple Speech assets by iOS,
-    /// Whisper and Parakeet V3 only through their Download buttons. The text says which.
+    /// Whisper, Parakeet V3, Orukeet and Cohere Transcribe only through their Download buttons. The text says which.
     case downloadRequired(String)
     case requiresNewerOS(String)
     case unsupportedDevice(String)
@@ -81,17 +81,20 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
     private let parakeetV3Store: ParakeetV3ModelStore
     private let orukeetStore: OrukeetModelStore
     private let parakeetV2Cache: URL
+    private let cohereStore: CohereModelStore
 
     init(
         whisperStore: WhisperModelStore = .production,
         parakeetV3Store: ParakeetV3ModelStore = .production,
         orukeetStore: OrukeetModelStore = .production,
-        parakeetV2Cache: URL = ParakeetTranscriber.cacheDirectory
+        parakeetV2Cache: URL = ParakeetTranscriber.cacheDirectory,
+        cohereStore: CohereModelStore = .production
     ) {
         self.whisperStore = whisperStore
         self.parakeetV3Store = parakeetV3Store
         self.orukeetStore = orukeetStore
         self.parakeetV2Cache = parakeetV2Cache
+        self.cohereStore = cohereStore
     }
 
     func automaticTranscriber(language: DictationLanguage) async -> any LocalTranscribing {
@@ -128,6 +131,9 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .orukeet:
             guard orukeetStore.isInstalled else { throw SpeechEngineError.notInstalled(engine) }
             return OrukeetTranscriber(store: orukeetStore, language: language)
+        case .cohereTranscribe:
+            guard cohereStore.isInstalled else { throw SpeechEngineError.notInstalled(engine) }
+            return CohereTranscriber(store: cohereStore, language: language)
         }
     }
 
@@ -138,6 +144,7 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .whisperLargeV3Turbo: whisperStore.isInstalled
         case .parakeetV3: parakeetV3Store.isInstalled
         case .orukeet: orukeetStore.isInstalled
+        case .cohereTranscribe: cohereStore.isInstalled
         }
     }
 
@@ -162,6 +169,10 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
             return orukeetStore.isInstalled
                 ? .installed
                 : .downloadRequired("Not downloaded (\(OrukeetModelSpec.downloadSizeLabel)).")
+        case .cohereTranscribe:
+            return cohereStore.isInstalled
+                ? .installed
+                : .downloadRequired("Not downloaded (\(CohereModelSpec.downloadSizeLabel)).")
         }
     }
 
@@ -173,6 +184,7 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .whisperLargeV3Turbo: folder = whisperStore.root
         case .parakeetV3: folder = parakeetV3Store.root
         case .orukeet: folder = orukeetStore.root
+        case .cohereTranscribe: folder = cohereStore.root
         }
         guard FileManager.default.fileExists(atPath: folder.path) else { return }
         try FileManager.default.removeItem(at: folder)

@@ -578,9 +578,11 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
     func testStoredRawValuesNamesAndGermanSupportAreStable() throws {
         XCTAssertEqual(SpeechEngineChoice.allCases.map(\.rawValue),
-                       ["apple-speech", "parakeet-v2", "whisper-large-v3-turbo", "parakeet-v3", "orukeet"])
+                       ["apple-speech", "parakeet-v2", "whisper-large-v3-turbo", "parakeet-v3", "orukeet",
+                        "cohere-transcribe"])
         XCTAssertEqual(SpeechEngineChoice.allCases.map(\.displayName),
-                       ["Apple Speech", "Parakeet V2", "Whisper Large V3 Turbo", "Parakeet V3", "Orukeet"])
+                       ["Apple Speech", "Parakeet V2", "Whisper Large V3 Turbo", "Parakeet V3", "Orukeet",
+                        "Cohere Transcribe"])
         for choice in SpeechEngineChoice.allCases {
             XCTAssertEqual(SpeechEngineChoice(displayName: choice.displayName), choice)
             XCTAssertEqual(try JSONDecoder().decode(SpeechEngineChoice.self, from: JSONEncoder().encode(choice)), choice)
@@ -599,8 +601,13 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertTrue(SpeechEngineChoice.orukeet.recognizesGerman)
         XCTAssertTrue(SpeechEngineChoice.orukeet.summary.contains("only when you tap Download"))
         XCTAssertTrue(SpeechEngineChoice.orukeet.languageSummary.contains("25 European languages"))
+        XCTAssertTrue(SpeechEngineChoice.cohereTranscribe.recognizesGerman)
+        XCTAssertTrue(SpeechEngineChoice.cohereTranscribe.summary.contains("only when you tap Download"))
+        XCTAssertTrue(SpeechEngineChoice.cohereTranscribe.languageSummary.contains("German and English"))
+        XCTAssertTrue(SpeechEngineChoice.cohereTranscribe.languageSummary.contains("no detection"))
         XCTAssertEqual(SpeechEngineChoice.allCases.filter(\.requiresExplicitDownload),
-                       [.whisperLargeV3Turbo, .parakeetV3, .orukeet])
+                       [.whisperLargeV3Turbo, .parakeetV3, .orukeet, .cohereTranscribe])
+        XCTAssertTrue(SpeechEngineChoice.cohereTranscribe.hasDeletableModel)
     }
 
     // MARK: - Preference persistence (no migration)
@@ -2278,5 +2285,137 @@ extension SpeechEngineSelectionTests {
         f.controller.performPrimaryAction()
         try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
         XCTAssertEqual(f.controller.preferredEngine, .orukeet)
+    }
+}
+
+extension SpeechEngineSelectionTests {
+    func testCohereRowOffersOnlyItsDownloadUntilInstalledThenDelete() {
+        let missing = row(.cohereTranscribe, availability: .downloadRequired("Not downloaded"), install: .notInstalled)
+        XCTAssertEqual(missing.action, .download)
+        XCTAssertEqual(missing.actionTitle, "Download (\(CohereModelSpec.downloadSizeLabel))")
+        XCTAssertFalse(missing.offersDelete)
+        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
+        XCTAssertNil(row(.cohereTranscribe, language: .german).warning, "German is one of its languages")
+
+        let downloading = row(.cohereTranscribe, install: .downloading(ModelDownloadProgress(completedBytes: 25, totalBytes: 100)))
+        XCTAssertEqual(downloading.progress, 0.25)
+        XCTAssertEqual(downloading.action, .cancelDownload)
+        XCTAssertEqual(row(.cohereTranscribe, install: .verifying).status, "Checking the downloaded files")
+        XCTAssertEqual(row(.cohereTranscribe, install: .cancelled).action, .retryDownload)
+        XCTAssertEqual(row(.cohereTranscribe, install: .failed("offline")).actionTitle, "Retry")
+        XCTAssertEqual(row(.cohereTranscribe, install: .installed).action, .use)
+        XCTAssertTrue(row(.cohereTranscribe, install: .installed).offersDelete)
+        XCTAssertEqual(row(.cohereTranscribe, preferred: .cohereTranscribe, install: .notInstalled,
+                           failure: "Not downloaded").action, .retryDownload)
+        XCTAssertTrue(SpeechEngineCard.deletionMessage(for: .cohereTranscribe).contains("Your engine choice stays"))
+    }
+
+    func testLaunchWithCohereChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
+        let store = CohereModelStore(root: WhisperTestFiles.makeRoot())
+        roots.append(store.root)
+        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), cohereStore: store)
+        let background = FakeWhisperBackground()
+        let f = fixture(preferred: .cohereTranscribe, language: .german, autoPrepare: true, provider: provider,
+                        modelBackground: background)
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertEqual(f.controller.engineName, "Cohere Transcribe")
+        XCTAssertFalse(f.bridge.isModelInstalled)
+        f.controller.noteSceneDidBecomeActive()
+        XCTAssertTrue(background.engines.isEmpty)
+
+        let notInstalled = SpeechEngineError.notInstalled(.cohereTranscribe).localizedDescription
+        f.controller.performPrimaryAction()
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+        XCTAssertNil(f.controller.currentEngine)
+        XCTAssertEqual(f.controller.preferredEngine, .cohereTranscribe)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Cohere")
+    }
+
+    func testSelectingAnUninstalledCohereChangesNothing() async throws {
+        let f = fixture(preferred: .parakeetV2)
+        try await f.ready()
+        let callsBefore = f.fake.explicitCalls
+        XCTAssertEqual(f.controller.selectEngine(.cohereTranscribe), .notInstalled)
+        XCTAssertEqual(f.storedPreferenceRaw, "parakeet-v2")
+        XCTAssertEqual(f.controller.currentEngine, .parakeetV2)
+        XCTAssertEqual(f.fake.explicitCalls, callsBefore)
+
+        f.fake.installed.insert(.cohereTranscribe)
+        XCTAssertEqual(f.controller.selectEngine(.cohereTranscribe), .selected)
+        XCTAssertEqual(f.storedPreferenceRaw, "cohere-transcribe")
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .cohereTranscribe)
+        XCTAssertTrue(f.bridge.isModelInstalled)
+    }
+
+    func testInstalledCoherePreparesOnOpeningWithTheBackgroundRuntime() async throws {
+        let background = FakeWhisperBackground()
+        let provider = FakeEngineProvider()
+        provider.installed = [.cohereTranscribe]
+        let f = fixture(preferred: .cohereTranscribe, autoPrepare: true, provider: provider,
+                        modelBackground: background, deferPreparationUntilActive: true)
+        XCTAssertTrue(provider.created.isEmpty)
+        f.controller.noteSceneDidBecomeActive()
+        f.controller.prepareInstalledModelIfNeeded()
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(provider.explicitCalls, [.cohereTranscribe])
+        XCTAssertEqual(background.engines, [.cohereTranscribe])
+        XCTAssertEqual(background.finishes.last, true)
+        XCTAssertFalse(f.audio.isKeepaliveRunning)
+    }
+
+    func testCoherePreparationExpiryNamesTheEngineAndKeepsTheChoice() async throws {
+        let background = FakeWhisperBackground()
+        let held = EngineASR(.cohereTranscribe)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.cohereTranscribe]
+        provider.queued[.cohereTranscribe] = [held]
+        let f = fixture(preferred: .cohereTranscribe, provider: provider, modelBackground: background)
+        f.controller.noteSceneDidBecomeActive()
+        try await f.waitUntil { provider.created.count == 1 }
+        try XCTUnwrap(background.expirations.first)()
+        XCTAssertEqual(f.controller.phase, .failed(
+            "Cohere Transcribe preparation paused. Open Typr or tap Try again to continue. iOS controls background time."))
+        XCTAssertEqual(f.controller.preferredEngine, .cohereTranscribe)
+        XCTAssertTrue(provider.automaticCalls.isEmpty)
+        await held.releasePrepare()
+    }
+
+    func testDictationLogRecordsCohereAndTheLanguageItWasGiven() async throws {
+        let env = LogTestEnvironment()
+        logEnvironments.append(env)
+        try await LogTestEnvironment.waitUntilLoaded(env.store)
+        let provider = FakeEngineProvider()
+        provider.installed = [.cohereTranscribe]
+        let f = fixture(preferred: .cohereTranscribe, language: .german, provider: provider, dictationLog: env.store)
+        try await f.ready()
+        _ = try await f.dictate(jobID: "cohere-1")
+        f.controller.setDictationLanguage(.automatic)
+        _ = try await f.dictate(jobID: "cohere-2")
+
+        let contexts = env.store.entries.map(\.context)
+        XCTAssertEqual(contexts.count, 2)
+        XCTAssertEqual(Set(contexts.map(\.speechEngine)), ["Cohere Transcribe"])
+        XCTAssertEqual(Set(contexts.map(\.speechLanguage)), ["German", CohereTranscriber.languageName(for: .automatic)])
+        let languages = await provider.instances(of: .cohereTranscribe).first?.languages
+        XCTAssertEqual(languages, [.german, .automatic], "each capture passes its own language")
+    }
+
+    func testDeletingTheCurrentCohereModelReleasesItAndKeepsTheChoice() async throws {
+        let provider = FakeEngineProvider()
+        provider.installed = [.cohereTranscribe]
+        let f = fixture(preferred: .cohereTranscribe, provider: provider)
+        try await f.ready()
+        XCTAssertTrue(f.bridge.isModelInstalled)
+
+        let result = await f.controller.deleteModel(.cohereTranscribe)
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(provider.deleted, [.cohereTranscribe])
+        XCTAssertNil(f.controller.currentEngine)
+        XCTAssertEqual(f.controller.phase, .modelRequired)
+        XCTAssertEqual(f.storedPreferenceRaw, "cohere-transcribe")
+        XCTAssertFalse(f.bridge.isModelInstalled)
+        XCTAssertTrue(provider.automaticCalls.isEmpty)
     }
 }

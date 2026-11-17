@@ -304,7 +304,7 @@ final class DictationController {
             switch preferred {
             case .appleSpeech:
                 prepareModel()
-            case .parakeetV2, .whisperLargeV3Turbo, .parakeetV3, .orukeet:
+            case .parakeetV2, .whisperLargeV3Turbo, .parakeetV3, .orukeet, .cohereTranscribe:
                 if engineProvider.isInstalled(preferred) {
                     prepareModel()
                 }
@@ -1063,6 +1063,7 @@ final class DictationController {
         case .whisperLargeV3Turbo: WhisperTranscriber.languageName(for: captureLanguage)
         case .parakeetV3: ParakeetV3Transcriber.languageName(for: captureLanguage)
         case .orukeet: OrukeetTranscriber.languageName(for: captureLanguage)
+        case .cohereTranscribe: CohereTranscriber.languageName(for: captureLanguage)
         default: transcriptionLanguage
         }
         let effectiveStyle = styleOverride ?? style

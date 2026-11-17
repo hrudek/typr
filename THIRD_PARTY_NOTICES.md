@@ -491,6 +491,22 @@ local loading and on-device compilation steps of Oruk AI's `OrukeetLocalModels`
 at commit `decfb6e4b50a41fbddadf8a9cf12beadf06ae2f1`), MIT license
 ([Oruk-AI/orukeet LICENSE](https://github.com/Oruk-AI/orukeet/blob/decfb6e4b50a41fbddadf8a9cf12beadf06ae2f1/LICENSE)).
 
+## Cohere Transcribe 03-2026 Core ML
+
+Typr downloads this at runtime, only when the user taps Download; nothing is
+bundled in this repository or the app: `q8/cohere_encoder.mlmodelc`,
+`q8/cohere_decoder_cache_external_v2.mlmodelc` and `vocab.json` from
+[FluidInference/cohere-transcribe-03-2026-coreml](https://huggingface.co/FluidInference/cohere-transcribe-03-2026-coreml/tree/e1ce10d4cae2ca9a8b36cef5786fa3660f070050)
+at revision `e1ce10d4cae2ca9a8b36cef5786fa3660f070050`.
+The base Cohere Transcribe weights are licensed under the
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+The Core ML conversion is provided by FluidInference. Its repository metadata
+says Apache-2.0, but the License section of its
+[README at that revision](https://huggingface.co/FluidInference/cohere-transcribe-03-2026-coreml/blob/e1ce10d4cae2ca9a8b36cef5786fa3660f070050/README.md#license)
+says [CC-BY-NC-4.0](https://creativecommons.org/licenses/by-nc/4.0/)
+(non-commercial). Typr is for personal use, so either license allows it.
+[Original Cohere Labs model and attribution](https://huggingface.co/CohereLabs/cohere-transcribe-03-2026).
+
 ## ZIPFoundation 0.9.20
 
 The iPhone app (only the Typr app target) uses the Swift package

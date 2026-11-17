@@ -10,6 +10,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
     case whisperLargeV3Turbo = "whisper-large-v3-turbo"
     case parakeetV3 = "parakeet-v3"
     case orukeet = "orukeet"
+    case cohereTranscribe = "cohere-transcribe"
 
     /// The name in the UI, the dictation log and `LocalTranscribing.displayName`.
     var displayName: String {
@@ -19,6 +20,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         case .whisperLargeV3Turbo: "Whisper Large V3 Turbo"
         case .parakeetV3: "Parakeet V3"
         case .orukeet: "Orukeet"
+        case .cohereTranscribe: "Cohere Transcribe"
         }
     }
 
@@ -30,7 +32,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
     /// Reaches this iPhone only through its Download button in the app; never downloaded by
     /// choosing or preparing it.
     var requiresExplicitDownload: Bool {
-        self == .whisperLargeV3Turbo || self == .parakeetV3 || self == .orukeet
+        self == .whisperLargeV3Turbo || self == .parakeetV3 || self == .orukeet || self == .cohereTranscribe
     }
 
     /// Has model files on this iPhone that the user can delete; iOS manages Apple Speech's assets.
@@ -57,6 +59,8 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
             "NVIDIA Parakeet TDT 0.6B V3 through FluidAudio (Core ML), running on this iPhone. About 483 MB, downloaded only when you tap Download."
         case .orukeet:
             "Oruk AI's Orukeet, trained further from NVIDIA Parakeet TDT 0.6B V3, through FluidAudio (Core ML), running on this iPhone. Experimental INT8 build. About 555 MB, downloaded only when you tap Download."
+        case .cohereTranscribe:
+            "Cohere Transcribe 03-2026 (2B parameters) through FluidAudio (Core ML, INT8), running on this iPhone. About 2.19 GB, downloaded only when you tap Download."
         }
     }
 
@@ -68,6 +72,8 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         case .whisperLargeV3Turbo: "German and English, or automatic detection"
         case .parakeetV3: "25 European languages including German and English, detected automatically"
         case .orukeet: "25 European languages including German and English, always detected automatically"
+        case .cohereTranscribe:
+            "14 languages including German and English, no detection: automatic uses your first iPhone language it supports, else English"
         }
     }
 

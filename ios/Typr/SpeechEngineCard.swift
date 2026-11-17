@@ -82,7 +82,7 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
         let preparationNote = "Opening Typr prepares the installed, chosen model automatically. First optimization can take several minutes. iOS may continue it in the background, but can pause or stop it; reopen Typr to retry. Vocabulary and the tech glossary apply after recognition"
         let note: String? = switch engine {
         case .whisperLargeV3Turbo: preparationNote + ", not as Whisper hints."
-        case .parakeetV3, .orukeet: preparationNote + "."
+        case .parakeetV3, .orukeet, .cohereTranscribe: preparationNote + "."
         case .appleSpeech, .parakeetV2: nil
         }
 

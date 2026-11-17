@@ -2,7 +2,8 @@
 
 Typr is a standalone iPhone dictation keyboard with a containing app, widgets and
 Live Activity. Speech recognition runs on-device: Apple Speech (iOS 26+), Parakeet
-V2 (iOS 18+), Whisper Large V3 Turbo, Parakeet V3 or Orukeet (explicit model downloads).
+V2 (iOS 18+), Whisper Large V3 Turbo, Parakeet V3, Orukeet or Cohere Transcribe
+(explicit model downloads).
 An explicit engine or language choice never silently falls back to another.
 
 ## How it works
@@ -35,17 +36,21 @@ An explicit engine or language choice never silently falls back to another.
 ## Downloaded model preparation
 
 Opening Typr automatically prepares an installed, explicitly chosen Whisper,
-Parakeet V3 or Orukeet model without downloading. On iOS 26+, Typr asks to continue that preparation after you
+Parakeet V3, Orukeet or Cohere Transcribe model without downloading. On iOS 26+, Typr asks to continue that preparation after you
 leave the app; older iOS has only limited background grace time. Opportunistic
 maintenance can also prepare it while charging. iOS may decline, pause or stop
 this work; there is no immediate post-update guarantee. Reopen Typr to retry.
 Preparation never starts the microphone or audio keepalive.
 
 Delete in Speech engine removes a downloaded model (Whisper, Parakeet V2,
-Parakeet V3 or Orukeet) with its partial downloads, after releasing it if it is
-loaded. The chosen engine stays chosen: Whisper, Parakeet V3 and Orukeet then
-need Download again, Parakeet V2 downloads again on next use. Apple Speech has no
-Delete; iOS manages its assets.
+Parakeet V3, Orukeet or Cohere Transcribe) with its partial downloads, after
+releasing it if it is loaded. The chosen engine stays chosen: Whisper, Parakeet
+V3, Orukeet and Cohere Transcribe then need Download again, Parakeet V2 downloads
+again on next use. Apple Speech has no Delete; iOS manages its assets.
+
+Cohere Transcribe has no language detection. German or English dictation passes
+that language; automatic passes the first iPhone language Cohere supports, else
+English.
 
 Background Neural Engine access on iOS 27+ requires the Background Inference
 capability (`com.apple.developer.background-tasks.continued-processing.inference`)
