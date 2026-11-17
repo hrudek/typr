@@ -18,6 +18,17 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The name in settings values, messages and the system's background task title.
+    var shortName: String {
+        self == .whisperLargeV3Turbo ? "Whisper" : displayName
+    }
+
+    /// Reaches this iPhone only through its Download button in the app; never downloaded by
+    /// choosing or preparing it.
+    var requiresExplicitDownload: Bool {
+        self == .whisperLargeV3Turbo
+    }
+
     /// The engine behind a transcriber's display name; nil for test or unknown engines.
     init?(displayName: String) {
         guard let match = Self.allCases.first(where: { $0.displayName == displayName }) else { return nil }

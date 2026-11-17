@@ -29,7 +29,7 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
         case use
         /// Prepare the chosen engine again after a failure or at launch.
         case prepare
-        /// Whisper only: the explicit download.
+        /// Downloaded engines only: the explicit download.
         case download
         case cancelDownload
         case retryDownload
@@ -60,19 +60,20 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
         preferred: SpeechEngineChoice?,
         current: SpeechEngineChoice?,
         availability: SpeechEngineAvailability?,
-        whisperInstall: WhisperInstallState,
+        /// The engine's own download; ignored for engines without a Download button.
+        install: ModelInstallState,
         language: DictationLanguage,
         preparation: ModelPreparationProgress?,
         failure: String?,
         canChangeEngine: Bool
     ) -> SpeechEngineRowState {
-        let isWhisper = engine == .whisperLargeV3Turbo
+        let downloadSizeLabel = DownloadableModels.downloadSizeLabel(for: engine)
         let isChosen = preferred == engine
         let badge: String? = current == engine
             ? (preferred == nil ? "In use · automatic" : "In use")
             : (isChosen ? "Chosen" : nil)
         let warning = languageWarning(engine: engine, language: language)
-        let note: String? = isWhisper
+        let note: String? = engine == .whisperLargeV3Turbo
             ? "Opening Typr prepares the installed, chosen model automatically. First optimization can take several minutes. iOS may continue it in the background, but can pause or stop it; reopen Typr to retry. Vocabulary and the tech glossary apply after recognition, not as Whisper hints."
             : nil
 
@@ -88,8 +89,8 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
                                         warning: warning, note: note)
         }
 
-        if isWhisper {
-            switch whisperInstall {
+        if downloadSizeLabel != nil {
+            switch install {
             case .downloading(let progress):
                 let done = ByteCountFormatter.string(fromByteCount: progress.completedBytes, countStyle: .file)
                 let total = ByteCountFormatter.string(fromByteCount: progress.totalBytes, countStyle: .file)
@@ -106,13 +107,13 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
                        isIndeterminate: preparation.fractionCompleted == nil)
         }
         if isChosen, current != engine, let failure {
-            if isWhisper, whisperInstall != .installed {
+            if downloadSizeLabel != nil, install != .installed {
                 return row(failure, action: .retryDownload, title: "Retry")
             }
             return row(failure, action: .prepare, title: "Try again")
         }
-        if isWhisper {
-            switch whisperInstall {
+        if downloadSizeLabel != nil {
+            switch install {
             case .cancelled:
                 return row("Download cancelled. Retry starts the download again; files already downloaded are kept.",
                            action: .retryDownload, title: "Retry")
@@ -129,8 +130,8 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
                 ? row("Ready on this iPhone")
                 : row("Ready on this iPhone", action: .use, title: "Use")
         }
-        if isWhisper, whisperInstall != .installed {
-            return row(availability.detail, action: .download, title: "Download (\(WhisperModelSpec.downloadSizeLabel))")
+        if let downloadSizeLabel, install != .installed {
+            return row(availability.detail, action: .download, title: "Download (\(downloadSizeLabel))")
         }
         if isChosen {
             return row(availability.detail, action: .prepare, title: "Prepare")
@@ -140,12 +141,10 @@ nonisolated struct SpeechEngineRowState: Equatable, Sendable {
     }
 }
 
-/// The Speech engine section: Apple Speech, Parakeet V2 and Whisper Large V3 Turbo, each with
-/// its languages and live status. Choosing applies to the next dictation and never falls back.
+/// The Speech engine section: every engine with its languages and live status. Choosing applies to the next dictation and never falls back.
 @MainActor
 struct SpeechEngineCard: View {
     let dictation: DictationController
-    @State private var installer = WhisperModelInstaller.shared
     @State private var availability: [SpeechEngineChoice: SpeechEngineAvailability] = [:]
     @State private var availabilityGeneration: UInt64 = 0
     @Environment(\.scenePhase) private var scenePhase
@@ -164,22 +163,29 @@ struct SpeechEngineCard: View {
                 .padding(.horizontal, 4)
         }
         .task(id: refreshKey) {
-            installer.refresh()
+            refreshInstallers()
             await refreshAvailability()
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                installer.refresh()
+                refreshInstallers()
                 Task { await refreshAvailability() }
             }
         }
     }
 
-    /// Re-read availability when the language, the ready engine or the Whisper install changes.
+    /// Re-read availability when the language, the ready engine or a download's install changes.
     private var refreshKey: String {
         let failed: Bool
         if case .failed = dictation.phase { failed = true } else { failed = false }
-        return "\(dictation.dictationLanguage.rawValue)|\(dictation.currentEngine?.rawValue ?? "-")|\(installer.state == .installed)|\(failed)"
+        let installed = SpeechEngineChoice.allCases.map { DownloadableModels.installer(for: $0)?.state == .installed }
+        return "\(dictation.dictationLanguage.rawValue)|\(dictation.currentEngine?.rawValue ?? "-")|\(installed)|\(failed)"
+    }
+
+    private func refreshInstallers() {
+        for engine in SpeechEngineChoice.allCases {
+            DownloadableModels.installer(for: engine)?.refresh()
+        }
     }
 
     private func refreshAvailability() async {
@@ -222,7 +228,7 @@ struct SpeechEngineCard: View {
             preferred: dictation.preferredEngine,
             current: dictation.currentEngine,
             availability: availability[engine],
-            whisperInstall: installer.state,
+            install: DownloadableModels.installer(for: engine)?.state ?? .notInstalled,
             language: dictation.dictationLanguage,
             preparation: preparation,
             failure: failure,
@@ -235,8 +241,8 @@ struct SpeechEngineCard: View {
         case .none: break
         case .use: dictation.selectEngine(state.engine)
         case .prepare: dictation.prepareModel()
-        case .download, .retryDownload: installer.install()
-        case .cancelDownload: installer.cancel()
+        case .download, .retryDownload: DownloadableModels.installer(for: state.engine)?.install()
+        case .cancelDownload: DownloadableModels.installer(for: state.engine)?.cancel()
         }
     }
 
@@ -275,7 +281,7 @@ struct SpeechEngineCard: View {
                     .font(.subheadline)
                     .foregroundStyle(TyprTheme.warmMic)
             }
-            if state.engine == .whisperLargeV3Turbo {
+            if state.engine.requiresExplicitDownload {
                 Text("First preparation can take several minutes.")
                     .font(.subheadline)
                     .foregroundStyle(TyprTheme.textMuted)

@@ -217,7 +217,7 @@ private final class FakeEngineProvider: SpeechEngineProviding {
 }
 
 /// Records Whisper downloader calls; any call outside an explicit install fails the test.
-private final class CountingDownloader: WhisperFileDownloading, @unchecked Sendable {
+private final class CountingDownloader: ModelFileDownloading, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [String] = []
     private var holding = false
@@ -227,7 +227,7 @@ private final class CountingDownloader: WhisperFileDownloading, @unchecked Senda
     func release() { lock.withLock { holding = false } }
     func fail(with error: (any Error)?) { lock.withLock { failure = error } }
 
-    func download(_ file: WhisperModelSpec.PinnedFile, into root: URL,
+    func download(_ file: PinnedModelFile, into root: URL,
                   progress: @escaping @Sendable (Double) -> Void) async throws {
         let failure: (any Error)? = lock.withLock {
             recorded.append(file.path)
@@ -279,7 +279,7 @@ private final class EngineFixture {
          cleanup: ((UserDefaults) -> TranscriptCleanupDependencies)? = nil,
          dictationLog: DictationLogStore? = nil,
          defaults existing: UserDefaults? = nil,
-         whisperBackground: (any WhisperPreparationScheduling)? = nil,
+         modelBackground: (any ModelPreparationScheduling)? = nil,
          deferPreparationUntilActive: Bool = false) {
         defaults = existing ?? UserDefaults(suiteName: suite)!
         settings = TyprSettings(defaults: defaults)
@@ -306,7 +306,7 @@ private final class EngineFixture {
             dictationLog: dictationLog,
             languageSettings: settings,
             engineProvider: self.provider,
-            whisperBackground: whisperBackground,
+            modelBackground: modelBackground,
             deferPreparationUntilActive: deferPreparationUntilActive
         )
     }
@@ -393,12 +393,12 @@ final class SpeechEngineSelectionTests: XCTestCase {
                          cleanup: ((UserDefaults) -> TranscriptCleanupDependencies)? = nil,
                          dictationLog: DictationLogStore? = nil,
                          defaults: UserDefaults? = nil,
-                         whisperBackground: (any WhisperPreparationScheduling)? = nil,
+                         modelBackground: (any ModelPreparationScheduling)? = nil,
                          deferPreparationUntilActive: Bool = false) -> EngineFixture {
         let made = EngineFixture(preferred: preferred, language: language, autoPrepare: autoPrepare, provider: provider,
                                  transcriberFactory: transcriberFactory, vocabularyTerms: vocabularyTerms,
                                  cleanup: cleanup, dictationLog: dictationLog, defaults: defaults,
-                                 whisperBackground: whisperBackground,
+                                 modelBackground: modelBackground,
                                  deferPreparationUntilActive: deferPreparationUntilActive)
         fixtures.append(made)
         return made
@@ -415,11 +415,11 @@ final class SpeechEngineSelectionTests: XCTestCase {
     private func row(_ engine: SpeechEngineChoice = .whisperLargeV3Turbo,
                      preferred: SpeechEngineChoice? = nil, current: SpeechEngineChoice? = nil,
                      availability: SpeechEngineAvailability? = .installed,
-                     install: WhisperInstallState = .installed, language: DictationLanguage = .english,
+                     install: ModelInstallState = .installed, language: DictationLanguage = .english,
                      preparation: ModelPreparationProgress? = nil, failure: String? = nil,
                      canChange: Bool = true) -> SpeechEngineRowState {
         SpeechEngineRowState.make(engine: engine, preferred: preferred, current: current,
-                                  availability: availability, whisperInstall: install, language: language,
+                                  availability: availability, install: install, language: language,
                                   preparation: preparation, failure: failure, canChangeEngine: canChange)
     }
 
@@ -461,7 +461,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
     }
 
     func testWhisperRowSeparatesDownloadVerificationAndDevicePreparation() {
-        let downloading = row(install: .downloading(WhisperDownloadProgress(completedBytes: 50, totalBytes: 100)))
+        let downloading = row(install: .downloading(ModelDownloadProgress(completedBytes: 50, totalBytes: 100)))
         XCTAssertEqual(downloading.progress, 0.5)
         XCTAssertFalse(downloading.isIndeterminate)
         XCTAssertTrue(downloading.status.hasPrefix("Downloading "))
@@ -486,7 +486,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
     }
 
     func testWhisperRowOffersRetryAfterFailureOrCancelAndNeverPromisesResume() {
-        for state in [WhisperInstallState.cancelled, .failed("No internet connection. Connect and tap Retry.")] {
+        for state in [ModelInstallState.cancelled, .failed("No internet connection. Connect and tap Retry.")] {
             let retry = row(install: state)
             XCTAssertEqual(retry.action, .retryDownload)
             XCTAssertEqual(retry.actionTitle, "Retry")
@@ -513,7 +513,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(download.action, .download)
         XCTAssertTrue(download.actionEnabled, "the current engine stays usable while Whisper downloads")
         XCTAssertTrue(row(install: .failed("offline"), canChange: false).actionEnabled)
-        XCTAssertTrue(row(install: .downloading(WhisperDownloadProgress(completedBytes: 1, totalBytes: 2)),
+        XCTAssertTrue(row(install: .downloading(ModelDownloadProgress(completedBytes: 1, totalBytes: 2)),
                           canChange: false).actionEnabled)
     }
 
@@ -1465,13 +1465,13 @@ final class SpeechEngineSelectionTests: XCTestCase {
 }
 
 @MainActor
-private final class FakeWhisperBackground: WhisperPreparationScheduling {
+private final class FakeWhisperBackground: ModelPreparationScheduling {
     var expirations: [@MainActor () -> Void] = []
     var finishes: [Bool] = []
     var updates: [ModelPreparationProgress] = []
     var maintenance: [Bool] = []
     var activations = 0
-    func begin(expiration: @escaping @MainActor () -> Void) { expirations.append(expiration) }
+    func begin(_ engine: SpeechEngineChoice, expiration: @escaping @MainActor () -> Void) { expirations.append(expiration) }
     func update(_ progress: ModelPreparationProgress) { updates.append(progress) }
     func sceneDidBecomeActive() { activations += 1 }
     func finish(success: Bool) { finishes.append(success) }
@@ -1484,12 +1484,12 @@ extension SpeechEngineSelectionTests {
     func testInstalledWhisperWaitsForForegroundThenPreparesOnlyOnce() async throws {
         let background = FakeWhisperBackground()
         let f = fixture(preferred: .whisperLargeV3Turbo, autoPrepare: true,
-                        whisperBackground: background, deferPreparationUntilActive: true)
+                        modelBackground: background, deferPreparationUntilActive: true)
         XCTAssertEqual(f.controller.phase, .modelRequired)
         XCTAssertTrue(f.fake.created.isEmpty, "background-only launch must wait for the registered handler")
         f.controller.noteSceneDidBecomeActive()
         f.controller.noteSceneDidBecomeActive()
-        f.controller.prepareInstalledWhisperIfNeeded() // maintenance joins, it never creates another model
+        f.controller.prepareInstalledModelIfNeeded() // maintenance joins, it never creates another model
         try await f.waitUntil { f.controller.phase == .ready }
         f.controller.noteSceneDidBecomeActive()
         XCTAssertEqual(f.fake.explicitCalls, [.whisperLargeV3Turbo])
@@ -1515,9 +1515,9 @@ extension SpeechEngineSelectionTests {
             let background = FakeWhisperBackground()
             let provider = FakeEngineProvider()
             provider.installed = []
-            let f = fixture(preferred: preferred, provider: provider, whisperBackground: background)
+            let f = fixture(preferred: preferred, provider: provider, modelBackground: background)
             f.controller.noteSceneDidBecomeActive()
-            f.controller.prepareInstalledWhisperIfNeeded()
+            f.controller.prepareInstalledModelIfNeeded()
             await Task.yield()
             XCTAssertTrue(provider.explicitCalls.isEmpty)
             XCTAssertTrue(provider.automaticCalls.isEmpty)
@@ -1534,7 +1534,7 @@ extension SpeechEngineSelectionTests {
         await old.holdPrepare()
         let provider = FakeEngineProvider()
         provider.queued[.whisperLargeV3Turbo] = [old]
-        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, modelBackground: background)
         f.controller.noteSceneDidBecomeActive()
         try await f.waitUntil { provider.created.count == 1 }
         // Ensure the cancellation-ignoring fake has actually entered its model operation.
@@ -1568,11 +1568,11 @@ extension SpeechEngineSelectionTests {
         await whisper.holdPrepare()
         let provider = FakeEngineProvider()
         provider.queued[.whisperLargeV3Turbo] = [whisper]
-        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, modelBackground: background)
         f.controller.noteSceneDidBecomeActive()
         try await f.waitUntil { provider.created.count == 1 }
         f.controller.noteSceneDidEnterBackground()
-        f.controller.prepareInstalledWhisperIfNeeded()
+        f.controller.prepareInstalledModelIfNeeded()
         XCTAssertEqual(background.expirations.count, 1)
         XCTAssertEqual(background.maintenance.last, true)
         XCTAssertFalse(f.audio.isKeepaliveRunning)
@@ -1584,8 +1584,8 @@ extension SpeechEngineSelectionTests {
 
     func testMaintenanceUsesChosenLanguageAndDoesNotLaunchHandoff() async throws {
         let background = FakeWhisperBackground()
-        let f = fixture(preferred: .whisperLargeV3Turbo, language: .german, whisperBackground: background)
-        f.controller.prepareInstalledWhisperIfNeeded()
+        let f = fixture(preferred: .whisperLargeV3Turbo, language: .german, modelBackground: background)
+        f.controller.prepareInstalledModelIfNeeded()
         try await f.waitUntil { f.controller.phase == .ready }
         XCTAssertEqual(f.fake.explicitLanguages, [.german])
         XCTAssertFalse(f.audio.isKeepaliveRunning)
@@ -1600,8 +1600,8 @@ extension SpeechEngineSelectionTests {
         await whisper.setPrepareFailure(error)
         let provider = FakeEngineProvider()
         provider.queued[.whisperLargeV3Turbo] = [whisper]
-        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
-        f.controller.prepareInstalledWhisperIfNeeded()
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, modelBackground: background)
+        f.controller.prepareInstalledModelIfNeeded()
         try await f.waitUntil { f.controller.phase.isFailure }
         XCTAssertEqual(f.controller.phase, .failed(error.localizedDescription))
         XCTAssertEqual(background.finishes.last, false)
@@ -1618,8 +1618,8 @@ extension SpeechEngineSelectionTests {
         await failed.setPrepareFailure(WhisperTranscriber.TranscriberError.preparationFailed("Resources unavailable"))
         let provider = FakeEngineProvider()
         provider.queued[.whisperLargeV3Turbo] = [failed]
-        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
-        f.controller.prepareInstalledWhisperIfNeeded()
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, modelBackground: background)
+        f.controller.prepareInstalledModelIfNeeded()
         try await f.waitUntil { f.controller.phase.isFailure }
         let staleExpiration = try XCTUnwrap(background.expirations.first)
         XCTAssertEqual(background.finishes.last, false)
@@ -1639,8 +1639,8 @@ extension SpeechEngineSelectionTests {
 
     /// Short system UI text that changes only with a real stage, never per heartbeat or callback.
     func testContinuedTaskSubtitleIsShortAndFollowsRealStages() {
-        typealias B = WhisperBackgroundPreparation
-        XCTAssertEqual(B.taskTitle, "Preparing Whisper")
+        typealias B = ModelBackgroundPreparation
+        XCTAssertEqual(B.taskTitle(for: .whisperLargeV3Turbo), "Preparing Whisper")
         XCTAssertEqual(B.taskSubtitle(for: nil), "Starting")
         XCTAssertEqual(B.taskSubtitle(for: ModelPreparationProgress(fractionCompleted: nil, detail: "Checking model files")), "Starting")
         for component in WhisperPreparationComponent.allCases {
@@ -1654,34 +1654,34 @@ extension SpeechEngineSelectionTests {
     }
 
     func testContinuedTaskCountsCompletedMilestonesRatherThanStayingIndeterminate() {
-        let unit = WhisperBackgroundPreparation.unitsPerStage
+        let unit = ModelBackgroundPreparation.unitsPerStage
         let progress = Progress(totalUnitCount: -1)
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: nil)
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: nil)
         XCTAssertEqual(progress.totalUnitCount, 5 * unit)
         XCTAssertEqual(progress.completedUnitCount, 0)
         for component in WhisperPreparationComponent.allCases {
             let update = component.progress(optimizing: true)
             XCTAssertNil(update.fractionCompleted, "the app must not invent a measured percent")
-            WhisperBackgroundPreparation.updateTaskProgress(progress, from: update)
+            ModelBackgroundPreparation.updateTaskProgress(progress, from: update)
             XCTAssertEqual(progress.completedUnitCount, (update.stageProgress?.completed ?? -1) * unit)
         }
         for completed: Int64 in [3, 4] {
-            WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+            ModelBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
                 fractionCompleted: nil, detail: "Next real stage", stageProgress: (completed, 5)))
             XCTAssertEqual(progress.completedUnitCount, completed * unit)
         }
         // Late/indeterminate updates cannot regress the system's progress. Only finish(success:)
         // is allowed to mark the task complete, never a queued readiness callback.
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.melSpectrogram.progress(optimizing: true))
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.melSpectrogram.progress(optimizing: true))
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
             fractionCompleted: nil, detail: "No measured progress"))
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
             fractionCompleted: 1, detail: "Ready", stageProgress: (5, 5)))
         XCTAssertEqual(progress.completedUnitCount, 4 * unit)
         XCTAssertFalse(progress.isFinished)
         // Attaching a delayed continued task uses the latest completed milestone.
         let attached = Progress(totalUnitCount: 0)
-        WhisperBackgroundPreparation.updateTaskProgress(attached, from: ModelPreparationProgress(
+        ModelBackgroundPreparation.updateTaskProgress(attached, from: ModelPreparationProgress(
             fractionCompleted: nil, detail: "Loading", stageProgress: (3, 5)))
         XCTAssertEqual(attached.completedUnitCount, 3 * unit)
     }
@@ -1690,26 +1690,26 @@ extension SpeechEngineSelectionTests {
     /// change while one Core ML specialization was still running. Heartbeats keep progress moving
     /// inside the running stage without ever claiming the stage or the preparation is done.
     func testHeartbeatAdvancesWithinRunningStageWithoutReachingMilestoneOrCompletion() {
-        let unit = WhisperBackgroundPreparation.unitsPerStage
+        let unit = ModelBackgroundPreparation.unitsPerStage
         let progress = Progress(totalUnitCount: -1)
-        XCTAssertFalse(WhisperBackgroundPreparation.advanceHeartbeat(progress),
+        XCTAssertFalse(ModelBackgroundPreparation.advanceHeartbeat(progress),
                        "no heartbeat before the stage layout is known")
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.textDecoder.progress(optimizing: true))
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.textDecoder.progress(optimizing: true))
         XCTAssertEqual(progress.completedUnitCount, unit)
-        XCTAssertTrue(WhisperBackgroundPreparation.advanceHeartbeat(progress))
+        XCTAssertTrue(ModelBackgroundPreparation.advanceHeartbeat(progress))
         XCTAssertEqual(progress.completedUnitCount, unit + 1)
-        for _ in 0..<(2 * unit) { WhisperBackgroundPreparation.advanceHeartbeat(progress) }
+        for _ in 0..<(2 * unit) { ModelBackgroundPreparation.advanceHeartbeat(progress) }
         XCTAssertEqual(progress.completedUnitCount, 2 * unit - 1, "a heartbeat never reaches the next milestone")
-        XCTAssertFalse(WhisperBackgroundPreparation.advanceHeartbeat(progress))
+        XCTAssertFalse(ModelBackgroundPreparation.advanceHeartbeat(progress))
         // The real milestone still jumps to its boundary, and heartbeats then fill the next stage.
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.audioEncoder.progress(optimizing: true))
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: WhisperPreparationComponent.audioEncoder.progress(optimizing: true))
         XCTAssertEqual(progress.completedUnitCount, 2 * unit)
-        WhisperBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
+        ModelBackgroundPreparation.updateTaskProgress(progress, from: ModelPreparationProgress(
             fractionCompleted: nil, detail: "Checking", stageProgress: (4, 5)))
-        for _ in 0..<(2 * unit) { WhisperBackgroundPreparation.advanceHeartbeat(progress) }
+        for _ in 0..<(2 * unit) { ModelBackgroundPreparation.advanceHeartbeat(progress) }
         XCTAssertEqual(progress.completedUnitCount, 5 * unit - 1)
         XCTAssertFalse(progress.isFinished, "only finish(success:) completes the system task")
-        XCTAssertLessThan(WhisperBackgroundPreparation.heartbeatInterval, .seconds(30))
+        XCTAssertLessThan(ModelBackgroundPreparation.heartbeatInterval, .seconds(30))
     }
 
     func testBecomingActiveAsksForContinuedTaskWithoutRestartingPreparation() async throws {
@@ -1718,7 +1718,7 @@ extension SpeechEngineSelectionTests {
         await whisper.holdPrepare()
         let provider = FakeEngineProvider()
         provider.queued[.whisperLargeV3Turbo] = [whisper]
-        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, modelBackground: background)
         f.controller.noteSceneDidBecomeActive()
         try await f.waitUntil { provider.created.count == 1 }
         XCTAssertEqual(background.expirations.count, 1)
@@ -1738,7 +1738,7 @@ extension SpeechEngineSelectionTests {
         await whisper.holdPrepare()
         let provider = FakeEngineProvider()
         provider.queued[.whisperLargeV3Turbo] = [whisper]
-        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, whisperBackground: background)
+        let f = fixture(preferred: .whisperLargeV3Turbo, provider: provider, modelBackground: background)
         f.controller.noteSceneDidBecomeActive()
         try await f.waitUntil { provider.created.count == 1 }
         let expire = try XCTUnwrap(background.expirations.first)

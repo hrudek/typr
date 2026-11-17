@@ -347,48 +347,56 @@ final class WhisperTranscriberTests: XCTestCase {
     private static let tooLittle: Int64 = 300_000_000
 
     func testFirstPreparationOptimizesOnlyWithEnoughStorage() {
-        let fresh = WhisperPreparationRecord()
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: fresh, environment: Self.env, availableBytes: Self.enough),
+        let fresh = ModelPreparationRecord()
+        XCTAssertEqual(ModelPreparationPlan.decide(record: fresh, environment: Self.env, availableBytes: Self.enough,
+                                                 requiredBytes: Self.enough),
                        .optimize)
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: fresh, environment: Self.env, availableBytes: Self.tooLittle),
+        XCTAssertEqual(ModelPreparationPlan.decide(record: fresh, environment: Self.env, availableBytes: Self.tooLittle,
+                                                 requiredBytes: Self.enough),
                        .insufficientStorage(available: Self.tooLittle))
         // Unknown free space never blocks; Core ML reports its own failure.
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: fresh, environment: Self.env, availableBytes: nil),
+        XCTAssertEqual(ModelPreparationPlan.decide(record: fresh, environment: Self.env, availableBytes: nil,
+                                                 requiredBytes: Self.enough),
                        .optimize)
     }
 
     func testCompletedLoadInTheSameEnvironmentLoadsEvenWithLittleStorage() {
-        let loaded = WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: false)
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: loaded, environment: Self.env, availableBytes: Self.tooLittle),
+        let loaded = ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: false)
+        XCTAssertEqual(ModelPreparationPlan.decide(record: loaded, environment: Self.env, availableBytes: Self.tooLittle,
+                                                 requiredBytes: Self.enough),
                        .load)
     }
 
     func testOSOrTyprUpdateExpectsOptimizationAgain() {
-        let loaded = WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: false)
+        let loaded = ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: false)
         let updated = "Version 27.1 (Build 24B5) | 1.0 (43) | rev"
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: loaded, environment: updated, availableBytes: Self.enough),
+        XCTAssertEqual(ModelPreparationPlan.decide(record: loaded, environment: updated, availableBytes: Self.enough,
+                                                 requiredBytes: Self.enough),
                        .optimize)
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: loaded, environment: updated, availableBytes: Self.tooLittle),
+        XCTAssertEqual(ModelPreparationPlan.decide(record: loaded, environment: updated, availableBytes: Self.tooLittle,
+                                                 requiredBytes: Self.enough),
                        .insufficientStorage(available: Self.tooLittle))
     }
 
     func testUnfinishedPreviousPreparationChecksStorageAgain() {
         // iOS terminated Typr while Core ML specialized: the cache cannot be trusted.
-        let interrupted = WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: true)
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: interrupted, environment: Self.env, availableBytes: Self.tooLittle),
+        let interrupted = ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: true)
+        XCTAssertEqual(ModelPreparationPlan.decide(record: interrupted, environment: Self.env, availableBytes: Self.tooLittle,
+                                                 requiredBytes: Self.enough),
                        .insufficientStorage(available: Self.tooLittle))
-        XCTAssertEqual(WhisperPreparationPlan.decide(record: interrupted, environment: Self.env, availableBytes: Self.enough),
+        XCTAssertEqual(ModelPreparationPlan.decide(record: interrupted, environment: Self.env, availableBytes: Self.enough,
+                                                 requiredBytes: Self.enough),
                        .optimize)
     }
 
     func testPreparationRecordRoundTripsAndToleratesMissingOrDamagedFiles() throws {
-        XCTAssertEqual(store.preparationRecord, WhisperPreparationRecord())
+        XCTAssertEqual(store.preparationRecord, ModelPreparationRecord())
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let record = WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: true)
+        let record = ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: true)
         store.writePreparationRecord(record)
         XCTAssertEqual(store.preparationRecord, record)
         try Data("not json".utf8).write(to: store.preparationURL)
-        XCTAssertEqual(store.preparationRecord, WhisperPreparationRecord())
+        XCTAssertEqual(store.preparationRecord, ModelPreparationRecord())
         // The record is not part of the install: it never changes "installed".
         XCTAssertNotEqual(WhisperModelStore.preparationFileName, WhisperModelStore.markerFileName)
     }
@@ -410,19 +418,19 @@ final class WhisperTranscriberTests: XCTestCase {
         XCTAssertTrue(store.isInstalled, "a storage stop never invalidates the install")
 
         // An interrupted earlier preparation in the same environment is stopped the same way.
-        store.writePreparationRecord(WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: true))
+        store.writePreparationRecord(ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: true))
         do {
             try await transcriber.prepare { progress.append($0.detail) }
             XCTFail("an interrupted specialization must check storage again")
         } catch let error as WhisperTranscriber.TranscriberError {
             XCTAssertEqual(error, .insufficientStorage(Self.tooLittle))
         }
-        XCTAssertEqual(store.preparationRecord, WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: true))
+        XCTAssertEqual(store.preparationRecord, ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: true))
     }
 
     func testPrepareWithAnExpectedCachePassesTheGuardDespiteLittleStorage() async throws {
         try WhisperTestFiles.populate(store, marker: true)
-        let loaded = WhisperPreparationRecord(loadedEnvironment: Self.env, inProgress: false)
+        let loaded = ModelPreparationRecord(loadedEnvironment: Self.env, inProgress: false)
         store.writePreparationRecord(loaded)
         let free = Self.tooLittle
         let transcriber = WhisperTranscriber(store: store, language: .german,
@@ -438,7 +446,7 @@ final class WhisperTranscriberTests: XCTestCase {
     }
 
     func testCurrentEnvironmentNamesOSTyprAndModelRevision() {
-        let environment = WhisperPreparationPlan.currentEnvironment()
+        let environment = ModelPreparationPlan.currentEnvironment(modelRevision: WhisperModelSpec.modelRevision)
         XCTAssertTrue(environment.contains(ProcessInfo.processInfo.operatingSystemVersionString))
         XCTAssertTrue(environment.hasSuffix(WhisperModelSpec.modelRevision))
     }

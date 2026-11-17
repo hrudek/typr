@@ -82,7 +82,7 @@ nonisolated enum WhisperPreparationComponent: String, CaseIterable, Sendable {
 
     // Three sequential specializations, the final load, and validation. These units are
     // milestones, not equal durations. Keep the app's Core ML fraction indeterminate.
-    static let totalPreparationStages: Int64 = 5
+    static let totalPreparationStages = ModelPreparationProgress.milestoneCount
 
     func progress(optimizing: Bool) -> ModelPreparationProgress {
         let step: Int
@@ -156,7 +156,7 @@ actor WhisperTranscriber: LocalTranscribing {
         store: WhisperModelStore = .production,
         language: DictationLanguage,
         availableCapacity: (@Sendable () -> Int64?)? = nil,
-        environment: String = WhisperPreparationPlan.currentEnvironment()
+        environment: String = ModelPreparationPlan.currentEnvironment(modelRevision: WhisperModelSpec.modelRevision)
     ) {
         self.store = store
         self.preparedLanguage = language
@@ -219,8 +219,9 @@ actor WhisperTranscriber: LocalTranscribing {
         // Before any model work (including the tokenizer): stop if specialization is expected
         // and the storage it needs is not free.
         let record = store.preparationRecord
-        let plan = WhisperPreparationPlan.decide(record: record, environment: environment,
-                                                 availableBytes: availableCapacity())
+        let plan = ModelPreparationPlan.decide(record: record, environment: environment,
+                                               availableBytes: availableCapacity(),
+                                               requiredBytes: WhisperModelSpec.optimizationStorageBytes)
         if case .insufficientStorage(let available) = plan {
             throw TranscriberError.insufficientStorage(available)
         }
@@ -241,18 +242,18 @@ actor WhisperTranscriber: LocalTranscribing {
         ))
         // Marked before Core ML starts: if iOS terminates Typr while specializing, the next
         // preparation expects specialization again and checks storage first.
-        store.writePreparationRecord(WhisperPreparationRecord(loadedEnvironment: record.loadedEnvironment,
+        store.writePreparationRecord(ModelPreparationRecord(loadedEnvironment: record.loadedEnvironment,
                                                               inProgress: true))
         let kit: WhisperKit
         do {
             kit = try await loadKit(tokenizer: tokenizer, optimizing: plan == .optimize,
                                     progressHandler: progressHandler)
         } catch {
-            store.writePreparationRecord(WhisperPreparationRecord(loadedEnvironment: record.loadedEnvironment,
+            store.writePreparationRecord(ModelPreparationRecord(loadedEnvironment: record.loadedEnvironment,
                                                                   inProgress: false))
             throw error
         }
-        store.writePreparationRecord(WhisperPreparationRecord(loadedEnvironment: environment, inProgress: false))
+        store.writePreparationRecord(ModelPreparationRecord(loadedEnvironment: environment, inProgress: false))
         // Skipped with the loader above; without it language prefill and detection are wrong.
         kit.textDecoder.isModelMultilingual = true
         try Task.checkCancellation()

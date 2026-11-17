@@ -532,9 +532,7 @@ struct ContentView: View {
 
             NavigationLink(value: SettingsDestination.speechEngine) {
                 SettingsLink(title: "Speech engine", detail: "On-device recognition and downloads",
-                             value: dictation.preferredEngine.map {
-                                 $0 == .whisperLargeV3Turbo ? "Whisper" : $0.displayName
-                             } ?? "Automatic")
+                             value: dictation.preferredEngine?.shortName ?? "Automatic")
             }
             .buttonStyle(.plain)
 

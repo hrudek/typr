@@ -12,7 +12,7 @@ final class DictationController {
         cleanup: TranscriptCleanupProduction.dependencies(),
         dictationLog: .shared,
         statistics: UsageDictationRecorder(store: UsageStatisticsStore()),
-        whisperBackground: WhisperBackgroundPreparation.shared,
+        modelBackground: ModelBackgroundPreparation.shared,
         deferPreparationUntilActive: true
     )
 
@@ -94,7 +94,7 @@ final class DictationController {
     /// Test seam for the automatic (no engine chosen) path; nil uses the provider's automatic choice.
     private let transcriberFactory: (() async -> any LocalTranscribing)?
     private let engineProvider: any SpeechEngineProviding
-    private let whisperBackground: (any WhisperPreparationScheduling)?
+    private let modelBackground: (any ModelPreparationScheduling)?
     private var deferredLaunchPreparation: Bool
     private let customVocabularySettings: CustomVocabularySettings
     private let audio: any AudioManaging
@@ -232,7 +232,7 @@ final class DictationController {
         languageSettings: TyprSettings = TyprSettings(),
         engineProvider: (any SpeechEngineProviding)? = nil,
         audioActivationRetryDelays: [Duration] = DictationController.audioActivationRetryDelays,
-        whisperBackground: (any WhisperPreparationScheduling)? = nil,
+        modelBackground: (any ModelPreparationScheduling)? = nil,
         deferPreparationUntilActive: Bool = false
     ) {
         self.audioRetryDelays = audioActivationRetryDelays
@@ -252,7 +252,7 @@ final class DictationController {
         self.transcriber = initialTranscriber
         self.transcriberFactory = transcriberFactory
         self.engineProvider = resolvedProvider
-        self.whisperBackground = whisperBackground
+        self.modelBackground = modelBackground
         self.deferredLaunchPreparation = autoPrepareOnInit && deferPreparationUntilActive
         self.preferredEngine = preferred
         self.customVocabularySettings = customVocabularySettings
@@ -290,7 +290,7 @@ final class DictationController {
         guard phase == .modelRequired, canChangeEngine else { return }
         if let preferred = preferredEngine {
             // An explicit engine prepares at launch only without downloading: Apple Speech (iOS
-            // manages its assets), Parakeet when cached, Whisper when verified on disk.
+            // manages its assets), Parakeet when cached, downloaded engines when verified on disk.
             switch preferred {
             case .appleSpeech:
                 prepareModel()
@@ -404,7 +404,7 @@ final class DictationController {
         case alreadySelected
         /// A dictation is being set up, recorded, transcribed or cleaned up.
         case busy
-        /// Whisper is not downloaded and verified; nothing is downloaded by selecting it.
+        /// A downloaded engine is not downloaded and verified; nothing is downloaded by selecting it.
         case notInstalled
     }
 
@@ -430,7 +430,7 @@ final class DictationController {
     func selectEngine(_ engine: SpeechEngineChoice) -> SpeechEngineSelection {
         guard canChangeEngine else { return .busy }
         guard engine != preferredEngine else { return .alreadySelected }
-        if engine == .whisperLargeV3Turbo, !engineProvider.isInstalled(engine) {
+        if engine.requiresExplicitDownload, !engineProvider.isInstalled(engine) {
             return .notInstalled
         }
         preferredEngine = engine
@@ -559,15 +559,19 @@ final class DictationController {
         preparePendingAppleLanguageIfIdle()
     }
 
-    /// Reopening prepares only an installed, explicitly selected Whisper, never a download or
-    /// a replacement engine. Also used by maintenance: both paths join the same preparation.
-    var needsWhisperPreparation: Bool {
-        preferredEngine == .whisperLargeV3Turbo && engineProvider.isInstalled(.whisperLargeV3Turbo)
-            && !isModelReady && canChangeEngine
+    /// Reopening prepares only an installed, explicitly selected downloaded engine, never a
+    /// download or a replacement engine. Also used by maintenance: both paths join the same preparation.
+    var needsDownloadedModelPreparation: Bool {
+        preferredDownloadedEngineIsInstalled && !isModelReady && canChangeEngine
     }
 
-    func prepareInstalledWhisperIfNeeded() {
-        guard needsWhisperPreparation, phase != .preparingModel else { return }
+    private var preferredDownloadedEngineIsInstalled: Bool {
+        guard let preferredEngine, preferredEngine.requiresExplicitDownload else { return false }
+        return engineProvider.isInstalled(preferredEngine)
+    }
+
+    func prepareInstalledModelIfNeeded() {
+        guard needsDownloadedModelPreparation, phase != .preparingModel else { return }
         prepareModel()
     }
 
@@ -576,32 +580,31 @@ final class DictationController {
             deferredLaunchPreparation = false
             prepareLaunchModel()
         }
-        prepareInstalledWhisperIfNeeded()
+        prepareInstalledModelIfNeeded()
         // A preparation that lost or never got its continued task asks again while active.
-        whisperBackground?.sceneDidBecomeActive()
-        scheduleWhisperMaintenance()
+        modelBackground?.sceneDidBecomeActive()
+        scheduleModelMaintenance()
     }
 
-    private func scheduleWhisperMaintenance() {
-        whisperBackground?.scheduleMaintenance(needed:
-            preferredEngine == .whisperLargeV3Turbo && engineProvider.isInstalled(.whisperLargeV3Turbo))
+    private func scheduleModelMaintenance() {
+        modelBackground?.scheduleMaintenance(needed: preferredDownloadedEngineIsInstalled)
     }
 
-    private func expireWhisperPreparation(generation: UInt64) {
+    private func expireModelPreparation(_ engine: SpeechEngineChoice, generation: UInt64) {
         guard modelPrepGeneration == generation, phase == .preparingModel else { return }
         // Invalidate immediately, but retain the task so a retry waits for any non-interruptible
         // Core ML call to return and release its candidate before allocating another one.
         modelPrepGeneration &+= 1
         preparationTask?.cancel()
         pendingHandoff = nil
-        phase = .failed("Whisper preparation paused. Open Typr or tap Try again to continue. iOS controls background time.")
-        modelPreparation = ModelPreparationProgress(fractionCompleted: nil, detail: "Whisper preparation paused")
+        phase = .failed("\(engine.shortName) preparation paused. Open Typr or tap Try again to continue. iOS controls background time.")
+        modelPreparation = ModelPreparationProgress(fractionCompleted: nil, detail: "\(engine.shortName) preparation paused")
         publishKeyboardSnapshot()
-        scheduleWhisperMaintenance()
+        scheduleModelMaintenance()
     }
 
     func noteSceneDidEnterBackground() {
-        scheduleWhisperMaintenance()
+        scheduleModelMaintenance()
         autoReturnFallbackTask?.cancel()
         autoReturnFallbackTask = nil
         if case .attempting = autoReturnState {
@@ -872,11 +875,12 @@ final class DictationController {
         modelNeedsReload = false
         modelPrepGeneration &+= 1
         let prepGen = modelPrepGeneration
-        whisperBackground?.finish(success: false)
+        modelBackground?.finish(success: false)
         phase = .preparingModel
         copied = false
+        let downloaded = preferredEngine.flatMap { $0.requiresExplicitDownload ? $0 : nil }
         modelPreparation = ModelPreparationProgress(
-            fractionCompleted: preferredEngine == .whisperLargeV3Turbo ? nil : 0,
+            fractionCompleted: downloaded == nil ? 0 : nil,
             detail: "Checking model files"
         )
         let preferred = preferredEngine
@@ -890,17 +894,17 @@ final class DictationController {
         isModelReady = false
         keyboardBridge.setModelInstalled(preferred.map { engineProvider.isInstalled($0) } ?? ParakeetTranscriber.hasCachedModel)
         publishKeyboardSnapshot()
-        if preferred == .whisperLargeV3Turbo {
-            whisperBackground?.begin { [weak self] in
-                self?.expireWhisperPreparation(generation: prepGen)
+        if let downloaded {
+            modelBackground?.begin(downloaded) { [weak self] in
+                self?.expireModelPreparation(downloaded, generation: prepGen)
             }
         }
-        scheduleWhisperMaintenance()
+        scheduleModelMaintenance()
 
         preparationTask = Task {
             defer {
-                if self.modelPrepGeneration == prepGen, preferred == .whisperLargeV3Turbo {
-                    self.whisperBackground?.finish(success: self.isModelReady)
+                if self.modelPrepGeneration == prepGen, downloaded != nil {
+                    self.modelBackground?.finish(success: self.isModelReady)
                 }
             }
             // A superseded preparation finishes (and is dropped) before this one creates a model.
@@ -922,7 +926,7 @@ final class DictationController {
                         guard let self, self.modelPrepGeneration == prepGen else { return }
                         guard self.phase == .preparingModel else { return }
                         self.modelPreparation = progress
-                        if preferred == .whisperLargeV3Turbo { self.whisperBackground?.update(progress) }
+                        if downloaded != nil { self.modelBackground?.update(progress) }
                     }
                 }
                 let candidateLanguageName = await candidate.languageName

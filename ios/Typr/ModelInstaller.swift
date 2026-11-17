@@ -1,26 +1,24 @@
 import Foundation
 import Observation
+import WhisperKit
 
 /// Downloads one pinned file into the Hub cache layout under `root`
-/// (`WhisperModelStore.fileURL(for:)`). Reports that file's own progress, 0...1.
-/// Production: `HubWhisperFileDownloader` (WhisperKit's `HubApiWrapper.snapshot`, exact revision).
-protocol WhisperFileDownloading: Sendable {
+/// (`ModelStore.fileURL(for:)`). Reports that file's own progress, 0...1.
+/// Production: `HubModelFileDownloader` (WhisperKit's `HubApiWrapper.snapshot`, exact revision).
+protocol ModelFileDownloading: Sendable {
     func download(
-        _ file: WhisperModelSpec.PinnedFile,
+        _ file: PinnedModelFile,
         into root: URL,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws
 }
 
-/// Parses the downloaded tokenizer locally (no network) and resolves Whisper's special tokens.
-/// Production: `WhisperKitTokenizerChecker` (`TyprWhisperTokenizer.load(from:)`).
-protocol WhisperTokenizerChecking: Sendable {
-    func check(tokenizerFolder: URL) async throws
-}
+/// A local check of downloaded files that found them damaged; its text is shown as is.
+protocol ModelFileCheckError: LocalizedError {}
 
 /// Byte-weighted download progress over every pinned file (WhisperKit's own progress weighs each
 /// file equally, which is wrong for one 422 MB file among small ones).
-nonisolated struct WhisperDownloadProgress: Equatable, Sendable {
+nonisolated struct ModelDownloadProgress: Equatable, Sendable {
     let completedBytes: Int64
     let totalBytes: Int64
 
@@ -34,18 +32,18 @@ nonisolated struct WhisperDownloadProgress: Equatable, Sendable {
         currentFileBytes: Int64,
         currentFileFraction: Double,
         totalBytes: Int64
-    ) -> WhisperDownloadProgress {
+    ) -> ModelDownloadProgress {
         let clamped = min(1, max(0, currentFileFraction.isFinite ? currentFileFraction : 0))
         let partial = Int64((Double(currentFileBytes) * clamped).rounded(.down))
-        return WhisperDownloadProgress(completedBytes: min(totalBytes, finishedBytes + partial), totalBytes: totalBytes)
+        return ModelDownloadProgress(completedBytes: min(totalBytes, finishedBytes + partial), totalBytes: totalBytes)
     }
 }
 
-nonisolated enum WhisperInstallState: Equatable, Sendable {
+nonisolated enum ModelInstallState: Equatable, Sendable {
     /// No complete, verified model on this iPhone (never selectable).
     case notInstalled
-    case downloading(WhisperDownloadProgress)
-    /// Checking every file's exact size and parsing the tokenizer locally.
+    case downloading(ModelDownloadProgress)
+    /// Checking every file's exact size and parsing the checked files locally.
     case verifying
     /// Marker written after verification: selectable.
     case installed
@@ -54,53 +52,57 @@ nonisolated enum WhisperInstallState: Equatable, Sendable {
     case failed(String)
 }
 
-nonisolated enum WhisperInstallError: LocalizedError, Equatable {
-    case insufficientStorage(needed: Int64, available: Int64)
-    case sizeMismatch(path: String, expected: Int64, actual: Int64?)
+nonisolated enum ModelInstallError: LocalizedError, Equatable {
+    case insufficientStorage(model: String, needed: Int64, available: Int64)
+    case sizeMismatch(model: String, path: String, expected: Int64, actual: Int64?)
 
     var errorDescription: String? {
         switch self {
-        case .insufficientStorage(let needed, let available):
+        case .insufficientStorage(let model, let needed, let available):
             let format = { (bytes: Int64) in ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
-            return "Not enough free storage: Whisper needs \(format(needed)), \(format(available)) is free."
-        case .sizeMismatch(let path, let expected, let actual):
+            return "Not enough free storage: \(model) needs \(format(needed)), \(format(available)) is free."
+        case .sizeMismatch(let model, let path, let expected, let actual):
             let found = actual.map { "\($0) bytes" } ?? "no file"
-            return "A Whisper model file is incomplete (\((path as NSString).lastPathComponent): expected \(expected) bytes, found \(found))."
+            return "A \(model) model file is incomplete (\((path as NSString).lastPathComponent): expected \(expected) bytes, found \(found))."
         }
     }
 }
 
-/// The only way Whisper reaches this iPhone: an explicit Download tap. Never called from launch,
-/// preparation, keyboard handoff, intents or engine selection. One download at a time: a second
-/// `install()` joins the running one; Retry after Cancel waits for the cancelled one to stop.
-/// The current speech engine is untouched while downloading.
+/// What the Speech engine section needs from any downloadable engine's installer.
+@MainActor
+protocol ModelInstalling: AnyObject {
+    var state: ModelInstallState { get }
+    func refresh()
+    @discardableResult func install() -> Task<Void, Never>
+    func cancel()
+}
+
+/// The only way a downloadable model reaches this iPhone: an explicit Download tap. Never called
+/// from launch, preparation, keyboard handoff, intents or engine selection. One download at a time:
+/// a second `install()` joins the running one; Retry after Cancel waits for the cancelled one to
+/// stop. The current speech engine is untouched while downloading.
 @MainActor
 @Observable
-final class WhisperModelInstaller {
-    static let shared = WhisperModelInstaller(
-        store: .production,
-        downloader: HubWhisperFileDownloader(),
-        tokenizerChecker: WhisperKitTokenizerChecker()
-    )
-
-    let store: WhisperModelStore
-    private let downloader: any WhisperFileDownloading
-    private let tokenizerChecker: any WhisperTokenizerChecking
+final class ModelInstaller<Spec: DownloadableModelSpec>: ModelInstalling {
+    let store: ModelStore<Spec>
+    private let downloader: any ModelFileDownloading
+    /// Parses `Spec.checkedFiles` locally; throws when they are damaged.
+    private let checkFiles: @Sendable () async throws -> Void
     private let availableCapacity: () -> Int64?
 
-    private(set) var state: WhisperInstallState = .notInstalled
+    private(set) var state: ModelInstallState = .notInstalled
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var generation: UInt64 = 0
 
     init(
-        store: WhisperModelStore,
-        downloader: any WhisperFileDownloading,
-        tokenizerChecker: any WhisperTokenizerChecking,
+        store: ModelStore<Spec>,
+        downloader: any ModelFileDownloading,
+        checkFiles: @escaping @Sendable () async throws -> Void,
         availableCapacity: (() -> Int64?)? = nil
     ) {
         self.store = store
         self.downloader = downloader
-        self.tokenizerChecker = tokenizerChecker
+        self.checkFiles = checkFiles
         self.availableCapacity = availableCapacity ?? { store.availableCapacity() }
         refresh()
     }
@@ -134,7 +136,7 @@ final class WhisperModelInstaller {
         let current = generation
         let previous = task
         previous?.cancel()
-        // Check local files before showing download bytes: a corrupt tokenizer may need repair,
+        // Check local files before showing download bytes: a corrupt checked file may need repair,
         // so counting its same-sized files now would start at 100% then move backwards.
         state = .verifying
         let task = Task { [weak self] in
@@ -160,17 +162,17 @@ final class WhisperModelInstaller {
             guard generation == current else { return }
             try store.prepareRoot()
             // Never leave an old marker advertising a valid install during verification/repair.
-            // A same-sized damaged tokenizer cannot be caught by byte counts or Hub metadata.
+            // A same-sized damaged checked file cannot be caught by byte counts or Hub metadata.
             store.removeMarker()
-            if store.invalidFiles(WhisperModelSpec.tokenizerFiles).isEmpty {
+            if store.invalidFiles(Spec.checkedFiles).isEmpty {
                 do {
-                    try await tokenizerChecker.check(tokenizerFolder: store.tokenizerFolder)
+                    try await checkFiles()
                 } catch {
                     try Task.checkCancellation()
                     guard generation == current else { return }
-                    // This is an explicit Download/Retry action: repair only the tokenizer,
+                    // This is an explicit Download/Retry action: repair only the checked files,
                     // keeping the large, complete model. No preparation path downloads anything.
-                    for file in WhisperModelSpec.tokenizerFiles {
+                    for file in Spec.checkedFiles {
                         try FileManager.default.removeItem(at: store.fileURL(for: file))
                     }
                 }
@@ -178,14 +180,14 @@ final class WhisperModelInstaller {
             try Task.checkCancellation()
             guard generation == current else { return }
             let missing = store.invalidFiles()
-            let needed = missing.reduce(Int64(0)) { $0 + $1.bytes } + WhisperModelSpec.storageHeadroomBytes
+            let needed = missing.reduce(Int64(0)) { $0 + $1.bytes } + Spec.storageHeadroomBytes
             if !missing.isEmpty, let available = availableCapacity(), available < needed {
-                throw WhisperInstallError.insufficientStorage(needed: needed, available: available)
+                throw ModelInstallError.insufficientStorage(model: Spec.engine.shortName, needed: needed, available: available)
             }
 
-            let total = WhisperModelSpec.totalBytes
-            var finished = WhisperModelSpec.allFiles.filter { !missing.contains($0) }.reduce(Int64(0)) { $0 + $1.bytes }
-            state = .downloading(WhisperDownloadProgress(completedBytes: finished, totalBytes: total))
+            let total = Spec.totalBytes
+            var finished = Spec.allFiles.filter { !missing.contains($0) }.reduce(Int64(0)) { $0 + $1.bytes }
+            state = .downloading(ModelDownloadProgress(completedBytes: finished, totalBytes: total))
             for file in missing {
                 try Task.checkCancellation()
                 let base = finished
@@ -196,7 +198,7 @@ final class WhisperModelInstaller {
                     try FileManager.default.removeItem(at: destination)
                 }
                 try await downloader.download(file, into: store.root) { [weak self] fraction in
-                    let progress = WhisperDownloadProgress.weighted(
+                    let progress = ModelDownloadProgress.weighted(
                         finishedBytes: base, currentFileBytes: file.bytes,
                         currentFileFraction: fraction, totalBytes: total)
                     Task { @MainActor [weak self] in
@@ -210,19 +212,21 @@ final class WhisperModelInstaller {
                 try Task.checkCancellation()
                 let size = store.size(of: file)
                 guard size == file.bytes else {
-                    throw WhisperInstallError.sizeMismatch(path: file.path, expected: file.bytes, actual: size)
+                    throw ModelInstallError.sizeMismatch(model: Spec.engine.shortName, path: file.path,
+                                                         expected: file.bytes, actual: size)
                 }
                 finished += file.bytes
                 guard generation == current else { return }
-                state = .downloading(WhisperDownloadProgress(completedBytes: finished, totalBytes: total))
+                state = .downloading(ModelDownloadProgress(completedBytes: finished, totalBytes: total))
             }
 
             guard generation == current else { return }
             state = .verifying
             if let invalid = store.invalidFiles().first {
-                throw WhisperInstallError.sizeMismatch(path: invalid.path, expected: invalid.bytes, actual: store.size(of: invalid))
+                throw ModelInstallError.sizeMismatch(model: Spec.engine.shortName, path: invalid.path,
+                                                     expected: invalid.bytes, actual: store.size(of: invalid))
             }
-            try await tokenizerChecker.check(tokenizerFolder: store.tokenizerFolder)
+            try await checkFiles()
             try Task.checkCancellation()
             guard generation == current else { return }
             try store.writeMarker()
@@ -246,12 +250,56 @@ final class WhisperModelInstaller {
             return "No internet connection. Connect and tap Retry."
         }
         let text = error.localizedDescription
-        if error is WhisperInstallError || error is WhisperTokenizerError {
+        if error is ModelInstallError || error is any ModelFileCheckError {
             return text
         }
         if text.localizedCaseInsensitiveContains("not available locally") || text.localizedCaseInsensitiveContains("offline") {
             return "No internet connection. Connect and tap Retry."
         }
         return "Download failed: \(text) Tap Retry to start again."
+    }
+}
+
+/// Production downloader: one exact file at the pinned revision through WhisperKit's Hub client,
+/// into Typr's Application Support root. Cancelling the task throws `CancellationError`.
+struct HubModelFileDownloader: ModelFileDownloading {
+    func download(
+        _ file: PinnedModelFile,
+        into root: URL,
+        progress: @escaping @Sendable (Double) -> Void
+    ) async throws {
+        let hub = HubApiWrapper(downloadBase: root)
+        _ = try await hub.snapshot(
+            from: HubApiWrapper.Repo(id: file.repo),
+            revision: file.revision,
+            matching: [file.path]
+        ) { value in
+            progress(value.fractionCompleted)
+        }
+    }
+}
+
+/// The installers of every engine that downloads only through its Download button.
+@MainActor
+enum DownloadableModels {
+    static let whisper = WhisperModelInstaller(
+        store: .production,
+        downloader: HubModelFileDownloader(),
+        tokenizerChecker: WhisperKitTokenizerChecker()
+    )
+
+    static func installer(for engine: SpeechEngineChoice) -> (any ModelInstalling)? {
+        switch engine {
+        case .whisperLargeV3Turbo: whisper
+        case .appleSpeech, .parakeetV2: nil
+        }
+    }
+
+    /// The Download button's size, nil for engines without one.
+    nonisolated static func downloadSizeLabel(for engine: SpeechEngineChoice) -> String? {
+        switch engine {
+        case .whisperLargeV3Turbo: WhisperModelSpec.downloadSizeLabel
+        case .appleSpeech, .parakeetV2: nil
+        }
     }
 }
