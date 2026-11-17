@@ -358,7 +358,7 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
     }
 
     func testBoundaryQueuesPredictionsWithoutWaitingAndPreservesImmediateUndo() async throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let gate = Gate()
         let worker = KeyboardSuggestionWorker(rank: { await gate.rank($0) })
         let (engine, target, _) = keyboard(worker: worker, context: .init(model: model))

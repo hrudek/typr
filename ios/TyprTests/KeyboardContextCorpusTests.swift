@@ -9,7 +9,7 @@ final class KeyboardContextCorpusTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.main.url(
             forResource: "context-heldout-r2", withExtension: "json", subdirectory: "WordData"))
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         // Pin quality as deterministic integer hits, not wall-clock thresholds.
         let expected: [String: (pairs: Int, hit1: Int, hit3: Int)] = [
             "de_news": (701, 52, 95), "de_opus": (434, 41, 74),
@@ -65,7 +65,7 @@ final class KeyboardContextCorpusTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.main.url(
             forResource: "context-heldout-r2", withExtension: "json", subdirectory: "WordData"))
         let fixture = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         for source in ["news", "wiki", "opus"] {
             let de = try XCTUnwrap(fixture.sentences["de_" + source])
             let en = try XCTUnwrap(fixture.sentences["en_" + source])
@@ -100,7 +100,7 @@ final class KeyboardContextCorpusTests: XCTestCase {
     }
 
     func testCompiledPackDeterministicLoadWork() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let de = try XCTUnwrap(model.de)
         let en = try XCTUnwrap(model.en)
         XCTAssertEqual(de.wordCount, 8_001)

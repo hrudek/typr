@@ -150,12 +150,7 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
     }
 
     private func decoder(usesLegacySearch: Bool = false) throws -> SpatialWordDecoder {
-        var sources: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return SpatialWordDecoder(lexicons: sources, usesLegacySearch: usesLegacySearch)
+        SpatialWordDecoder(lexicons: try XCTUnwrap(BundledKeyboardData.lexicons), usesLegacySearch: usesLegacySearch)
     }
 
     // MARK: - Metrics

@@ -28,13 +28,7 @@ final class KeyboardSuggestionEvaluationTests: XCTestCase {
     private let engineID = UUID()
 
     private func resources() throws -> [Decoder.Language: SpatialWordLexicon] {
-        var sources: [Decoder.Language: SpatialWordLexicon] = [:]
-        for language in Decoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return sources
+        try XCTUnwrap(BundledKeyboardData.lexicons)
     }
 
     private func engine(_ sources: [Decoder.Language: SpatialWordLexicon], languages: Set<Decoder.Language>,

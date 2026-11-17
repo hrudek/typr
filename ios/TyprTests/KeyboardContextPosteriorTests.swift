@@ -4,7 +4,7 @@ import XCTest
 
 final class KeyboardContextPosteriorTests: XCTestCase {
     func testSentencePosteriorSwitchesAndFiniteBounds() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var state = KeyboardContextModel.State()
         for _ in 0..<100 { state.consume("habe", model: model) }
         XCTAssertGreaterThan(state.weightDE, 0.9)
@@ -27,7 +27,7 @@ final class KeyboardContextPosteriorTests: XCTestCase {
     }
 
     func testCuesAndSentenceReset() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var noun = KeyboardContextModel.State(), lower = KeyboardContextModel.State()
         noun.consume("das", model: model); lower.consume("das", model: model)
         noun.consume("Haus", model: model); lower.consume("haus", model: model)
@@ -52,7 +52,7 @@ final class KeyboardContextPosteriorTests: XCTestCase {
     }
 
     func testWindowEvictionRetokenizationAndCurrentWordExclusion() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var first = KeyboardContextModel.State(), second = KeyboardContextModel.State()
         first.consume("habe", model: model); second.consume("with", model: model)
         for _ in 0..<9 { first.consume("qzx", model: model); second.consume("qzx", model: model) }
@@ -67,7 +67,7 @@ final class KeyboardContextPosteriorTests: XCTestCase {
 
     @MainActor
     func testRecentUsagePriorRoundTripDeletionAndReset() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let suite = "R2-4.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -92,7 +92,7 @@ final class KeyboardContextPosteriorTests: XCTestCase {
     }
 
     func testUsageRecencyCountCapAndDeterministicTies() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let date = Date(timeIntervalSince1970: 100)
         let low: [String: PersonalTypingModel.WordCount] = ["habe": .init(count: 4, lastUpdated: date)]
         let high: [String: PersonalTypingModel.WordCount] = ["habe": .init(count: 10_000, lastUpdated: date)]
@@ -110,7 +110,7 @@ final class KeyboardContextPosteriorTests: XCTestCase {
 
     @MainActor
     func testEnginePriorCacheLearningOffAndFullAccessGating() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let suite = "R2-4.gating.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

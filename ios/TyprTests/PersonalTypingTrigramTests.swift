@@ -30,7 +30,7 @@ final class PersonalTypingTrigramTests: XCTestCase {
         XCTAssertEqual(personal.select(after: "project", earlier: "your"), .init(context: "project", lookups: 2))
         XCTAssertEqual(personal.select(after: "missing", earlier: "our"), .init(context: nil, lookups: 2))
         XCTAssertEqual(personal.select(after: nil, earlier: nil).lookups, 0)
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         XCTAssertEqual(model.context(before: "our project ", currentToken: nil).earlier, "our")
         for prefix in ["our. project ", "our\nproject ", "our 123 project ", "our https://x project "] {
             XCTAssertNil(model.context(before: prefix, currentToken: nil).earlier, prefix)
@@ -57,7 +57,7 @@ final class PersonalTypingTrigramTests: XCTestCase {
     /// Default-run replacement for the research-only learning sweep. All four phrases share
     /// their middle word, so only the earlier word can select each target.
     func testSettledCompletionAndPredictionTeachTrigramCountsAndEarlierContext() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let phrases = try XCTUnwrap(PersonalTrigramPhraseFixtures.phrases["de"])
         let middle = phrases[0][1]
         let repetitions = PersonalBigramModel.novelFollowerMinimum
@@ -87,7 +87,7 @@ final class PersonalTypingTrigramTests: XCTestCase {
     }
 
     func testTrigramNextWordAndRerankWithBigramFallback() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var personal = PersonalBigramModel()
         for _ in 0..<12 { personal.record("garden", after: "project") }
         for _ in 0..<8 { personal.record("keyboard", after: "project", earlier: "our") }
@@ -111,7 +111,7 @@ final class PersonalTypingTrigramTests: XCTestCase {
             func guesses(for word: String) -> [String] { [] }
             func completions(for prefix: String) -> [String] { [] }
         }
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let controls = ["Lena", "Donaudampfschiff", "WeChat", "camelCase", "meeting", "tasche",
                         "mittwoch", "updated", "reviewer", "standard", "tastaturen", "kollegen"]
         var queries = 0, unwanted = 0, differences = 0

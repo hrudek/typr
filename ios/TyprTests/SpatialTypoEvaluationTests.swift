@@ -73,12 +73,7 @@ final class SpatialTypoEvaluationTests: XCTestCase {
     }
 
     private func evaluate(seed: UInt64, sigma: Double, half: Int) throws {
-        var sources: [Decoder.Language: SpatialWordLexicon] = [:]
-        for language in Decoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
+        let sources = try XCTUnwrap(BundledKeyboardData.lexicons)
         let decoder = Decoder(lexicons: sources)
         let germanWords: [String] = SpatialTypoEvaluationFixtures.german
         let englishWords: [String] = SpatialTypoEvaluationFixtures.english

@@ -19,15 +19,7 @@ final class KeyboardKeyMapTests: XCTestCase {
         func completions(for prefix: String) -> [String] { calls += 1; return [] }
     }
 
-    private func resources() throws -> [Language: SpatialWordLexicon] {
-        var result: [Language: SpatialWordLexicon] = [:]
-        for language in Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                                                    withExtension: "words", subdirectory: "WordData"))
-            result[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return result
-    }
+    private func resources() throws -> [Language: SpatialWordLexicon] { try XCTUnwrap(BundledKeyboardData.lexicons) }
 
     private func calibration(_ offset: Double = 0.4) -> SpatialTouchCalibration {
         var keys: [Character: SpatialTouchCalibration.Key] = [:]

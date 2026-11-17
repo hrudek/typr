@@ -272,7 +272,7 @@ final class PersonalTypingBigramTests: XCTestCase {
     }
 
     func testDiscountedBackoffAndPersonalTopThreeAgainstExhaustiveUnion() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var personal = PersonalBigramModel()
         for _ in 0..<12 { personal.record("swift", after: "ich") }
         for _ in 0..<3 { personal.record("coffee", after: "ich") }
@@ -434,7 +434,7 @@ final class PersonalTypingBigramTests: XCTestCase {
             XCTAssertEqual(engine.autocorrect.learning.personalBigrams.pairCount, 0, "Prediction picks teach no pair")
         }
         // Published chips already show the capitalization they insert (real corpus, personal follower).
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let session = KeyboardLearningSession()
         for _ in 0..<4 { session.model.recordPair("tastatur", after: "meine") }
         for (text, sentences) in [("Das ist meine ", true), ("das ist meine ", false)] {

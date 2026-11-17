@@ -78,7 +78,7 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
 
     /// Recall@1/@3 and MRR@3 of the personal follower after 0, 1, 2, 4 and 8 typed repetitions.
     func testPersonalNextWordRecallGrowsWithRepeatedTrustedSessions() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         var times: [Double] = []
         for (name, pairs) in Self.fixtures {
             let session = KeyboardLearningSession()
@@ -112,7 +112,7 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
     /// Public CC0 held-out sentences: corpus-only versus a bilingual user's trained personal layer.
     /// Shared contexts (e.g. `das`, `the`) can be overridden by design; the bound states the cost.
     func testHeldoutCorpusPredictionsStayCloseWithPersonalPairs() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let url = try XCTUnwrap(Bundle.main.url(forResource: "context-heldout-cc0", withExtension: "json", subdirectory: "WordData"))
         struct Fixture: Decodable { let sentences: [String: [[String]]] }
         let sentences = try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url)).sentences
@@ -150,12 +150,8 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
     /// full words (spatial alternatives). Variants: corpus-only, personal pairs, learning off
     /// with retained pairs. Automatic decisions must be identical in all three.
     func testNoisyTouchRankingWithPersonalPairsAndNoAddedAutomaticChanges() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
-        var lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)", withExtension: "words", subdirectory: "WordData"))
-            lexicons[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url, options: .mappedIfSafe)))
-        }
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
         let decoder = SpatialWordDecoder(lexicons: lexicons)
         let grid = KeyboardLayout(width: 393, orientation: .portrait, layer: .letters, field: .text, showsGlobe: false, showsStrip: true)
         let controls = ["Lena", "Donaudampfschiff", "WeChat", "camelCase", "meeting", "tasche", "mittwoch", "updated",
@@ -233,7 +229,7 @@ final class PersonalTypingBigramEvaluationTests: XCTestCase {
     /// Deterministic event-count ageing: unused pairs fade under unrelated traffic, a phrase
     /// still in use survives, and the caps hold throughout.
     func testAgeingForgetsUnusedPairsAndKeepsUsedOnes() throws {
-        let model = try XCTUnwrap(KeyboardContextModelTests.model)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let pairs = try XCTUnwrap(Self.fixtures.first { $0.name == "de" }).pairs
         var personal = PersonalBigramModel()
         for _ in 0..<8 { for (h, w) in pairs { personal.record(w, after: h) } }

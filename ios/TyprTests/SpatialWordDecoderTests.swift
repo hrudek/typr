@@ -570,13 +570,7 @@ final class SpatialWordDecoderTests: XCTestCase {
     }
 
     private func bundledDecoder() throws -> SpatialWordDecoder {
-        var sources: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
-        return SpatialWordDecoder(lexicons: sources)
+        SpatialWordDecoder(lexicons: try XCTUnwrap(BundledKeyboardData.lexicons))
     }
 
     func testFixedPublicWordFixturesWithBundledData() throws {
@@ -740,12 +734,7 @@ final class SpatialWordDecoderTests: XCTestCase {
     }
 
     func testTwoThousandCountedDictionaryWordsHaveIdenticalColdAndCachedResults() throws {
-        var sources: [SpatialWordDecoder.Language: SpatialWordLexicon] = [:]
-        for language in SpatialWordDecoder.Language.allCases {
-            let url = try XCTUnwrap(Bundle.main.url(forResource: "keyboard-\(language.rawValue)",
-                withExtension: "words", subdirectory: "WordData"))
-            sources[language] = try XCTUnwrap(SpatialWordLexicon(data: Data(contentsOf: url)))
-        }
+        let sources = try XCTUnwrap(BundledKeyboardData.lexicons)
         let english = try XCTUnwrap(sources[.english])
         var words: [String] = []
         func collect(_ index: Int, _ prefix: String) throws {
