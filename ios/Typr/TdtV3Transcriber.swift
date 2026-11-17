@@ -299,8 +299,6 @@ actor TdtV3Transcriber<Spec: TdtV3ModelSpec>: LocalTranscribing {
             return manager
         } catch is CancellationError {
             throw CancellationError()
-        } catch let error as TranscriberError {
-            throw error
         } catch {
             // Resource denial (including background Core ML restrictions) is not evidence of
             // corrupt downloaded files. Do not tell the person to download the model again.
