@@ -4,7 +4,7 @@ import XCTest
 
 nonisolated enum ParakeetV3TestFiles {
     // JSON allows trailing whitespace, so padding keeps the vocabulary parseable at its pinned size.
-    static func vocabulary(count: Int = ParakeetV3ModelSpec.vocabularySize) throws -> Data {
+    static func vocabulary(count: Int = TdtV3Vocabulary.size) throws -> Data {
         let tokens = Dictionary(uniqueKeysWithValues: (0..<count).map { (String($0), "t\($0)") })
         var data = try JSONEncoder().encode(tokens)
         let pinned = Int(ParakeetV3ModelSpec.vocabularyFile.bytes)
@@ -63,7 +63,7 @@ private final class FakeParakeetV3Downloader: ModelFileDownloading, @unchecked S
     }
 }
 
-private final class ParakeetV3ProgressLog: @unchecked Sendable {
+final class PreparationProgressLog: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [ModelPreparationProgress] = []
     var values: [ModelPreparationProgress] { lock.withLock { recorded } }
@@ -102,9 +102,9 @@ final class ParakeetV3Tests: XCTestCase {
         XCTAssertEqual(ParakeetV3ModelSpec.allFiles.first, ParakeetV3ModelSpec.vocabularyFile, "vocabulary first")
         XCTAssertEqual(ParakeetV3ModelSpec.checkedFiles, [ParakeetV3ModelSpec.vocabularyFile])
         let folders = Set(ParakeetV3ModelSpec.modelFiles.compactMap { $0.path.split(separator: "/").first.map(String.init) })
-        XCTAssertEqual(folders, Set(ParakeetV3PreparationComponent.allCases.map { "\($0.rawValue).mlmodelc" }))
-        XCTAssertEqual(ParakeetV3ModelSpec.preprocessorComputeUnits, .cpuOnly)
-        XCTAssertEqual(ParakeetV3ModelSpec.modelComputeUnits, .cpuAndNeuralEngine, "no GPU: background preparation")
+        XCTAssertEqual(folders, Set(TdtV3PreparationComponent.allCases.map { "\($0.rawValue).mlmodelc" }))
+        XCTAssertEqual(TdtV3PreparationComponent.preprocessor.computeUnits, .cpuOnly)
+        XCTAssertEqual(TdtV3PreparationComponent.modelComputeUnits, .cpuAndNeuralEngine, "no GPU: background preparation")
     }
 
     func testStoreIsSeparateFromWhisperAndExcludedFromBackup() throws {
@@ -143,18 +143,18 @@ final class ParakeetV3Tests: XCTestCase {
         let url = store.vocabularyURL
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try ParakeetV3TestFiles.vocabulary().write(to: url)
-        let vocabulary = try ParakeetV3Vocabulary.load(from: url)
-        XCTAssertEqual(vocabulary.count, ParakeetV3ModelSpec.vocabularySize)
+        let vocabulary = try TdtV3Vocabulary.load(from: url, for: .parakeetV3)
+        XCTAssertEqual(vocabulary.count, TdtV3Vocabulary.size)
         XCTAssertEqual(vocabulary[8_191], "t8191")
 
         try ParakeetV3TestFiles.vocabulary(count: 8_000).write(to: url)
-        XCTAssertThrowsError(try ParakeetV3Vocabulary.load(from: url)) {
-            XCTAssertEqual($0 as? ParakeetV3VocabularyError, .damaged)
+        XCTAssertThrowsError(try TdtV3Vocabulary.load(from: url, for: .parakeetV3)) {
+            XCTAssertEqual($0 as? TdtV3VocabularyError, TdtV3VocabularyError(engine: .parakeetV3))
         }
         try WhisperTestFiles.writeSparse(url, bytes: ParakeetV3ModelSpec.vocabularyFile.bytes)
-        XCTAssertThrowsError(try ParakeetV3Vocabulary.load(from: url), "zero bytes of the right size are damaged")
+        XCTAssertThrowsError(try TdtV3Vocabulary.load(from: url, for: .parakeetV3), "zero bytes of the right size are damaged")
         try FileManager.default.removeItem(at: url)
-        XCTAssertThrowsError(try ParakeetV3Vocabulary.load(from: url))
+        XCTAssertThrowsError(try TdtV3Vocabulary.load(from: url, for: .parakeetV3))
     }
 
     func testDownloadFetchesEveryFileInOrderReportsBytesAndVerifiesBeforeInstalled() async throws {
@@ -258,7 +258,7 @@ final class ParakeetV3Tests: XCTestCase {
     func testPreparationStopsBeforeModelWorkWithoutOptimizationStorage() async throws {
         let store = makeStore()
         try ParakeetV3TestFiles.populate(store, marker: true)
-        let log = ParakeetV3ProgressLog()
+        let log = PreparationProgressLog()
         let free: Int64 = 300_000_000
         let transcriber = ParakeetV3Transcriber(store: store, language: .german,
                                                 availableCapacity: { free }, environment: "env")
@@ -291,7 +291,7 @@ final class ParakeetV3Tests: XCTestCase {
     func testSparseModelsFailAsPreparationWithoutDownloadAdviceAndClearTheInProgressMark() async throws {
         let store = makeStore()
         try ParakeetV3TestFiles.populate(store, marker: true)
-        let log = ParakeetV3ProgressLog()
+        let log = PreparationProgressLog()
         let transcriber = ParakeetV3Transcriber(store: store, language: .english,
                                                 availableCapacity: { .max }, environment: "env")
         do {
@@ -306,21 +306,21 @@ final class ParakeetV3Tests: XCTestCase {
     }
 
     func testComponentsLoadInOrderWithMilestonesAndStopAtTheFirstFailure() async throws {
-        let log = ParakeetV3ProgressLog()
-        var loaded: [ParakeetV3PreparationComponent] = []
-        _ = try await ParakeetV3PreparationComponent.prepare(optimizing: true, progressHandler: { log.append($0) }) {
+        let log = PreparationProgressLog()
+        var loaded: [TdtV3PreparationComponent] = []
+        _ = try await TdtV3PreparationComponent.prepare(engine: .parakeetV3, optimizing: true, progressHandler: { log.append($0) }) {
             loaded.append($0)
         }
         XCTAssertEqual(loaded, [.preprocessor, .decoder, .joint, .encoder])
         XCTAssertEqual(log.values.map { $0.stageProgress?.completed }, [0, 1, 2, 3])
         XCTAssertTrue(log.values.allSatisfy { $0.stageProgress?.total == ModelPreparationProgress.milestoneCount })
         XCTAssertTrue(log.values.allSatisfy { $0.fractionCompleted == nil })
-        XCTAssertEqual(ParakeetV3PreparationComponent.encoder.progress(optimizing: false).detail,
+        XCTAssertEqual(TdtV3PreparationComponent.encoder.progress(engine: .parakeetV3, optimizing: false).detail,
                        "Loading Parakeet V3 audio encoder · Step 4 of 4")
 
         loaded = []
         do {
-            _ = try await ParakeetV3PreparationComponent.prepare(optimizing: false, progressHandler: { _ in }) {
+            _ = try await TdtV3PreparationComponent.prepare(engine: .parakeetV3, optimizing: false, progressHandler: { _ in }) {
                 loaded.append($0)
                 if $0 == .decoder { throw FakeParakeetV3Failure() }
             }

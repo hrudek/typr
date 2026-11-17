@@ -32,9 +32,16 @@ protocol DownloadableModelSpec: Sendable {
     static var optimizationStorageBytes: Int64 { get }
     /// Core ML specializes again for another model revision.
     static var modelRevision: String { get }
+    /// Whether everything the engine loads is on disk; with the marker, the model is installed.
+    static func filesComplete(in store: ModelStore<Self>) -> Bool
 }
 
 extension DownloadableModelSpec {
+    /// Every pinned file at its exact size.
+    static func filesComplete(in store: ModelStore<Self>) -> Bool {
+        store.invalidFiles().isEmpty
+    }
+
     /// Approximate download size for the UI.
     static var downloadSizeLabel: String {
         ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
@@ -49,9 +56,10 @@ extension DownloadableModelSpec {
 ///     root/<Spec.markerFileName>      (the marker)
 ///     root/<Spec.preparationFileName> (the last preparation, see `ModelPreparationRecord`)
 ///
-/// Installed means the marker matches the pinned spec AND every pinned file exists with its exact
-/// size. A partial or invalid folder is never installed and never selectable. Typr never deletes
-/// the model (Delete is out of scope); a failed or cancelled download leaves its files for Retry.
+/// Installed means the marker matches the pinned spec AND `Spec.filesComplete` (by default every
+/// pinned file exists with its exact size). A partial or invalid folder is never installed and
+/// never selectable. Only Delete removes the model (the whole `root`); a failed or cancelled
+/// download leaves its files for Retry.
 nonisolated struct ModelStore<Spec: DownloadableModelSpec>: Sendable {
     typealias Marker = Spec.Marker
     static var markerFileName: String { Spec.markerFileName }
@@ -102,7 +110,7 @@ nonisolated struct ModelStore<Spec: DownloadableModelSpec>: Sendable {
     }
 
     var filesComplete: Bool {
-        invalidFiles().isEmpty
+        Spec.filesComplete(in: self)
     }
 
     /// Bytes of pinned files already present with their exact size.
@@ -116,7 +124,7 @@ nonisolated struct ModelStore<Spec: DownloadableModelSpec>: Sendable {
         return marker == Spec.marker
     }
 
-    /// Marker plus every pinned file at its exact size. Checked at launch and before every prepare.
+    /// Marker plus complete files. Checked at launch and before every prepare.
     var isInstalled: Bool {
         hasMarker && filesComplete
     }

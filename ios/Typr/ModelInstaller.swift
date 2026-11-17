@@ -88,6 +88,7 @@ final class ModelInstaller<Spec: DownloadableModelSpec>: ModelInstalling {
     private let downloader: any ModelFileDownloading
     /// Parses `Spec.checkedFiles` locally; throws when they are damaged.
     private let checkFiles: @Sendable () async throws -> Void
+    private let unpack: (@Sendable () async throws -> Void)?
     private let availableCapacity: () -> Int64?
 
     private(set) var state: ModelInstallState = .notInstalled
@@ -98,11 +99,13 @@ final class ModelInstaller<Spec: DownloadableModelSpec>: ModelInstalling {
         store: ModelStore<Spec>,
         downloader: any ModelFileDownloading,
         checkFiles: @escaping @Sendable () async throws -> Void,
+        unpack: (@Sendable () async throws -> Void)? = nil,
         availableCapacity: (() -> Int64?)? = nil
     ) {
         self.store = store
         self.downloader = downloader
         self.checkFiles = checkFiles
+        self.unpack = unpack
         self.availableCapacity = availableCapacity ?? { store.availableCapacity() }
         refresh()
     }
@@ -181,7 +184,7 @@ final class ModelInstaller<Spec: DownloadableModelSpec>: ModelInstalling {
             guard generation == current else { return }
             let missing = store.invalidFiles()
             let needed = missing.reduce(Int64(0)) { $0 + $1.bytes } + Spec.storageHeadroomBytes
-            if !missing.isEmpty, let available = availableCapacity(), available < needed {
+            if !missing.isEmpty || unpack != nil, let available = availableCapacity(), available < needed {
                 throw ModelInstallError.insufficientStorage(model: Spec.engine.shortName, needed: needed, available: available)
             }
 
@@ -226,6 +229,9 @@ final class ModelInstaller<Spec: DownloadableModelSpec>: ModelInstalling {
                 throw ModelInstallError.sizeMismatch(model: Spec.engine.shortName, path: invalid.path,
                                                      expected: invalid.bytes, actual: store.size(of: invalid))
             }
+            try await unpack?()
+            try Task.checkCancellation()
+            guard generation == current else { return }
             try await checkFiles()
             try Task.checkCancellation()
             guard generation == current else { return }
@@ -288,11 +294,13 @@ enum DownloadableModels {
         tokenizerChecker: WhisperKitTokenizerChecker()
     )
     static let parakeetV3 = ParakeetV3ModelInstaller(store: .production, downloader: HubModelFileDownloader())
+    static let orukeet = OrukeetModelInstaller(store: .production, downloader: HubModelFileDownloader())
 
     static func installer(for engine: SpeechEngineChoice) -> (any ModelInstalling)? {
         switch engine {
         case .whisperLargeV3Turbo: whisper
         case .parakeetV3: parakeetV3
+        case .orukeet: orukeet
         case .appleSpeech, .parakeetV2: nil
         }
     }
@@ -302,6 +310,7 @@ enum DownloadableModels {
         switch engine {
         case .whisperLargeV3Turbo: WhisperModelSpec.downloadSizeLabel
         case .parakeetV3: ParakeetV3ModelSpec.downloadSizeLabel
+        case .orukeet: OrukeetModelSpec.downloadSizeLabel
         case .appleSpeech, .parakeetV2: nil
         }
     }

@@ -9,6 +9,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
     case parakeetV2 = "parakeet-v2"
     case whisperLargeV3Turbo = "whisper-large-v3-turbo"
     case parakeetV3 = "parakeet-v3"
+    case orukeet = "orukeet"
 
     /// The name in the UI, the dictation log and `LocalTranscribing.displayName`.
     var displayName: String {
@@ -17,6 +18,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         case .parakeetV2: "Parakeet V2"
         case .whisperLargeV3Turbo: "Whisper Large V3 Turbo"
         case .parakeetV3: "Parakeet V3"
+        case .orukeet: "Orukeet"
         }
     }
 
@@ -28,7 +30,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
     /// Reaches this iPhone only through its Download button in the app; never downloaded by
     /// choosing or preparing it.
     var requiresExplicitDownload: Bool {
-        self == .whisperLargeV3Turbo || self == .parakeetV3
+        self == .whisperLargeV3Turbo || self == .parakeetV3 || self == .orukeet
     }
 
     /// Has model files on this iPhone that the user can delete; iOS manages Apple Speech's assets.
@@ -53,6 +55,8 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
             "OpenAI Whisper Large V3 Turbo (Argmax WhisperKit, Core ML), running on this iPhone. About 627 MB, downloaded only when you tap Download."
         case .parakeetV3:
             "NVIDIA Parakeet TDT 0.6B V3 through FluidAudio (Core ML), running on this iPhone. About 483 MB, downloaded only when you tap Download."
+        case .orukeet:
+            "Oruk AI's Orukeet, trained further from NVIDIA Parakeet TDT 0.6B V3, through FluidAudio (Core ML), running on this iPhone. Experimental INT8 build. About 555 MB, downloaded only when you tap Download."
         }
     }
 
@@ -63,6 +67,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         case .parakeetV2: "English only"
         case .whisperLargeV3Turbo: "German and English, or automatic detection"
         case .parakeetV3: "25 European languages including German and English, detected automatically"
+        case .orukeet: "25 European languages including German and English, always detected automatically"
         }
     }
 

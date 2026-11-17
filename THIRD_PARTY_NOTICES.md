@@ -465,6 +465,63 @@ The NVIDIA Parakeet TDT 0.6B v3 model is licensed under
 The Core ML conversion is provided by FluidInference.
 [Original NVIDIA model and attribution](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3).
 
+## Orukeet r3 Core ML (INT8 encoder)
+
+Typr downloads this at runtime, only when the user taps Download; nothing is
+bundled in this repository or the app: the archive
+`coreml/orukeet-r3-coreml-int8sym-encoder-only-experimental-20260920-deflated.zip`
+(SHA-256 `24df9ff76f00f86f9ae1fd601cbbcab1d1eac98c7e8107de67444a7858d88b8b`) from
+[oruk/orukeet](https://huggingface.co/oruk/orukeet/tree/419d7f79e290127e202a0f610509868d314743eb/coreml)
+at revision `419d7f79e290127e202a0f610509868d314743eb`. Typr unpacks its
+`Preprocessor`, `Encoder`, `Decoder` and `JointDecisionv3` packages and
+`parakeet_vocab.json`, and compiles the packages on the iPhone.
+Orukeet is Oruk AI's adaptation of NVIDIA Parakeet TDT 0.6B v3; the Orukeet
+weights are licensed under
+[Creative Commons Attribution-ShareAlike 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+(the archive's `LICENSE-WEIGHTS`), with the Core ML conversion and optimizations by
+Oruk AI, based on Fluid Inference's Core ML graphs. NVIDIA retains copyright in
+the NVIDIA Parakeet TDT 0.6B v3 model, licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/)
+([original NVIDIA model and attribution](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)).
+No endorsement by NVIDIA is implied.
+
+`ios/Typr/OrukeetModelSpec.swift` and `ios/Typr/TdtV3Transcriber.swift` follow the
+local loading and on-device compilation steps of Oruk AI's `OrukeetLocalModels`
+([OrukeetEngine.swift](https://github.com/Oruk-AI/orukeet/blob/decfb6e4b50a41fbddadf8a9cf12beadf06ae2f1/export/coreml/benchmark/Sources/OrukeetCoreML/OrukeetEngine.swift)
+at commit `decfb6e4b50a41fbddadf8a9cf12beadf06ae2f1`), MIT license
+([Oruk-AI/orukeet LICENSE](https://github.com/Oruk-AI/orukeet/blob/decfb6e4b50a41fbddadf8a9cf12beadf06ae2f1/LICENSE)).
+
+## ZIPFoundation 0.9.20
+
+The iPhone app (only the Typr app target) uses the Swift package
+[weichsel/ZIPFoundation](https://github.com/weichsel/ZIPFoundation/tree/0.9.20),
+pinned with `exactVersion: 0.9.20` in `ios/project.yml` (tag commit
+`22787ffb59de99e5dc1fbfe80b19c97a904ad48d`), under the MIT license below.
+
+```text
+MIT License
+
+Copyright (c) 2017-2025 Thomas Zoechling (https://www.peakstep.com)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Argmax OSS (WhisperKit) 1.1.1
 
 The iPhone app (only the Typr app target, not the keyboard or widgets) uses the

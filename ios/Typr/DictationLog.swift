@@ -82,11 +82,10 @@ enum DictationLogASRFailure: String, Codable, Sendable {
             }
         }
         if let error = error as? ParakeetV3Transcriber.TranscriberError {
-            switch error {
-            case .notInstalled, .notPrepared, .insufficientStorage, .preparationFailed: return .modelNotReady
-            case .emptyTranscript: return .noSpeech
-            case .corruptModel: return .other
-            }
+            return error.asrFailure
+        }
+        if let error = error as? OrukeetTranscriber.TranscriberError {
+            return error.asrFailure
         }
         if let error = error as? SpeechEngineError {
             switch error {
