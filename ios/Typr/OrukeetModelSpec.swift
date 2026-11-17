@@ -121,8 +121,9 @@ nonisolated enum OrukeetArchiveError: ModelFileCheckError, Equatable {
 
 /// Turns the downloaded archive into the compiled models. Only the pinned entries are read, each
 /// written to a path Typr builds from its own pinned name, so archive paths never choose a
-/// destination. A checksum mismatch deletes the archive (Retry downloads it again); any other
-/// failure keeps it, so Retry unpacks without downloading.
+/// destination. Earlier compiled models are removed first: the install's marker is already gone
+/// and the storage check does not count them. A checksum mismatch deletes the archive (Retry
+/// downloads it again); any other failure keeps it, so Retry unpacks without downloading.
 nonisolated struct OrukeetArchive: Sendable {
     struct Entry: Equatable, Sendable {
         let path: String
@@ -142,8 +143,8 @@ nonisolated struct OrukeetArchive: Sendable {
             throw OrukeetArchiveError.damaged
         }
         let staging = store.repoFolder(OrukeetModelSpec.modelRepo).appending(component: "unpacking")
-        if files.fileExists(atPath: staging.path) {
-            try files.removeItem(at: staging)
+        for stale in [staging, store.modelFolder] where files.fileExists(atPath: stale.path) {
+            try files.removeItem(at: stale)
         }
         defer { try? files.removeItem(at: staging) }
         let packages = staging.appending(component: "packages")
@@ -169,10 +170,6 @@ nonisolated struct OrukeetArchive: Sendable {
         try files.moveItem(at: packages.appending(component: TdtV3Vocabulary.fileName),
                            to: compiled.appending(component: TdtV3Vocabulary.fileName))
         try Task.checkCancellation()
-
-        if files.fileExists(atPath: store.modelFolder.path) {
-            try files.removeItem(at: store.modelFolder)
-        }
         try files.moveItem(at: compiled, to: store.modelFolder)
         try files.removeItem(at: archiveURL)
     }

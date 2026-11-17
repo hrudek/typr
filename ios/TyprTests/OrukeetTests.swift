@@ -147,6 +147,8 @@ final class OrukeetTests: XCTestCase {
 
     func testArchiveUnpacksOnlyPinnedEntriesCompilesThemAndDeletesTheArchive() async throws {
         let store = makeStore()
+        try OrukeetTestFiles.populateCompiled(store)
+        try Data("old".utf8).write(to: store.modelFolder.appending(component: "stale.bin"))
         let url = store.fileURL(for: OrukeetModelSpec.archive)
         let folder = "bundle"
         var files: [String: Data] = [TdtV3Vocabulary.fileName: try ParakeetV3TestFiles.vocabulary()]
