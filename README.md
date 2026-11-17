@@ -2,8 +2,8 @@
 
 Typr is a standalone iPhone dictation keyboard with a containing app, widgets and
 Live Activity. Speech recognition runs on-device: Apple Speech (iOS 26+), Parakeet
-V2 (iOS 18+) or Whisper Large V3 Turbo (explicit model download). An explicit
-engine or language choice never silently falls back to another.
+V2 (iOS 18+), Whisper Large V3 Turbo or Parakeet V3 (both explicit model downloads).
+An explicit engine or language choice never silently falls back to another.
 
 ## How it works
 
@@ -32,10 +32,10 @@ engine or language choice never silently falls back to another.
   unavailable. The full keyboard adds German/English autocorrect and adaptive
   suggestions.
 
-## Whisper preparation
+## Downloaded model preparation
 
-Opening Typr automatically prepares an installed, explicitly chosen Whisper model
-without downloading. On iOS 26+, Typr asks to continue that preparation after you
+Opening Typr automatically prepares an installed, explicitly chosen Whisper or
+Parakeet V3 model without downloading. On iOS 26+, Typr asks to continue that preparation after you
 leave the app; older iOS has only limited background grace time. Opportunistic
 maintenance can also prepare it while charging. iOS may decline, pause or stop
 this work; there is no immediate post-update guarantee. Reopen Typr to retry.

@@ -5,8 +5,8 @@ import Speech
 nonisolated enum SpeechEngineAvailability: Equatable, Sendable {
     /// Ready to prepare without any download.
     case installed
-    /// Usable after a download: Parakeet on first preparation, Apple Speech assets by iOS,
-    /// Whisper only through its Download button. The text says which.
+    /// Usable after a download: Parakeet V2 on first preparation, Apple Speech assets by iOS,
+    /// Whisper and Parakeet V3 only through their Download buttons. The text says which.
     case downloadRequired(String)
     case requiresNewerOS(String)
     case unsupportedDevice(String)
@@ -64,7 +64,7 @@ protocol SpeechEngineProviding: AnyObject {
     /// The original behavior: Apple Speech when it is available (any availability candidate),
     /// else Parakeet V2. Apple Speech then prepares the strict locale for `language`.
     func automaticTranscriber(language: DictationLanguage) async -> any LocalTranscribing
-    /// Exactly `engine`. Whisper requires a verified install; nothing here downloads Whisper.
+    /// Exactly `engine`. Downloaded engines require a verified install; nothing here downloads them.
     func transcriber(for engine: SpeechEngineChoice, language: DictationLanguage) async throws -> any LocalTranscribing
     /// Installed without network, synchronously (the keyboard's `model.installed` flag, launch).
     /// Apple Speech reports false: its assets are known only asynchronously.
@@ -76,9 +76,11 @@ protocol SpeechEngineProviding: AnyObject {
 @MainActor
 final class ProductionSpeechEngineProvider: SpeechEngineProviding {
     private let whisperStore: WhisperModelStore
+    private let parakeetV3Store: ParakeetV3ModelStore
 
-    init(whisperStore: WhisperModelStore = .production) {
+    init(whisperStore: WhisperModelStore = .production, parakeetV3Store: ParakeetV3ModelStore = .production) {
         self.whisperStore = whisperStore
+        self.parakeetV3Store = parakeetV3Store
     }
 
     func automaticTranscriber(language: DictationLanguage) async -> any LocalTranscribing {
@@ -109,6 +111,9 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .whisperLargeV3Turbo:
             guard whisperStore.isInstalled else { throw SpeechEngineError.notInstalled(engine) }
             return WhisperTranscriber(store: whisperStore, language: language)
+        case .parakeetV3:
+            guard parakeetV3Store.isInstalled else { throw SpeechEngineError.notInstalled(engine) }
+            return ParakeetV3Transcriber(store: parakeetV3Store, language: language)
         }
     }
 
@@ -117,6 +122,7 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
         case .appleSpeech: false
         case .parakeetV2: ParakeetTranscriber.hasCachedModel
         case .whisperLargeV3Turbo: whisperStore.isInstalled
+        case .parakeetV3: parakeetV3Store.isInstalled
         }
     }
 
@@ -133,6 +139,10 @@ final class ProductionSpeechEngineProvider: SpeechEngineProviding {
             return whisperStore.isInstalled
                 ? .installed
                 : .downloadRequired("Not downloaded (\(WhisperModelSpec.downloadSizeLabel)).")
+        case .parakeetV3:
+            return parakeetV3Store.isInstalled
+                ? .installed
+                : .downloadRequired("Not downloaded (\(ParakeetV3ModelSpec.downloadSizeLabel)).")
         }
     }
 }

@@ -8,6 +8,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
     case appleSpeech = "apple-speech"
     case parakeetV2 = "parakeet-v2"
     case whisperLargeV3Turbo = "whisper-large-v3-turbo"
+    case parakeetV3 = "parakeet-v3"
 
     /// The name in the UI, the dictation log and `LocalTranscribing.displayName`.
     var displayName: String {
@@ -15,6 +16,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         case .appleSpeech: "Apple Speech"
         case .parakeetV2: "Parakeet V2"
         case .whisperLargeV3Turbo: "Whisper Large V3 Turbo"
+        case .parakeetV3: "Parakeet V3"
         }
     }
 
@@ -26,7 +28,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
     /// Reaches this iPhone only through its Download button in the app; never downloaded by
     /// choosing or preparing it.
     var requiresExplicitDownload: Bool {
-        self == .whisperLargeV3Turbo
+        self == .whisperLargeV3Turbo || self == .parakeetV3
     }
 
     /// The engine behind a transcriber's display name; nil for test or unknown engines.
@@ -44,6 +46,8 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
             "NVIDIA Parakeet TDT 0.6B V2 through FluidAudio, running on this iPhone. Downloaded from Hugging Face on first use."
         case .whisperLargeV3Turbo:
             "OpenAI Whisper Large V3 Turbo (Argmax WhisperKit, Core ML), running on this iPhone. About 627 MB, downloaded only when you tap Download."
+        case .parakeetV3:
+            "NVIDIA Parakeet TDT 0.6B V3 through FluidAudio (Core ML), running on this iPhone. About 483 MB, downloaded only when you tap Download."
         }
     }
 
@@ -53,6 +57,7 @@ nonisolated enum SpeechEngineChoice: String, CaseIterable, Codable, Sendable {
         case .appleSpeech: "German and English, as installed by iOS"
         case .parakeetV2: "English only"
         case .whisperLargeV3Turbo: "German and English, or automatic detection"
+        case .parakeetV3: "25 European languages including German and English, detected automatically"
         }
     }
 

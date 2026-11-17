@@ -453,6 +453,18 @@ The NVIDIA Parakeet TDT 0.6B v2 model is licensed under
 The Core ML conversion is provided by FluidInference.
 [Original NVIDIA model and attribution](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2).
 
+## NVIDIA Parakeet TDT 0.6B v3 Core ML
+
+Typr downloads this at runtime, only when the user taps Download; nothing is
+bundled in this repository or the app: `Preprocessor`, `Encoder`, `Decoder` and
+`JointDecisionv3` (`.mlmodelc`) and `parakeet_vocab.json` from
+[FluidInference/parakeet-tdt-0.6b-v3-coreml](https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml/tree/7dd20fe6b1797d35f5e3307e8b1732d9a178edfe)
+at revision `7dd20fe6b1797d35f5e3307e8b1732d9a178edfe`.
+The NVIDIA Parakeet TDT 0.6B v3 model is licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/).
+The Core ML conversion is provided by FluidInference.
+[Original NVIDIA model and attribution](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3).
+
 ## Argmax OSS (WhisperKit) 1.1.1
 
 The iPhone app (only the Typr app target, not the keyboard or widgets) uses the

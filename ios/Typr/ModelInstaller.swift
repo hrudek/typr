@@ -287,10 +287,12 @@ enum DownloadableModels {
         downloader: HubModelFileDownloader(),
         tokenizerChecker: WhisperKitTokenizerChecker()
     )
+    static let parakeetV3 = ParakeetV3ModelInstaller(store: .production, downloader: HubModelFileDownloader())
 
     static func installer(for engine: SpeechEngineChoice) -> (any ModelInstalling)? {
         switch engine {
         case .whisperLargeV3Turbo: whisper
+        case .parakeetV3: parakeetV3
         case .appleSpeech, .parakeetV2: nil
         }
     }
@@ -299,6 +301,7 @@ enum DownloadableModels {
     nonisolated static func downloadSizeLabel(for engine: SpeechEngineChoice) -> String? {
         switch engine {
         case .whisperLargeV3Turbo: WhisperModelSpec.downloadSizeLabel
+        case .parakeetV3: ParakeetV3ModelSpec.downloadSizeLabel
         case .appleSpeech, .parakeetV2: nil
         }
     }
