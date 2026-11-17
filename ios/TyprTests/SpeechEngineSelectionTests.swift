@@ -1877,10 +1877,10 @@ extension SpeechEngineSelectionTests {
     func testParakeetV3StagesDriveTheContinuedTaskLikeWhisper() {
         typealias B = ModelBackgroundPreparation
         let progress = Progress(totalUnitCount: -1)
-        for component in ParakeetV3PreparationComponent.allCases {
-            let update = component.progress(optimizing: true)
+        for component in TdtV3PreparationComponent.allCases {
+            let update = component.progress(engine: .parakeetV3, optimizing: true)
             XCTAssertEqual(B.taskSubtitle(for: update), "Optimizing for this iPhone")
-            XCTAssertEqual(B.taskSubtitle(for: component.progress(optimizing: false)), "Loading model")
+            XCTAssertEqual(B.taskSubtitle(for: component.progress(engine: .parakeetV3, optimizing: false)), "Loading model")
             B.updateTaskProgress(progress, from: update)
             XCTAssertEqual(progress.completedUnitCount, (update.stageProgress?.completed ?? -1) * B.unitsPerStage)
         }

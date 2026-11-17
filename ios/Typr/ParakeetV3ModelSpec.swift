@@ -1,11 +1,10 @@
-import CoreML
 import Foundation
 
 /// Everything that pins Typr's Parakeet V3 engine: NVIDIA Parakeet TDT 0.6B V3 in FluidInference's
 /// Core ML conversion, at an exact revision with every file's size. The files are the ones
 /// FluidAudio 0.15.5 loads for `AsrModelVersion.v3` with its default `.int8` encoder precision
 /// (`ModelNames.ASR.requiredModelsV3` plus `parakeet_vocab.json`).
-nonisolated enum ParakeetV3ModelSpec: DownloadableModelSpec {
+nonisolated enum ParakeetV3ModelSpec: TdtV3ModelSpec {
     struct Marker: Codable, Equatable, Sendable {
         var modelRepo = ParakeetV3ModelSpec.modelRepo
         var modelRevision = ParakeetV3ModelSpec.modelRevision
@@ -21,7 +20,7 @@ nonisolated enum ParakeetV3ModelSpec: DownloadableModelSpec {
     static let modelRepo = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
     static let modelRevision = "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe"
 
-    static let vocabularyFile = file("parakeet_vocab.json", bytes: 151_122)
+    static let vocabularyFile = file(TdtV3Vocabulary.fileName, bytes: 151_122)
 
     static let modelFiles: [PinnedModelFile] = [
         file("Preprocessor.mlmodelc/analytics/coremldata.bin", bytes: 243),
@@ -56,13 +55,11 @@ nonisolated enum ParakeetV3ModelSpec: DownloadableModelSpec {
     /// Not measured for Parakeet V3: Whisper's measured requirement (a larger model) is used.
     static let optimizationStorageBytes: Int64 = WhisperModelSpec.optimizationStorageBytes
 
-    /// The vocabulary's token count; the blank token is the next ID (FluidAudio `AsrModelVersion.v3.blankId`).
-    static let vocabularySize = 8_192
+    static let acceptsLanguageHint = true
 
-    /// FluidAudio's defaults for these models: preprocessor on CPU, the rest on CPU and Neural
-    /// Engine. No GPU, for the same background reasons as `WhisperModelSpec`.
-    static let preprocessorComputeUnits: MLComputeUnits = .cpuOnly
-    static let modelComputeUnits: MLComputeUnits = .cpuAndNeuralEngine
+    static func modelFolder(in store: ModelStore<Self>) -> URL {
+        store.repoFolder(modelRepo)
+    }
 
     private static func file(_ path: String, bytes: Int64) -> PinnedModelFile {
         PinnedModelFile(repo: modelRepo, revision: modelRevision, path: path, bytes: bytes)
@@ -74,16 +71,6 @@ nonisolated enum ParakeetV3ModelSpec: DownloadableModelSpec {
 ///     root/models/FluidInference/parakeet-tdt-0.6b-v3-coreml/{parakeet_vocab.json, *.mlmodelc/…}
 typealias ParakeetV3ModelStore = ModelStore<ParakeetV3ModelSpec>
 
-extension ModelStore where Spec == ParakeetV3ModelSpec {
-    var modelFolder: URL {
-        repoFolder(ParakeetV3ModelSpec.modelRepo)
-    }
-
-    var vocabularyURL: URL {
-        fileURL(for: ParakeetV3ModelSpec.vocabularyFile)
-    }
-}
-
 typealias ParakeetV3ModelInstaller = ModelInstaller<ParakeetV3ModelSpec>
 
 extension ModelInstaller where Spec == ParakeetV3ModelSpec {
@@ -93,36 +80,9 @@ extension ModelInstaller where Spec == ParakeetV3ModelSpec {
         availableCapacity: (() -> Int64?)? = nil
     ) {
         self.init(store: store, downloader: downloader,
-                  checkFiles: { _ = try ParakeetV3Vocabulary.load(from: store.vocabularyURL) },
+                  checkFiles: { _ = try TdtV3Vocabulary.load(from: store.vocabularyURL, for: .parakeetV3) },
                   availableCapacity: availableCapacity)
     }
 }
 
-nonisolated enum ParakeetV3VocabularyError: ModelFileCheckError, Equatable {
-    case damaged
-
-    var errorDescription: String? {
-        "The Parakeet V3 vocabulary on this iPhone is damaged. Download Parakeet V3 again."
-    }
-}
-
-/// Reads `parakeet_vocab.json` locally: a JSON object from token ID to token, as FluidAudio 0.15.5's
-/// `AsrModels` parses it for the 0.6B models, with exactly the IDs `0..<vocabularySize`.
-nonisolated enum ParakeetV3Vocabulary {
-    static func load(from url: URL) throws -> [Int: String] {
-        guard let data = try? Data(contentsOf: url),
-              let tokens = try? JSONDecoder().decode([String: String].self, from: data) else {
-            throw ParakeetV3VocabularyError.damaged
-        }
-        var vocabulary: [Int: String] = [:]
-        for (key, token) in tokens {
-            guard let id = Int(key) else { throw ParakeetV3VocabularyError.damaged }
-            vocabulary[id] = token
-        }
-        guard vocabulary.count == ParakeetV3ModelSpec.vocabularySize,
-              vocabulary.keys.allSatisfy({ (0..<ParakeetV3ModelSpec.vocabularySize).contains($0) }) else {
-            throw ParakeetV3VocabularyError.damaged
-        }
-        return vocabulary
-    }
-}
+typealias ParakeetV3Transcriber = TdtV3Transcriber<ParakeetV3ModelSpec>
