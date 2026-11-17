@@ -461,10 +461,13 @@ final class KeyboardViewController: UIInputViewController {
             now: now,
             animated: true
         )
-        // The text before the cursor (as already read for insertion spacing), capped, so cleanup
-        // knows the topic. Only in the start command; cold starts open a URL and send none.
+        // The text around the cursor and the host app, capped, as context for AI cleanup (Hex's
+        // caret text). Only in the start command; cold starts open a URL and send no text.
         bridge.send(.start, jobID: jobID, style: viewModel.style, sentAt: now,
-                    context: textDocumentProxy.documentContextBeforeInput)
+                    context: textDocumentProxy.documentContextBeforeInput,
+                    selected: textDocumentProxy.selectedText,
+                    after: textDocumentProxy.documentContextAfterInput,
+                    host: KeyboardHost.app(of: self))
     }
 
     private func stopWarmDictation() {

@@ -75,8 +75,7 @@ private final class LogControllerFixture {
 
     init(injectLog: Bool = true, statistics: UsageDictationRecorder? = nil) {
         bridge = KeyboardBridge(defaults: env.defaults)
-        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), language: CleanupTestLanguage(),
-            background: background, isEnabled: { true }, sleep: sleeper.sleep)
+        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: model), background: background, isEnabled: { true }, sleep: sleeper.sleep)
         let activeASR = asr
         controller = DictationController(audio: audio, keyboardBridge: bridge, transcriber: activeASR,
             transcriberFactory: { activeASR }, autoPrepareOnInit: false,
@@ -161,8 +160,8 @@ final class DictationLogControllerTests: XCTestCase {
         XCTAssertNotNil(entry.modelMilliseconds)
         XCTAssertNotNil(entry.cleanupMilliseconds)
         XCTAssertNotNil(entry.stopToFinalMilliseconds)
-        XCTAssertEqual(entry.promptRevision, "2026-11-09a")
-        XCTAssertEqual(entry.guardRevision, "2026-11-09a")
+        XCTAssertEqual(entry.promptRevision, "hex-b5b5a27")
+        XCTAssertEqual(entry.guardRevision, "none")
         try await f.dispose()
     }
 

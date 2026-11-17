@@ -14,7 +14,7 @@ enum CleanupEngine: String, CaseIterable {
     }
 }
 
-/// App-only preference in the standard defaults, like the cleanup prompt; the next dictation uses it.
+/// App-only preference in the standard defaults; the next dictation uses it.
 @MainActor
 struct CleanupEnginePreferences {
     private static let key = "typr.cleanupEngine"
@@ -138,23 +138,6 @@ struct SelectedTranscriptCleaner: TyprTranscriptCleaning {
     func makeSession() -> any CleanupSession { current.makeSession() }
 }
 
-@MainActor
-struct SelectedLanguageDetector: LanguageDetecting {
-    let engine: @MainActor () -> CleanupEngine
-    let apple: any LanguageDetecting
-    let anthropic: any LanguageDetecting
-
-    func supports(_ text: String) -> Bool {
-        engine() == .anthropic ? anthropic.supports(text) : apple.supports(text)
-    }
-}
-
-/// Claude handles every dictation language Typr offers.
-@MainActor
-struct AnyLanguageSupported: LanguageDetecting {
-    func supports(_ text: String) -> Bool { true }
-}
-
 /// Apple Intelligence before iOS 26: never available, so its session is never used.
 @MainActor
 struct UnsupportedAppleCleaner: TyprTranscriptCleaning {
@@ -165,5 +148,5 @@ struct UnsupportedAppleCleaner: TyprTranscriptCleaning {
 @MainActor
 final class UnavailableCleanupSession: CleanupSession {
     func prewarm() async {}
-    func clean(_ text: String, style: DictationStyle) async throws -> String { throw CleanupModelError.unavailable }
+    func generate(_ prompt: String) async throws -> String { throw CleanupModelError.unavailable }
 }

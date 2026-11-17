@@ -74,7 +74,7 @@ final class DictationController {
         let cleanupSkipReason: CleanupSkipReason?
         let logToken: DictationLogToken?
         let logCleanupPath: DictationLogCleanupPath
-        /// Dictation language and data-only preceding text for Typr cleanup, frozen at start.
+        /// Dictation language, host app and data-only caret text for Typr cleanup, frozen at start.
         let cleanupContext: CleanupContext
         /// The engine and language this capture is transcribed with, frozen at start: a later
         /// engine or language change applies to the next dictation only.
@@ -108,8 +108,6 @@ final class DictationController {
 
     private let cleanup: TranscriptCleanupDependencies?
     private let cleanupCoordinator = CleanupCoordinator()
-    /// This session's recent results, in memory only, as cleanup context when the keyboard sent none.
-    private let cleanupHistory = CleanupContextHistory()
     private let statistics: UsageDictationRecorder?
     private let languageSettings: TyprSettings
     private var pendingCleanupJob: CleanupJob?
@@ -1030,7 +1028,7 @@ final class DictationController {
         styleOverride: DictationStyle? = nil,
         copyToPasteboard: Bool = false,
         attemptAutoReturnOnStart: Bool = false,
-        keyboardContext: String? = nil
+        keyboardContext: CleanupContext? = nil
     ) {
         guard activeCapture == nil else { return }
         // Never begin a new Apple capture with the previous locale. The current capture is
@@ -1077,8 +1075,9 @@ final class DictationController {
             : (enabled ? .typr : .none)
         let cleanupEnabled = enabled && effectiveStyle != .verbatim
         let disabledCleanupReason: CleanupSkipReason? = !enabled ? .off : (effectiveStyle == .verbatim ? .verbatim : nil)
-        let cleanupContext = CleanupContext.make(language: captureLanguage, keyboard: keyboardContext,
-                                                 previousDictations: cleanupHistory.recent(at: now()))
+        // The keyboard's caret text and host app; a cold start knows only the app it came from.
+        var cleanupContext = keyboardContext ?? CleanupContext(application: attemptAutoReturnOnStart ? returnHost : nil)
+        cleanupContext.language = captureLanguage
 
         phase = .requestingPermission
         copied = false
@@ -1293,7 +1292,7 @@ final class DictationController {
                         // Verbatim remains synchronous: no prepare, model call, lease or await.
                         self.cleanupCoordinator.recordSkip(.verbatim, dependencies: cleanup, diagnostics: recording)
                     } else {
-                        text = await self.cleanupCoordinator.clean(spelled, style: session.style, job: session.cleanupJob,
+                        text = await self.cleanupCoordinator.clean(spelled, job: session.cleanupJob,
                             dependencies: cleanup, skipReason: session.cleanupSkipReason,
                             vocabulary: prepared.cleanupTerms, context: session.cleanupContext, diagnostics: recording)
                         guard self.jobGeneration == captureGeneration, !Task.isCancelled else { return }
@@ -1321,7 +1320,6 @@ final class DictationController {
                 self.statistics?.success(session.statisticsToken, recognized: rawText,
                                          delivered: formatted, seconds: finalDuration)
                 recording?.finish(text: formatted, beforeSpelling: beforeSpelling, spellingPass: secondPass)
-                self.cleanupHistory.record(formatted, at: self.now())
                 self.recordingDuration = 0
                 self.transcript = formatted
                 // Exact recording correlation, never whichever archive row happens to be latest.
@@ -1528,7 +1526,8 @@ final class DictationController {
                 keyboardJobID: command.jobID,
                 styleOverride: command.style,
                 copyToPasteboard: false,
-                keyboardContext: command.context
+                keyboardContext: CleanupContext(application: command.host, before: command.context ?? "",
+                                                selected: command.selected ?? "", after: command.after ?? "")
             )
         case .stop:
             guard phase == .recording, activeKeyboardJobID == command.jobID else { return }

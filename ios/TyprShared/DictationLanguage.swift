@@ -65,15 +65,4 @@ nonisolated enum DictationLanguage: String, CaseIterable, Codable, Sendable {
     private static func languageCode(of identifier: String) -> String {
         String(identifier.prefix { $0 != "-" && $0 != "_" }).lowercased()
     }
-
-    /// The cleanup prompt's language line; nil for automatic (the transcript's own language).
-    var cleanupInstruction: String? {
-        switch self {
-        case .automatic: nil
-        case .german:
-            "Language: the speaker dictates German. Write the whole text in correct German. Keep English words and technical terms exactly as spoken; never translate them."
-        case .english:
-            "Language: the speaker dictates English. Write the whole text in correct English. Keep words from other languages exactly as spoken; never translate them."
-        }
-    }
 }

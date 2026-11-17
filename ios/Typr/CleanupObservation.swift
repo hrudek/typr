@@ -2,28 +2,8 @@ import Foundation
 import OSLog
 
 /// Only fixed typed reasons may enter observations. In particular, never stringify an Error.
-enum CleanupGuardRule: String, Sendable {
-    case notesLineAnchors = "notes-line-anchors"
-    case notesMarkers = "notes-markers"
-    case grew = "grew"
-    case newValue = "new-value"
-    case duplicated = "duplicated"
-
-    /// Why the card says the change was not used.
-    var explanation: String {
-        switch self {
-        case .notesLineAnchors: "it changed the line breaks"
-        case .notesMarkers: "it changed bullet or new-line words"
-        case .grew: "it was much longer than what you said"
-        case .newValue: "it contained a number or link you didn't say"
-        case .duplicated: "it repeated what you said"
-        }
-    }
-}
-
 enum CleanupFailureReason: Equatable, Sendable {
     case contextWindow, refused, rateLimited, generationFailed, unavailable, deadline, expired, emptyOutput
-    case guardRejected(CleanupGuardRule)
 
     var label: String {
         switch self {
@@ -35,14 +15,12 @@ enum CleanupFailureReason: Equatable, Sendable {
         case .deadline: "deadline"
         case .expired: "expired"
         case .emptyOutput: "empty-output"
-        case .guardRejected(let rule): "guard-rejected(\(rule.rawValue))"
         }
     }
 }
 
 enum CleanupSkipReason: String, Sendable {
-    case off, verbatim, language, budget, busy, unavailable
-    case tooShort = "too-short"
+    case off, verbatim, busy, unavailable
     case numbersOnly = "numbers-only"
     case noBackgroundLease = "no-background-lease"
 }
@@ -129,7 +107,6 @@ final class CleanupDiagnostics: CleanupObserving {
         case .failed(let reason):
             switch reason {
             case .deadline: return "Apple Intelligence took longer than \(took); plain transcript used"
-            case .guardRejected(let rule): return "Apple Intelligence's change was not used: \(rule.explanation) (\(took))"
             case .rateLimited: return "iOS limited Apple Intelligence (often in the background); plain transcript used"
             case .refused: return "Apple Intelligence refused this text; plain transcript used"
             case .contextWindow: return "too long for Apple Intelligence; plain transcript used"
@@ -142,9 +119,6 @@ final class CleanupDiagnostics: CleanupObserving {
             switch reason {
             case .off: return "AI cleanup is off"
             case .verbatim: return "skipped in Verbatim style"
-            case .language: return "skipped: a language Apple Intelligence doesn't support"
-            case .tooShort: return "skipped: fewer than 3 words"
-            case .budget: return "skipped: dictation too long"
             case .busy: return "skipped: the previous cleanup was still running"
             case .unavailable: return "skipped: Apple Intelligence unavailable"
             case .numbersOnly: return "skipped: numbers only"

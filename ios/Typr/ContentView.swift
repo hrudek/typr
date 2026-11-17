@@ -170,7 +170,6 @@ struct ContentView: View {
                             case .keyboardLearnedWords, .statistics:
                                 EmptyView() // Handled above.
                             case .textProcessing: TextProcessingSettingsCard()
-                            case .cleanupPrompt: CleanupPromptEditor()
                             case .history: HistorySettingsCard { showingLog = true }
                             case .speechEngine: SpeechEngineCard(dictation: dictation)
                             case .style: DictationStyleSettingsCard(dictation: dictation)

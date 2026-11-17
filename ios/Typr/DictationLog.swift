@@ -140,8 +140,9 @@ struct DictationLogContext: Codable, Equatable, Sendable {
     var vocabularyTerms: [String]?
     /// The dictation language picker's value ("automatic", "de", "en"). nil means not recorded.
     var dictationLanguage: String?
-    /// Where the preceding text offered to Typr cleanup came from ("keyboard", "previous-dictations")
-    /// and its length in characters. The text itself is never logged. nil means none was offered.
+    /// Where the text around the cursor offered to Typr cleanup came from ("keyboard"; older entries
+    /// also "previous-dictations") and its length in characters. The text itself is never logged.
+    /// nil means none was offered.
     var cleanupContextSource: String?
     var cleanupContextCharacters: Int?
     /// `TechGlossary.revision` used for this entry's spelling fixes. nil means not recorded.
@@ -188,8 +189,9 @@ struct DictationLogContext: Codable, Equatable, Sendable {
         // Do not retain the user's entire dictionary (including unrelated, inactive terms).
         // Applied replacements remain recorded on the two spelling passes.
         context.dictationLanguage = cleanupContext?.language.rawValue
-        context.cleanupContextSource = cleanupContext?.source?.rawValue
-        context.cleanupContextCharacters = cleanupContext?.preceding?.count
+        let caretCharacters = cleanupContext?.characters ?? 0
+        context.cleanupContextSource = caretCharacters > 0 ? "keyboard" : nil
+        context.cleanupContextCharacters = caretCharacters > 0 ? caretCharacters : nil
         context.glossaryRevision = TechGlossary.revision
         return context
     }

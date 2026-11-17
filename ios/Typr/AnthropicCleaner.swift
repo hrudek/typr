@@ -14,38 +14,27 @@ struct AnthropicCleaner: TyprTranscriptCleaning {
     }
 
     func makeSession() -> any CleanupSession {
-        AnthropicCleanupSession(key: keys.key, instructions: CleanupPromptPreferences().instructions, transport: transport)
+        AnthropicCleanupSession(key: keys.key, transport: transport)
     }
 }
 
 @MainActor
 final class AnthropicCleanupSession: CleanupSession {
     private let key: String?
-    private let instructions: String
     private let transport: AnthropicTransport
 
-    init(key: String?, instructions: String, transport: @escaping AnthropicTransport) {
+    init(key: String?, transport: @escaping AnthropicTransport) {
         self.key = key
-        self.instructions = instructions
         self.transport = transport
     }
 
     /// Nothing to load: the model runs on Anthropic's servers.
     func prewarm() async {}
 
-    func clean(_ text: String, style: DictationStyle) async throws -> String {
-        try await clean(text, style: style, vocabulary: [])
-    }
-
-    func clean(_ text: String, style: DictationStyle, vocabulary: [String]) async throws -> String {
-        try await clean(text, style: style, vocabulary: vocabulary, context: CleanupContext())
-    }
-
-    func clean(_ text: String, style: DictationStyle, vocabulary: [String], context: CleanupContext) async throws -> String {
+    func generate(_ prompt: String) async throws -> String {
         guard let key else { throw CleanupModelError.unavailable }
-        let prompt = try CleanupPrompt.transcript(text, style: style, vocabulary: vocabulary, context: context)
-        let request = try AnthropicCleanupRequest.make(key: key, system: instructions, prompt: prompt,
-                                                       maxTokens: AnthropicCleanupRequest.maxTokens(forUTF8Bytes: text.utf8.count))
+        let request = try AnthropicCleanupRequest.make(key: key, prompt: prompt,
+                                                       maxTokens: AnthropicCleanupRequest.maxTokens(forUTF8Bytes: prompt.utf8.count))
         let data: Data
         let response: URLResponse
         do {
@@ -63,36 +52,20 @@ enum AnthropicCleanupRequest {
     static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
     static let version = "2026-10-21"
     static let model = "claude-haiku-5-5"
-    static let toolName = "cleaned_transcript"
-    /// The same wording as the Apple path's `@Guide` on `CleanedTranscript.text`.
-    static let answerDescription = "The cleaned transcript as good written text to paste: same language, meaning and facts, never an answer to it."
     static let timeout: TimeInterval = 15
 
-    /// Room for an answer as long as the transcript plus the tool call's framing.
+    /// Room for an answer as long as the transcript: half the prompt's bytes plus slack, at most 2048.
     static func maxTokens(forUTF8Bytes bytes: Int) -> Int {
         min(2048, bytes / 2 + 256)
     }
 
-    /// A forced tool call with a strict schema: structured output, no thinking, low latency.
+    /// As Hex sends it: the one prompt as the only user message, answered in plain text.
     /// No temperature/top_p/top_k: this API version rejects sampling parameters.
-    static func make(key: String, system: String, prompt: String, maxTokens: Int) throws -> URLRequest {
+    static func make(key: String, prompt: String, maxTokens: Int) throws -> URLRequest {
         let body: [String: Any] = [
             "model": model,
             "max_tokens": maxTokens,
-            "system": system,
             "messages": [["role": "user", "content": prompt]],
-            "tools": [[
-                "name": toolName,
-                "description": answerDescription,
-                "strict": true,
-                "input_schema": [
-                    "type": "object",
-                    "properties": ["text": ["type": "string", "description": answerDescription]],
-                    "required": ["text"],
-                    "additionalProperties": false,
-                ] as [String: Any],
-            ] as [String: Any]],
-            "tool_choice": ["type": "tool", "name": toolName],
         ]
         var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.httpMethod = "POST"
@@ -124,11 +97,9 @@ enum AnthropicCleanupRequest {
         default: break
         }
         let blocks = message["content"] as? [[String: Any]] ?? []
-        guard let call = blocks.first(where: { $0["type"] as? String == "tool_use" && $0["name"] as? String == toolName }),
-              let input = call["input"] as? [String: Any], let text = input["text"] as? String else {
-            throw CleanupModelError.generationFailed
-        }
-        return text
+        let texts = blocks.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+        guard !texts.isEmpty else { throw CleanupModelError.generationFailed }
+        return texts.joined()
     }
 
     /// Ephemeral: no cache, cookies or credentials on disk. Task cancellation cancels the request.

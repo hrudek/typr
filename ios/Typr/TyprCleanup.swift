@@ -1,26 +1,11 @@
 import Foundation
 
+/// One model session for one dictation: Hex's `generate(prompt)`.
 @MainActor
 protocol CleanupSession: AnyObject {
     func prewarm() async
-    func clean(_ text: String, style: DictationStyle) async throws -> String
-    /// `vocabulary`: the owner's preferred spellings (Custom vocabulary list), for the prompt.
-    func clean(_ text: String, style: DictationStyle, vocabulary: [String]) async throws -> String
-    /// `context`: the dictation language and data-only preceding text, for the prompt.
-    func clean(_ text: String, style: DictationStyle, vocabulary: [String], context: CleanupContext) async throws -> String
-}
-
-@MainActor
-extension CleanupSession {
-    /// Sessions without a prompt (test fakes) ignore the vocabulary.
-    func clean(_ text: String, style: DictationStyle, vocabulary: [String]) async throws -> String {
-        try await clean(text, style: style)
-    }
-
-    /// Sessions without a prompt (test fakes) ignore the context.
-    func clean(_ text: String, style: DictationStyle, vocabulary: [String], context: CleanupContext) async throws -> String {
-        try await clean(text, style: style, vocabulary: vocabulary)
-    }
+    /// The model's answer to the whole prompt (`CleanupPrompt.make`).
+    func generate(_ prompt: String) async throws -> String
 }
 
 @MainActor
@@ -28,11 +13,6 @@ protocol TyprTranscriptCleaning {
     /// Fresh availability, never the UI's cached value.
     var unavailableReason: String? { get }
     func makeSession() -> any CleanupSession
-}
-
-@MainActor
-protocol LanguageDetecting {
-    func supports(_ text: String) -> Bool
 }
 
 @MainActor
@@ -45,7 +25,6 @@ protocol BackgroundTaskStarting {
 @MainActor
 struct TranscriptCleanupDependencies {
     let cleaner: any TyprTranscriptCleaning
-    let language: any LanguageDetecting
     let background: any BackgroundTaskStarting
     let isEnabled: @MainActor () -> Bool
     var sleep: @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
@@ -101,14 +80,10 @@ final class CleanupJob {
 /// Unstructured tasks are intentional: structured task groups would await an uncooperative model.
 @MainActor
 final class CleanupCoordinator {
-    /// How long a short dictation waits for Apple Intelligence before the plain transcript is used.
+    /// How long a short dictation waits for the model before the plain transcript is used.
     static let deadline: Duration = .seconds(4)
-    /// The longest wait, for the longest admitted dictation.
+    /// The longest wait, for the longest dictations.
     static let maximumDeadline: Duration = .seconds(12)
-    /// Admission budget: longer transcripts skip cleanup (`budget`). Sized so instructions, spellings,
-    /// context, transcript and answer stay inside the on-device model's ~4,096-token context window.
-    static let maximumUTF8Bytes = 2400
-    static let maximumWords = 400
 
     /// Four seconds up to 400 UTF-8 bytes, then one more second per 150 bytes, at most twelve:
     /// generation time grows with the answer's length, and a one-minute dictation (about 750 bytes)
@@ -183,7 +158,7 @@ final class CleanupCoordinator {
         pending.continuation.resume(returning: value)
     }
 
-    func clean(_ raw: String, style: DictationStyle, job: CleanupJob?,
+    func clean(_ raw: String, job: CleanupJob?,
                dependencies: TranscriptCleanupDependencies, skipReason: CleanupSkipReason? = nil,
                vocabulary: [String] = [], context: CleanupContext = CleanupContext(),
                diagnostics: (any CleanupTextDiagnostics)? = nil) async -> String {
@@ -197,7 +172,7 @@ final class CleanupCoordinator {
             return raw
         }
         if skipReason == .off || skipReason == .verbatim { return skip(skipReason!) }
-        // Desktop #949: after ASR, before language/admission. Prewarm may already have run.
+        // Hex #949: a numbers-only transcript has nothing to rewrite. Prewarm may already have run.
         if CleanupNumbers.only(raw) { return skip(.numbersOnly) }
         if let skipReason { return skip(skipReason) }
         guard let job else { return skip(.busy) }
@@ -207,12 +182,6 @@ final class CleanupCoordinator {
         }
         guard job.permitted else { return skip(.noBackgroundLease) }
         guard dependencies.cleaner.unavailableReason == nil else { return skip(.unavailable) }
-        // One or two words have nothing to clean up.
-        let words = CleanupGuard.wordCount(raw)
-        guard words >= 3 else { return skip(.tooShort) }
-        guard raw.utf8.count <= Self.maximumUTF8Bytes, words <= Self.maximumWords else { return skip(.budget) }
-        // An explicitly chosen dictation language is never skipped for its language.
-        guard context.language != .automatic || dependencies.language.supports(raw) else { return skip(.language) }
         guard admit(job.id) else { return skip(.busy) }
         return await withTaskCancellationHandler {
             // No suspension between cancellation check and continuation registration on MainActor.
@@ -221,6 +190,7 @@ final class CleanupCoordinator {
                 observe(.cancelled, started: started, dependencies: dependencies, diagnostics: diagnostics)
                 return raw
             }
+            let prompt = CleanupPrompt.make(raw, vocabulary: vocabulary, context: context)
             return await withCheckedContinuation { continuation in
                 pending = Pending(id: job.id, continuation: continuation, raw: raw, started: started,
                                   dependencies: dependencies, diagnostics: diagnostics)
@@ -228,34 +198,27 @@ final class CleanupCoordinator {
                 modelTask = Task {
                     let modelStarted = dependencies.clock()
                     do {
-                        let revised = try await job.session.clean(raw, style: style, vocabulary: vocabulary, context: context)
+                        let answer = try await job.session.generate(prompt)
                         let modelMilliseconds = dictationLogMilliseconds(from: modelStarted, to: dependencies.clock())
                         // A model that ignored cancellation and returned after its job was resolved
                         // (deadline, expiry, cancel) only reports how long it really took.
                         if pending?.id != job.id {
-                            diagnostics?.modelAnswer(revised, use: .late, modelMilliseconds: modelMilliseconds)
+                            diagnostics?.modelAnswer(answer, use: .late, modelMilliseconds: modelMilliseconds)
                             let elapsed = started.duration(to: dependencies.clock()).components
                             dependencies.observer.recordLate(
                                 latencyMilliseconds: max(0, elapsed.seconds * 1000 + elapsed.attoseconds / 1_000_000_000_000_000))
                             release(job.id)
                             return
                         }
-                        // Inspect RAW Notes line anchors before trimming or classifying empty output.
-                        if style == .notes && raw.components(separatedBy: "\n").count != revised.components(separatedBy: "\n").count {
-                            diagnostics?.modelAnswer(revised, use: .rejected(.guardRejected(.notesLineAnchors)), modelMilliseconds: modelMilliseconds)
-                            resolve(job.id, value: raw, outcome: .failed(.guardRejected(.notesLineAnchors)))
-                        } else if revised.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            diagnostics?.modelAnswer(revised, use: .rejected(.emptyOutput), modelMilliseconds: modelMilliseconds)
+                        // As Hex: the trimmed answer, or the transcript when the answer is empty.
+                        let cleaned = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if cleaned.isEmpty {
+                            diagnostics?.modelAnswer(answer, use: .rejected(.emptyOutput), modelMilliseconds: modelMilliseconds)
                             resolve(job.id, value: raw, outcome: .failed(.emptyOutput))
-                        } else if let rule = CleanupGuard.rejection(input: raw, output: revised, style: style, vocabulary: vocabulary) {
-                            diagnostics?.modelAnswer(revised, use: .rejected(.guardRejected(rule)), modelMilliseconds: modelMilliseconds)
-                            resolve(job.id, value: raw, outcome: .failed(.guardRejected(rule)))
                         } else {
-                            // English and technical compounds with spaces, not hyphens ("Pull Request").
-                            let cleaned = CleanupHyphens.apply(revised.trimmingCharacters(in: .whitespacesAndNewlines))
                             let changed = cleaned != raw.trimmingCharacters(in: .whitespacesAndNewlines)
                             dependencies.observer.recordChange(changed)
-                            diagnostics?.modelAnswer(revised, use: .accepted, modelMilliseconds: modelMilliseconds)
+                            diagnostics?.modelAnswer(answer, use: .accepted, modelMilliseconds: modelMilliseconds)
                             resolve(job.id, value: cleaned, outcome: .completed, changed: changed)
                         }
                     } catch {

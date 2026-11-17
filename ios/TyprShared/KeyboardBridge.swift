@@ -58,12 +58,19 @@ nonisolated struct KeyboardCommand: Codable, Equatable, Sendable {
     let jobID: String
     let style: DictationStyle
     let sentAt: TimeInterval
-    /// Start only: the end of the host field's text before the cursor, at most
-    /// `maximumContextCharacters`, so Typr cleanup knows the topic. Data for the cleanup prompt
-    /// only; never logged. Older commands without it decode as nil.
+    /// Start only, like Hex's caret text: the host field's text before the cursor (its end), the
+    /// selection the dictation replaces, and the text after the cursor (its start), within Hex's
+    /// caps. A selection over its cap sends none of the three, as Hex reads none. Data for the
+    /// cleanup prompt only; never logged. Older commands without them decode as nil.
     let context: String?
+    let selected: String?
+    let after: String?
+    /// Start only: the host app's bundle ID (`KeyboardHost`), when known.
+    let host: String?
 
-    static let maximumContextCharacters = 300
+    static let maximumBeforeCharacters = 1000
+    static let maximumAfterCharacters = 1000
+    static let maximumSelectedCharacters = 2000
 
     init(
         id: String = UUID().uuidString,
@@ -71,14 +78,22 @@ nonisolated struct KeyboardCommand: Codable, Equatable, Sendable {
         jobID: String,
         style: DictationStyle = .polished,
         sentAt: TimeInterval = Date().timeIntervalSince1970,
-        context: String? = nil
+        context: String? = nil,
+        selected: String? = nil,
+        after: String? = nil,
+        host: String? = nil
     ) {
         self.id = id
         self.kind = kind
         self.jobID = jobID
         self.style = style
         self.sentAt = sentAt
-        self.context = context.map { String($0.suffix(Self.maximumContextCharacters)) }.flatMap { $0.isEmpty ? nil : $0 }
+        func nonEmpty(_ text: String?) -> String? { text.flatMap { $0.isEmpty ? nil : $0 } }
+        let readable = (selected?.count ?? 0) <= Self.maximumSelectedCharacters
+        self.context = readable ? nonEmpty(context.map { String($0.suffix(Self.maximumBeforeCharacters)) }) : nil
+        self.selected = readable ? nonEmpty(selected) : nil
+        self.after = readable ? nonEmpty(after.map { String($0.prefix(Self.maximumAfterCharacters)) }) : nil
+        self.host = nonEmpty(host)
     }
 }
 
@@ -307,14 +322,21 @@ struct KeyboardBridge {
         jobID: String,
         style: DictationStyle? = nil,
         sentAt: TimeInterval = Date().timeIntervalSince1970,
-        context: String? = nil
+        context: String? = nil,
+        selected: String? = nil,
+        after: String? = nil,
+        host: String? = nil
     ) {
+        let start = kind == .start
         let command = KeyboardCommand(
             kind: kind,
             jobID: jobID,
             style: style ?? self.style,
             sentAt: sentAt,
-            context: kind == .start ? context : nil
+            context: start ? context : nil,
+            selected: start ? selected : nil,
+            after: start ? after : nil,
+            host: start ? host : nil
         )
         guard let data = try? encoder.encode(command) else { return }
         defaults?.set(data, forKey: Key.command)

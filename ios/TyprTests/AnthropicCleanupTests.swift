@@ -44,11 +44,10 @@ final class AnthropicTransportProbe: @unchecked Sendable {
         }
     }
 
-    static func message(text: String = "Hello there, world.", name: String = "cleaned_transcript",
-                        stopReason: String = "tool_use") -> Data {
+    static func message(text: String = "Hello there, world.", stopReason: String = "end_turn") -> Data {
         let json: [String: Any] = [
             "type": "message", "role": "assistant", "stop_reason": stopReason,
-            "content": [["type": "tool_use", "id": "toolu_1", "name": name, "input": ["text": text]]],
+            "content": [["type": "text", "text": text]],
         ]
         return try! JSONSerialization.data(withJSONObject: json)
     }
@@ -56,21 +55,20 @@ final class AnthropicTransportProbe: @unchecked Sendable {
 
 @MainActor
 final class AnthropicCleanupTests: XCTestCase {
-    private func session(_ probe: AnthropicTransportProbe, key: String? = "sk-ant-test",
-                         instructions: String = "Fix punctuation.") -> AnthropicCleanupSession {
-        AnthropicCleanupSession(key: key, instructions: instructions, transport: probe.transport)
+    private func session(_ probe: AnthropicTransportProbe, key: String? = "sk-ant-test") -> AnthropicCleanupSession {
+        AnthropicCleanupSession(key: key, transport: probe.transport)
     }
 
     private func body(_ request: URLRequest) throws -> [String: Any] {
         try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
     }
 
-    func testRequestUsesMessagesAPIWithForcedStrictToolAndNoSampling() async throws {
+    /// As Hex: the whole prompt is the one user message; no system prompt, tool or sampling.
+    func testRequestSendsThePromptAsTheOnlyUserMessage() async throws {
         let probe = AnthropicTransportProbe()
         probe.body = AnthropicTransportProbe.message()
-        let raw = "hello there world"
-        let context = CleanupContext(language: .english)
-        _ = try await session(probe).clean(raw, style: .polished, vocabulary: ["Typr"], context: context)
+        let prompt = CleanupPrompt.make("hello there world", vocabulary: ["Typr"], context: CleanupContext(application: "com.apple.MobileSMS"))
+        _ = try await session(probe).generate(prompt)
 
         let request = try XCTUnwrap(probe.requests.first)
         XCTAssertEqual(request.url?.absoluteString, "https://api.anthropic.com/v1/messages")
@@ -82,68 +80,33 @@ final class AnthropicCleanupTests: XCTestCase {
 
         let json = try body(request)
         XCTAssertEqual(json["model"] as? String, "claude-haiku-5-5")
-        XCTAssertEqual(json["max_tokens"] as? Int, raw.utf8.count / 2 + 256)
-        XCTAssertEqual(json["system"] as? String, "Fix punctuation.")
-        for sampling in ["temperature", "top_p", "top_k", "thinking"] { XCTAssertNil(json[sampling], sampling) }
-
+        XCTAssertEqual(json["max_tokens"] as? Int, AnthropicCleanupRequest.maxTokens(forUTF8Bytes: prompt.utf8.count))
+        for absent in ["system", "tools", "tool_choice", "temperature", "top_p", "top_k", "thinking"] {
+            XCTAssertNil(json[absent], absent)
+        }
         let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
         XCTAssertEqual(messages.count, 1)
         XCTAssertEqual(messages[0]["role"] as? String, "user")
-        XCTAssertEqual(messages[0]["content"] as? String,
-                       try CleanupPrompt.transcript(raw, style: .polished, vocabulary: ["Typr"], context: context))
-
-        let tools = try XCTUnwrap(json["tools"] as? [[String: Any]])
-        XCTAssertEqual(tools.count, 1)
-        XCTAssertEqual(tools[0]["name"] as? String, "cleaned_transcript")
-        XCTAssertEqual(tools[0]["strict"] as? Bool, true)
-        XCTAssertEqual(tools[0]["description"] as? String, AnthropicCleanupRequest.answerDescription)
-        let schema = try XCTUnwrap(tools[0]["input_schema"] as? [String: Any])
-        XCTAssertEqual(schema["type"] as? String, "object")
-        XCTAssertEqual(schema["required"] as? [String], ["text"])
-        XCTAssertEqual(schema["additionalProperties"] as? Bool, false)
-        let text = try XCTUnwrap((schema["properties"] as? [String: Any])?["text"] as? [String: Any])
-        XCTAssertEqual(text["type"] as? String, "string")
-        XCTAssertEqual(text["description"] as? String, AnthropicCleanupRequest.answerDescription)
-
-        let choice = try XCTUnwrap(json["tool_choice"] as? [String: Any])
-        XCTAssertEqual(choice["type"] as? String, "tool")
-        XCTAssertEqual(choice["name"] as? String, "cleaned_transcript")
+        XCTAssertEqual(messages[0]["content"] as? String, prompt)
     }
 
-    func testMaxTokensGrowsWithTranscriptAndIsCapped() {
+    func testMaxTokensGrowsWithThePromptAndIsCapped() {
         XCTAssertEqual(AnthropicCleanupRequest.maxTokens(forUTF8Bytes: 0), 256)
         XCTAssertEqual(AnthropicCleanupRequest.maxTokens(forUTF8Bytes: 1000), 756)
-        XCTAssertEqual(AnthropicCleanupRequest.maxTokens(forUTF8Bytes: CleanupCoordinator.maximumUTF8Bytes), 1456)
         XCTAssertEqual(AnthropicCleanupRequest.maxTokens(forUTF8Bytes: 10_000), 2048)
     }
 
-    func testCleanerSessionUsesSavedCustomPromptAsSystem() async throws {
-        let prompts = CleanupPromptPreferences()
-        let previous = prompts.isCustom ? prompts.instructions : nil
-        defer { if let previous { prompts.save(previous) } else { prompts.reset() } }
-        prompts.save("Keep my wording.")
-        let probe = AnthropicTransportProbe()
-        probe.body = AnthropicTransportProbe.message()
-        let cleaner = AnthropicCleaner(keys: AnthropicKeyStore(storage: MemorySecret("sk-ant-test")), transport: probe.transport)
-        _ = try await cleaner.makeSession().clean("one two three", style: .polished, vocabulary: [], context: CleanupContext())
-        XCTAssertEqual(try body(XCTUnwrap(probe.requests.first))["system"] as? String, "Keep my wording.")
-
-        prompts.reset()
-        _ = try await cleaner.makeSession().clean("one two three", style: .polished, vocabulary: [], context: CleanupContext())
-        XCTAssertEqual(try body(XCTUnwrap(probe.requests.last))["system"] as? String, CleanupPrompt.instructions)
-    }
-
-    func testToolAnswerIsReturned() async throws {
+    func testTextAnswerIsReturned() async throws {
         let probe = AnthropicTransportProbe()
         probe.body = AnthropicTransportProbe.message(text: "Hello there, world.")
-        let answer = try await session(probe).clean("hello there world", style: .polished)
+        let answer = try await session(probe).generate("prompt")
         XCTAssertEqual(answer, "Hello there, world.")
     }
 
     func testFailuresMapToBareCleanupErrors() async {
         let ok = AnthropicTransportProbe.message()
-        let textOnly = try! JSONSerialization.data(withJSONObject: [
-            "stop_reason": "end_turn", "content": [["type": "text", "text": "Hello there, world."]],
+        let toolOnly = try! JSONSerialization.data(withJSONObject: [
+            "stop_reason": "tool_use", "content": [["type": "tool_use", "name": "x", "input": ["text": "Hi"]]],
         ] as [String: Any])
         let cases: [(String, (AnthropicTransportProbe) -> Void, CleanupModelError)] = [
             ("401", { $0.status = 401; $0.body = Data(#"{"type":"error"}"#.utf8) }, .unavailable),
@@ -154,10 +117,9 @@ final class AnthropicCleanupTests: XCTestCase {
             ("500", { $0.status = 500; $0.body = ok }, .generationFailed),
             ("refusal", { $0.body = AnthropicTransportProbe.message(stopReason: "refusal") }, .refused),
             ("max_tokens", { $0.body = AnthropicTransportProbe.message(stopReason: "max_tokens") }, .generationFailed),
-            ("no tool block", { $0.body = textOnly }, .generationFailed),
-            ("other tool", { $0.body = AnthropicTransportProbe.message(name: "other") }, .generationFailed),
+            ("no text block", { $0.body = toolOnly }, .generationFailed),
             ("not JSON", { $0.body = Data("<html>".utf8) }, .generationFailed),
-            ("missing text", { $0.body = Data(#"{"content":[{"type":"tool_use","name":"cleaned_transcript","input":{}}]}"#.utf8) }, .generationFailed),
+            ("missing text", { $0.body = Data(#"{"content":[{"type":"text"}]}"#.utf8) }, .generationFailed),
             ("offline", { $0.failure = URLError(.notConnectedToInternet) }, .generationFailed),
             ("timeout", { $0.failure = URLError(.timedOut) }, .generationFailed),
             ("not HTTP", { $0.plainResponse = true; $0.body = ok }, .generationFailed),
@@ -167,7 +129,7 @@ final class AnthropicCleanupTests: XCTestCase {
             probe.body = ok
             configure(probe)
             do {
-                _ = try await session(probe).clean("hello there world", style: .polished)
+                _ = try await session(probe).generate("hello there world")
                 XCTFail("\(name) returned an answer")
             } catch {
                 XCTAssertEqual(error as? CleanupModelError, expected, name)
@@ -179,7 +141,7 @@ final class AnthropicCleanupTests: XCTestCase {
         let probe = AnthropicTransportProbe()
         probe.waitForCancellation = true
         let session = session(probe)
-        let task = Task { try await session.clean("hello there world", style: .polished) }
+        let task = Task { try await session.generate("hello there world") }
         try await waitForState("request sent") { probe.started }
         task.cancel()
         do {
@@ -196,7 +158,7 @@ final class AnthropicCleanupTests: XCTestCase {
         let session = session(probe)
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            return try await session.clean("hello there world", style: .polished)
+            return try await session.generate("hello there world")
         }
         do { _ = try await task.value; XCTFail("Cancelled cleanup returned") } catch {
             XCTAssertEqual(error as? CleanupModelError, .generationFailed)
@@ -210,7 +172,7 @@ final class AnthropicCleanupTests: XCTestCase {
         let cleaner = AnthropicCleaner(keys: AnthropicKeyStore(storage: secret), transport: probe.transport)
         XCTAssertEqual(cleaner.unavailableReason, "Add an Anthropic API key to use Claude")
         do {
-            _ = try await cleaner.makeSession().clean("hello there world", style: .polished)
+            _ = try await cleaner.makeSession().generate("hello there world")
             XCTFail("Cleanup without a key returned")
         } catch {
             XCTAssertEqual(error as? CleanupModelError, .unavailable)
@@ -232,13 +194,12 @@ final class AnthropicCleanupTests: XCTestCase {
         let cleaner = AnthropicCleaner(keys: AnthropicKeyStore(storage: MemorySecret("sk-ant-test")), transport: probe.transport)
         let background = CleanupTestBackground()
         let observer = CleanupTestObserver()
-        var dependencies = TranscriptCleanupDependencies(cleaner: cleaner, language: AnyLanguageSupported(),
-                                                         background: background, isEnabled: { true })
+        var dependencies = TranscriptCleanupDependencies(cleaner: cleaner, background: background, isEnabled: { true })
         dependencies.observer = observer
         let job = CleanupJob(session: cleaner.makeSession(), background: background)
         job.begin()
         let raw = "hello there world"
-        let result = await CleanupCoordinator().clean(raw, style: .polished, job: job, dependencies: dependencies)
+        let result = await CleanupCoordinator().clean(raw, job: job, dependencies: dependencies)
         XCTAssertEqual(result, raw)
         XCTAssertEqual(observer.events.map(\.outcome), [.failed(.rateLimited)])
         XCTAssertEqual(probe.requests.count, 1)
@@ -283,17 +244,13 @@ final class CleanupEngineSelectionTests: XCTestCase {
                 engine: { preferences.engine },
                 apple: CleanupTestCleaner(unavailableReason: "Turn on Apple Intelligence in Settings to use this", session: appleSession),
                 anthropic: CleanupTestCleaner(unavailableReason: nil, session: claudeSession))
-            let language = SelectedLanguageDetector(engine: { preferences.engine },
-                                                    apple: CleanupTestLanguage(allowed: false), anthropic: AnyLanguageSupported())
 
             XCTAssertEqual(cleaner.unavailableReason, "Turn on Apple Intelligence in Settings to use this")
             XCTAssertTrue(cleaner.makeSession() === appleSession)
-            XCTAssertFalse(language.supports("Bonjour tout le monde"))
 
             preferences.engine = .anthropic
             XCTAssertNil(cleaner.unavailableReason)
             XCTAssertTrue(cleaner.makeSession() === claudeSession)
-            XCTAssertTrue(language.supports("Bonjour tout le monde"))
         }
     }
 
@@ -308,7 +265,7 @@ final class CleanupEngineSelectionTests: XCTestCase {
         let cleaner = UnsupportedAppleCleaner()
         XCTAssertEqual(cleaner.unavailableReason, "Requires iOS 26 or later")
         do {
-            _ = try await cleaner.makeSession().clean("one two three", style: .polished, vocabulary: [], context: CleanupContext())
+            _ = try await cleaner.makeSession().generate("one two three")
             XCTFail("Unsupported Apple cleanup returned")
         } catch {
             XCTAssertEqual(error as? CleanupModelError, .unavailable)

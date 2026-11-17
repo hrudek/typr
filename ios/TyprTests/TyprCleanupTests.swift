@@ -21,7 +21,10 @@ final class CleanupTestSession: CleanupSession {
         if suspendPrewarm { await withCheckedContinuation { prewarmGate = $0 } }
         cancelled = Task.isCancelled
     }
-    func clean(_ text: String, style: DictationStyle) async throws -> String {
+    /// Every prompt this session was asked, in order.
+    private(set) var prompts: [String] = []
+    func generate(_ prompt: String) async throws -> String {
+        prompts.append(prompt)
         cleanCount += 1
         cleansInFlight += 1
         defer { cleansInFlight -= 1 }
@@ -42,12 +45,6 @@ struct CleanupTestCleaner: TyprTranscriptCleaning {
     var unavailableReason: String?
     let session: CleanupTestSession
     func makeSession() -> any CleanupSession { session }
-}
-
-@MainActor
-struct CleanupTestLanguage: LanguageDetecting {
-    var allowed = true
-    func supports(_ text: String) -> Bool { allowed }
 }
 
 @MainActor
@@ -92,19 +89,19 @@ final class TyprCleanupTests: XCTestCase {
         XCTAssertEqual(defaults.object(forKey: "typr.aiCleanup") as? Bool, false)
     }
 
-    func testSuccessThrowAndGuardFallback() async {
+    /// Success (trimmed, as Hex trims), a thrown error, and an empty answer: the last two keep the transcript.
+    func testSuccessThrowAndEmptyFallback() async {
         for mode in 0..<3 {
             let session = CleanupTestSession()
             session.shouldThrow = mode == 1
-            if mode == 2 { session.result = "Please transfer 950 Euro" }
+            session.result = mode == 2 ? " \n " : "  Die Katze sitzt auf der Matte.\n"
             let bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-                background: bg, isEnabled: { true }, sleep: clock.sleep)
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true }, sleep: clock.sleep)
             let job = CleanupJob(session: session, background: bg)
             job.begin()
             let coordinator = CleanupCoordinator()
-            let value = await coordinator.clean(raw, style: .polished, job: job, dependencies: deps)
-            XCTAssertEqual(value, mode == 0 ? session.result : raw)
+            let value = await coordinator.clean(raw, job: job, dependencies: deps)
+            XCTAssertEqual(value, mode == 0 ? "Die Katze sitzt auf der Matte." : raw)
             XCTAssertNil(coordinator.reservedBy)
             job.finish(); job.finish()
             XCTAssertEqual(bg.ends, [1])
@@ -116,18 +113,17 @@ final class TyprCleanupTests: XCTestCase {
     func testDeadlineRetainsReservationUntilIgnoringModelCompletes() async {
         let session = CleanupTestSession(); session.suspend = true
         let bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-            background: bg, isEnabled: { true }, sleep: clock.sleep)
+        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true }, sleep: clock.sleep)
         let coordinator = CleanupCoordinator()
         let a = CleanupJob(session: session, background: bg); a.begin()
-        let task = Task { await coordinator.clean(raw, style: .polished, job: a, dependencies: deps) }
+        let task = Task { await coordinator.clean(raw, job: a, dependencies: deps) }
         await drain()
         clock.fire()
         let value = await task.value
         XCTAssertEqual(value, raw)
         XCTAssertEqual(coordinator.reservedBy, a.id)
         let b = CleanupJob(session: session, background: bg); b.begin()
-        let skipped = await coordinator.clean(raw, style: .polished, job: b, dependencies: deps)
+        let skipped = await coordinator.clean(raw, job: b, dependencies: deps)
         XCTAssertEqual(skipped, raw)
         coordinator.cancel(b.id); coordinator.release(b.id)
         XCTAssertEqual(coordinator.reservedBy, a.id)
@@ -136,7 +132,7 @@ final class TyprCleanupTests: XCTestCase {
         XCTAssertNil(coordinator.reservedBy)
         session.suspend = false
         let c = CleanupJob(session: session, background: bg); c.begin()
-        let cleaned = await coordinator.clean(raw, style: .polished, job: c, dependencies: deps)
+        let cleaned = await coordinator.clean(raw, job: c, dependencies: deps)
         XCTAssertEqual(cleaned, session.result)
         a.finish(); b.finish(); c.finish(); clock.fire(); await drain()
     }
@@ -145,11 +141,10 @@ final class TyprCleanupTests: XCTestCase {
         for expire in [false, true] {
             let session = CleanupTestSession(); session.suspend = true
             let bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-                background: bg, isEnabled: { true }, sleep: clock.sleep)
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true }, sleep: clock.sleep)
             let job = CleanupJob(session: session, background: bg); job.begin()
             let coordinator = CleanupCoordinator()
-            let task = Task { await coordinator.clean(raw, style: .polished, job: job, dependencies: deps) }
+            let task = Task { await coordinator.clean(raw, job: job, dependencies: deps) }
             await drain()
             if expire { bg.expiration?() } else { task.cancel() }
             let value = await task.value
@@ -166,11 +161,10 @@ final class TyprCleanupTests: XCTestCase {
         for mode in 0..<2 {
             let bg = CleanupTestBackground(); bg.invalid = mode == 0; bg.expireInBegin = mode == 1
             let session = CleanupTestSession()
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-                background: bg, isEnabled: { true })
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true })
             let job = CleanupJob(session: session, background: bg); job.begin()
             let coordinator = CleanupCoordinator()
-            let value = await coordinator.clean(raw, style: .polished, job: job, dependencies: deps)
+            let value = await coordinator.clean(raw, job: job, dependencies: deps)
             XCTAssertEqual(value, raw)
             XCTAssertEqual(session.cleanCount, 0)
             job.finish(); job.finish()
@@ -189,8 +183,8 @@ final class TyprCleanupTests: XCTestCase {
         let foreign = UUID()
         XCTAssertTrue(coordinator.admit(foreign))
         job.begin()
-        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(), background: bg, isEnabled: { true })
-        let value = await coordinator.clean(raw, style: .polished, job: job, dependencies: deps)
+        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true })
+        let value = await coordinator.clean(raw, job: job, dependencies: deps)
         XCTAssertEqual(value, raw)
         XCTAssertEqual(session.cleanCount, 0)
         coordinator.release(job.id)
@@ -200,12 +194,11 @@ final class TyprCleanupTests: XCTestCase {
 
     func testLateDeadlineCannotResolveFollowingJobAndResultRaceIsSingleResolution() async {
         let session = CleanupTestSession(), bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(),
-            background: bg, isEnabled: { true }, sleep: clock.sleep)
+        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true }, sleep: clock.sleep)
         let coordinator = CleanupCoordinator()
         let a = CleanupJob(session: session, background: bg); a.begin()
         session.suspend = true
-        let firstTask = Task { await coordinator.clean(raw, style: .polished, job: a, dependencies: deps) }
+        let firstTask = Task { await coordinator.clean(raw, job: a, dependencies: deps) }
         await drain()
         XCTAssertEqual(clock.gates.count, 1)
         session.resume()
@@ -214,7 +207,7 @@ final class TyprCleanupTests: XCTestCase {
         await drain()
         session.suspend = true
         let b = CleanupJob(session: session, background: bg); b.begin()
-        let task = Task { await coordinator.clean(raw, style: .polished, job: b, dependencies: deps) }
+        let task = Task { await coordinator.clean(raw, job: b, dependencies: deps) }
         await drain()
         // Wake only A's cancelled sleeper; it must not cancel or resolve B.
         if !clock.gates.isEmpty { clock.gates.removeFirst().resume() }
@@ -247,50 +240,29 @@ final class TyprCleanupTests: XCTestCase {
         XCTAssertNil(coordinator.reservedBy)
     }
 
-    func testInputAndLanguageAdmissionSkipModel() async {
-        // Each row violates just one gate. In particular, many short words cannot
-        // isolate the byte budget, and a rejecting detector would mask every other gate.
-        let byteOnly = String(repeating: "lang", count: CleanupCoordinator.maximumUTF8Bytes / 4 + 1) + " eins zwei"
-        let wordOnly = String(repeating: "ab ", count: CleanupCoordinator.maximumWords + 1)
-        let shortOnly = "zwei Worte"
-        XCTAssertGreaterThan(byteOnly.utf8.count, CleanupCoordinator.maximumUTF8Bytes)
-        XCTAssertEqual(CleanupGuard.wordCount(byteOnly), 3)
-        XCTAssertLessThanOrEqual(CleanupGuard.wordCount(byteOnly), CleanupCoordinator.maximumWords)
-        XCTAssertGreaterThan(CleanupGuard.wordCount(wordOnly), CleanupCoordinator.maximumWords)
-        XCTAssertLessThanOrEqual(wordOnly.utf8.count, CleanupCoordinator.maximumUTF8Bytes)
-        XCTAssertEqual(CleanupGuard.wordCount(shortOnly), 2)
-        for text in [shortOnly, raw] {
-            XCTAssertLessThanOrEqual(text.utf8.count, CleanupCoordinator.maximumUTF8Bytes)
-            XCTAssertLessThanOrEqual(CleanupGuard.wordCount(text), CleanupCoordinator.maximumWords)
-        }
-        XCTAssertGreaterThanOrEqual(CleanupGuard.wordCount(raw), 3)
-
-        let rows: [(gate: String, text: String, languageAllowed: Bool)] = [
-            ("bytes", byteOnly, true), ("words", wordOnly, true),
-            ("short", shortOnly, true), ("language", raw, false)
-        ]
-        for row in rows {
-            let session = CleanupTestSession(), bg = CleanupTestBackground()
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session),
-                language: CleanupTestLanguage(allowed: row.languageAllowed), background: bg, isEnabled: { true })
+    /// As in Hex, any length and language goes to the model: no word count, byte budget or
+    /// language admission. Only numbers-only transcripts skip it.
+    func testEveryTranscriptButNumbersOnlyReachesTheModel() async {
+        for text in ["zwei Worte", "Bonjour", String(repeating: "lang ", count: 600)] {
+            let session = CleanupTestSession(), bg = CleanupTestBackground(), clock = CleanupTestSleeper()
+            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg,
+                isEnabled: { true }, sleep: clock.sleep)
             let job = CleanupJob(session: session, background: bg); job.begin()
-            let coordinator = CleanupCoordinator()
-            let value = await coordinator.clean(row.text, style: .polished, job: job, dependencies: deps)
-            XCTAssertEqual(value, row.text, row.gate)
-            XCTAssertNil(coordinator.reservedBy, row.gate)
-            XCTAssertEqual(session.cleanCount, 0, row.gate)
-            job.finish()
+            let value = await CleanupCoordinator().clean(text, job: job, dependencies: deps)
+            XCTAssertEqual(value, session.result)
+            XCTAssertEqual(session.prompts, [CleanupPrompt.make(text)])
+            job.finish(); clock.fire(); await drain()
         }
     }
 
     func testAlreadyCancelledBeforeRegistrationDoesNotStartModel() async {
         let session = CleanupTestSession(), bg = CleanupTestBackground()
-        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), language: CleanupTestLanguage(), background: bg, isEnabled: { true })
+        let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true })
         let job = CleanupJob(session: session, background: bg); job.begin()
         let coordinator = CleanupCoordinator()
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            return await coordinator.clean(raw, style: .polished, job: job, dependencies: deps)
+            return await coordinator.clean(raw, job: job, dependencies: deps)
         }
         let value = await task.value
         XCTAssertEqual(value, raw)
