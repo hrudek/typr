@@ -2094,4 +2094,59 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(f.controller.currentEngine, .appleSpeech)
         XCTAssertNil(f.controller.preferredEngine)
     }
+
+    func testDeletingWaitsForASupersededLoadOfThatEngine() async throws {
+        let held = EngineASR(.parakeetV3)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3, .whisperLargeV3Turbo]
+        provider.queued[.parakeetV3] = [held]
+        let f = fixture(preferred: .parakeetV3, provider: provider)
+        f.controller.prepareModel()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(f.controller.selectEngine(.whisperLargeV3Turbo), .selected)
+        let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        await mainActorBarrier()
+        XCTAssertTrue(provider.deleted.isEmpty, "the superseded load still holds the files")
+        await held.releasePrepare()
+        let result = await deletion.value
+        XCTAssertEqual(result, .deleted)
+        XCTAssertEqual(provider.deleted, [.parakeetV3])
+        try await f.waitUntil { f.controller.phase == .ready }
+        XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo)
+        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
+    }
+
+    func testKeyboardLaunchDuringDeletionIsAnsweredWhenItEnds() async throws {
+        let held = EngineASR(.parakeetV3)
+        await held.holdPrepare()
+        let provider = FakeEngineProvider()
+        provider.installed = [.parakeetV3]
+        provider.queued[.parakeetV3] = [held]
+        let f = fixture(preferred: .parakeetV3, provider: provider)
+        f.controller.prepareModel()
+        for _ in 0..<100 {
+            if await held.prepareCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
+        try await f.waitUntil { f.controller.isDeletingModel }
+        f.controller.handleKeyboardLaunch(.startRecording(jobID: "kb-delete", requestedAt: f.now, style: .polished, host: nil))
+        XCTAssertEqual(provider.explicitCalls, [.parakeetV3], "no preparation starts during the deletion")
+        provider.errors[.parakeetV3] = .notInstalled(.parakeetV3)
+        await held.releasePrepare()
+        _ = await deletion.value
+
+        let notInstalled = SpeechEngineError.notInstalled(.parakeetV3).localizedDescription
+        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+        XCTAssertEqual(provider.explicitCalls, [.parakeetV3, .parakeetV3])
+        XCTAssertEqual(f.bridge.snapshot().state, .failed)
+        XCTAssertEqual(f.bridge.snapshot().message, notInstalled)
+        XCTAssertTrue(f.audio.captures.isEmpty)
+        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+    }
 }

@@ -212,6 +212,15 @@ final class DictationController {
     /// The engine of the ready transcriber; nil while none is ready or while switching.
     private(set) var currentEngine: SpeechEngineChoice?
     private(set) var isDeletingModel = false
+    @ObservationIgnored private var loadingEngine: SpeechEngineChoice? {
+        didSet {
+            guard loadingEngine == nil else { return }
+            let waiters = loadFinishedWaiters
+            loadFinishedWaiters = []
+            waiters.forEach { $0.resume() }
+        }
+    }
+    @ObservationIgnored private var loadFinishedWaiters: [CheckedContinuation<Void, Never>] = []
     private(set) var modelPreparation = ModelPreparationProgress(
         fractionCompleted: 0,
         detail: "Checking model files"
@@ -437,22 +446,20 @@ final class DictationController {
         guard engine.hasDeletableModel else { return .notDeletable }
         guard canChangeEngine else { return .busy }
         isDeletingModel = true
-        defer { isDeletingModel = false }
         let preparingEngine = preferredEngine ?? SpeechEngineChoice(displayName: engineName)
         if currentEngine == engine || (!isModelReady && preparingEngine == engine) {
             if keyboardSessionEnabled { endWarmSession() }
             modelPrepGeneration &+= 1
-            let previous = preparationTask
-            previous?.cancel()
-            preparationTask = nil
-            pendingHandoff = nil
+            preparationTask?.cancel()
             modelBackground?.finish(success: false)
             transcriber = UnpreparedTranscriber(displayName: engineName)
             currentEngine = nil
             isModelReady = false
             phase = .modelRequired
-            // A Core ML load cannot be interrupted; its files stay until it returns.
-            await previous?.value
+        }
+        // A Core ML load cannot be interrupted, also one superseded by another engine's choice.
+        while loadingEngine == engine {
+            await withCheckedContinuation { loadFinishedWaiters.append($0) }
         }
         let result: ModelDeletion
         do {
@@ -467,6 +474,8 @@ final class DictationController {
         }
         publishKeyboardSnapshot()
         scheduleModelMaintenance()
+        isDeletingModel = false
+        fulfillPendingHandoffOrPrepare()
         return result
     }
 
@@ -972,6 +981,8 @@ final class DictationController {
                 }
                 guard self.modelPrepGeneration == prepGen else { return }
                 engineName = candidate.displayName
+                loadingEngine = SpeechEngineChoice(displayName: candidate.displayName)
+                defer { loadingEngine = nil }
                 try await candidate.prepare { [weak self] progress in
                     Task { @MainActor [weak self] in
                         guard let self, self.modelPrepGeneration == prepGen else { return }
