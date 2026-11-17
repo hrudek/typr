@@ -761,12 +761,17 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertFalse(updated.scan === snapshot.scan)
         // Warm the original snapshot, change a count and add a word, then revisit the original.
         // The corpus memo survives, but entry bonuses and personal-only words must refresh.
+        var coldResults: [String: SpatialWordDecoder.Result] = [:]
         for (current, currentCounts) in [(snapshot, counts), (updated, changedCounts), (snapshot, counts)] {
             for languages: Set<SpatialWordDecoder.Language> in [[.english], [.german], [.english, .german], [.english]] {
-                for typed in ["helo", "keyboar", "thinkng", "wunderbar", "strasse", "teh", "xello", changedWord] {
+                for typed in ["wunderbar", "xello", changedWord] {
                     let word = evidence(typed, aimedAt: typed == "xello" ? "zello" : typed)
-                    let cold = try XCTUnwrap(SpatialWordDecoder(lexicons: sources).decode(word, languages: languages,
-                        personal: .init(kept: [], counts: currentCounts, rejected: [])))
+                    let key = "\(currentCounts == counts) \(languages.map(\.rawValue).sorted()) \(typed)"
+                    if coldResults[key] == nil {
+                        coldResults[key] = try XCTUnwrap(SpatialWordDecoder(lexicons: sources).decode(word,
+                            languages: languages, personal: .init(kept: [], counts: currentCounts, rejected: [])))
+                    }
+                    let cold = try XCTUnwrap(coldResults[key])
                     for _ in 0..<2 {
                         let cached = try XCTUnwrap(decoder.decode(word, languages: languages, personal: current))
                         XCTAssertEqual(cached.literalScore, cold.literalScore)

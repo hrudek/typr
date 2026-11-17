@@ -9,11 +9,23 @@ targets:
     platform: iOS
     sources:
       - TyprTests/DecoderStatisticsEvaluationTests.swift
+      - TyprTests/KeyboardBoundaryDecoderTests.swift
+      - TyprTests/KeyboardBoundaryEvaluationTests.swift
+      - TyprTests/KeyboardBoundaryMultipartTests.swift
+      - TyprTests/KeyboardContextCorpusTests.swift
+      - TyprTests/KeyboardContextEvaluationTests.swift
+      - TyprTests/KeyboardKeyMapEvaluationFixtures.swift
+      - TyprTests/KeyboardKeyMapTests.swift
       - TyprTests/KeyboardNeuralEvaluationTests.swift
+      - TyprTests/KeyboardSuggestionEvaluationTests.swift
+      - TyprTests/KeyboardTestSupport.swift
       - TyprTests/PersonalTrigramPhraseFixtures.swift
+      - TyprTests/PersonalTypingAimEvaluationTests.swift
+      - TyprTests/PersonalTypingBigramEvaluationTests.swift
       - TyprTests/PersonalTypingTrigramEvaluationTests.swift
       - TyprTests/SpatialTypoEvaluationEvidence.swift
       - TyprTests/SpatialTypoEvaluationFixtures.swift
+      - TyprTests/SpatialTypoEvaluationTests.swift
     dependencies:
       - target: Typr
     settings:

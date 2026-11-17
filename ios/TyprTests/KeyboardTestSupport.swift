@@ -35,3 +35,14 @@ nonisolated enum EvaluationSample {
 
     static func includes(_ index: Int, every stride: Int) -> Bool { isFull || index % stride == 0 }
 }
+
+/// Older transaction tests inject explicit strip choices rather than waiting for real dictionary
+/// output. Bind those fixture choices to the CURRENT field exactly as a freshly rendered chip is.
+@MainActor
+extension FullKeyboardEngine {
+    func acceptOwnedFixtureSuggestion(_ suggestion: KeyboardSuggestion) {
+        var owned = suggestion
+        owned.ownership = suggestionOwnership
+        acceptSuggestion(owned)
+    }
+}

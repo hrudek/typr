@@ -2,17 +2,6 @@ import Foundation
 import XCTest
 @testable import Typr
 
-/// Older transaction tests inject explicit strip choices rather than waiting for real dictionary
-/// output. Bind those fixture choices to the CURRENT field exactly as a freshly rendered chip is.
-@MainActor
-extension FullKeyboardEngine {
-    func acceptOwnedFixtureSuggestion(_ suggestion: KeyboardSuggestion) {
-        var owned = suggestion
-        owned.ownership = suggestionOwnership
-        acceptSuggestion(owned)
-    }
-}
-
 @MainActor
 final class KeyboardSuggestionWorkerTests: XCTestCase {
     private final class Checker: TextChecking {

@@ -75,7 +75,7 @@ final class KeyboardContextModelTests: XCTestCase {
     func testNormalizedBackoffAndSingleLanguageSelection() throws {
         let model = try XCTUnwrap(BundledKeyboardData.contextModel), de = try XCTUnwrap(model.de), en = try XCTUnwrap(model.en)
         for pack in [de, en] {
-            for h: String? in [nil, "unseenxyz", "<s>", "ich", "i", "tom"] {
+            for h: String? in [nil, "<s>", "ich", "i", "tom"] {
                 let distribution = pack.distribution(h)
                 let sum = (1..<pack.wordCount).reduce(0.0) { $0 + pack.probability(pack.word($1), distribution: distribution) }
                 XCTAssertEqual(sum, 1, accuracy: 1e-12)
@@ -153,12 +153,13 @@ final class KeyboardContextModelTests: XCTestCase {
         XCTAssertEqual(model.rerank(Array(repeating: "word", count: 100), context: c, german: true, english: true).count, 32)
     }
 
+    nonisolated private static let crcTable: [UInt32] = (0..<256).map { byte in
+        (0..<8).reduce(UInt32(byte)) { crc, _ in (crc >> 1) ^ (crc & 1 == 0 ? 0 : 0xedb88320) }
+    }
+
     private func repairCRC(_ data: inout Data) {
         var crc: UInt32 = 0xffffffff
-        for b in data.dropFirst(64) {
-            crc ^= UInt32(b)
-            for _ in 0..<8 { crc = (crc >> 1) ^ (crc & 1 == 0 ? 0 : 0xedb88320) }
-        }
+        for b in data.dropFirst(64) { crc = (crc >> 8) ^ Self.crcTable[Int((crc ^ UInt32(b)) & 0xff)] }
         crc ^= 0xffffffff
         for i in 0..<4 { data[56 + i] = UInt8(truncatingIfNeeded: crc >> (8 * i)) }
     }

@@ -175,6 +175,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
                           target.allSatisfy({ "abcdefghijklmnopqrstuvwxyz".contains($0) }) else { continue }
                     let prefix = words[..<i].joined(separator: " ").replacingOccurrences(of: " .", with: ".") + " "
                     ordinal += 1
+                    guard EvaluationSample.includes(ordinal, every: 61) else { continue }
                     // One and two neighbour substitutions, plus the correctly typed control.
                     for error in [SpatialTypoEvaluationEvidence.ErrorClass.neighbour1, .neighbour2, nil] {
                         let word = try SpatialTypoEvaluationEvidence.evidence(target, grid: grid, error: error, ordinal: ordinal,
@@ -231,7 +232,7 @@ final class KeyboardContextEvaluationTests: XCTestCase {
                           sorted[Int(Double(sorted.count - 1) * 0.95)], sorted.last!)
         }
         print("EVAL context_noisy_heldout_latency calls=\(milliseconds[1].count) baseline_\(summary(milliseconds[0])) context_\(summary(milliseconds[1])) timing=\(Self.timingPlatform)")
-        XCTAssertEqual(milliseconds[1].count, 2_154) // Same bounded fixture calls in both variants.
+        XCTAssertEqual(milliseconds[1].count, EvaluationSample.isFull ? 2_154 : 34) // Same bounded fixture calls in both variants.
         XCTAssertEqual(milliseconds[0].count, milliseconds[1].count)
     }
 
