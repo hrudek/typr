@@ -177,8 +177,6 @@ final class KeyboardViewController: UIInputViewController {
         mountSurface()
     }
 
-    /// The full keyboard on iPhone, or the dictation bar when it was picked or on iPad.
-    /// Only switches while idle.
     private func mountSurface() {
         let isPhone = UIDevice.current.userInterfaceIdiom == .phone
         let wantsFull = KeyboardSurfaceChoice.wantsFullKeyboard(
