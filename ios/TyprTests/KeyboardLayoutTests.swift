@@ -205,6 +205,15 @@ final class KeyboardLayoutTests: XCTestCase {
                 let offset = y * cgImage.bytesPerRow + x * cgImage.bitsPerPixel / 8
                 return Int(data[offset]) + Int(data[offset + 1]) + Int(data[offset + 2])
             }
+            func alpha(_ point: CGPoint) -> Int {
+                let x = Int(point.x - joined.frame.minX), y = Int(point.y - joined.frame.minY)
+                return Int(data[y * cgImage.bytesPerRow + x * cgImage.bitsPerPixel / 8 + 3])
+            }
+            for edge in [joined.frame.minY + 0.5, joined.frame.maxY - 0.5] {
+                let corner = CGPoint(x: joined.mechanicalSeamX(atY: edge, face: face), y: edge)
+                let body = CGPoint(x: joined.frame.minX + joined.radius * 2, y: edge)
+                XCTAssertLessThan(alpha(corner), alpha(body))
+            }
             for y in [face.minY + face.height * 0.25, face.midY, face.maxY - face.height * 0.25] {
                 let seam = CGPoint(x: joined.mechanicalSeamX(atY: y, face: face), y: y)
                 XCTAssertLessThan(brightness(seam), brightness(CGPoint(x: seam.x - 6, y: y)))
