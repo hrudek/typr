@@ -366,16 +366,17 @@ final class KeyboardLayoutTests: XCTestCase {
 
 @MainActor
 final class FullKeyboardSettingsTests: XCTestCase {
-    func testFullKeyboardIsOffAndAutocorrectOnByDefault() throws {
+    func testFullKeyboardAndAutocorrectAreOnByDefault() throws {
         let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = FullKeyboardSettings(defaults: defaults)
 
-        XCTAssertFalse(settings.isEnabled)
+        XCTAssertTrue(settings.isEnabled)
         XCTAssertTrue(settings.autocorrect)
         XCTAssertTrue(settings.swipeTyping)
 
+        settings.isEnabled = false
         settings.applyLaunchArguments(["Typr"])
         XCTAssertFalse(settings.isEnabled)
         settings.applyLaunchArguments(["Typr", FullKeyboardSettings.launchArgument])

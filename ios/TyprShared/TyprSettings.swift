@@ -80,9 +80,9 @@ struct TyprSettings {
     }
 
     /// The full keyboard without its suggestion bar: the keys move up and the keyboard gets
-    /// shorter. Autocorrect on space still applies. On by default; off keeps the bar.
+    /// shorter. Autocorrect on space still applies. Off by default; the bar is shown.
     var hideSuggestionBar: Bool {
-        get { defaults?.object(forKey: Key.hideSuggestionBar) as? Bool ?? true }
+        get { defaults?.object(forKey: Key.hideSuggestionBar) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.hideSuggestionBar) }
     }
 }
