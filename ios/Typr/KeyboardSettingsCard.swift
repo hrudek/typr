@@ -13,9 +13,11 @@ struct KeyboardSettingsCard: View {
     @State private var autocorrectEnglish = TyprSettings().autocorrectEnglish
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
     @State private var globeKey = FullKeyboardSettings().globeKey
+    @State private var bottomRow = FullKeyboardSettings().bottomRow
 
     static let swipeNotice = "Swipe typing powered by FUTO Swipe."
     static let globeKeyFooter = "On iPhones with no globe under the keyboard. A spacer sits left of 123, keeps it away from the corner and does nothing when tapped. As a spacer or hidden, hold 123 for the next keyboard, or hold space in the dictation bar."
+    static let bottomRowFooter = "Hold the period key for more punctuation. Drag to set the keys around the space bar in any order."
 
     var body: some View {
         VStack(spacing: 24) {
@@ -56,6 +58,27 @@ struct KeyboardSettingsCard: View {
                     .padding(.horizontal, 16)
             }
             if fullKeyboard {
+                VStack(alignment: .leading, spacing: 8) {
+                    SettingsSection(title: "Bottom row") {
+                        SettingsOrderRows(items: $bottomRow.order) { key in
+                            if key == .period {
+                                Toggle(isOn: $bottomRow.periodKey) {
+                                    Text(key.title).font(.body).foregroundStyle(TyprTheme.textBase)
+                                }
+                                .tint(TyprTheme.success)
+                            } else {
+                                Text(key.title).font(.body).foregroundStyle(TyprTheme.textBase)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .onChange(of: bottomRow) { _, row in
+                        FullKeyboardSettings().bottomRow = row
+                    }
+                    Text(Self.bottomRowFooter)
+                        .font(.footnote).foregroundStyle(TyprTheme.textMuted)
+                        .padding(.horizontal, 16)
+                }
                 SettingsSection(title: "Typing assistance") {
                     SettingsToggle(title: "Autocorrect", detail: "Correct contractions, shortcuts and small typos on space.", isOn: $autocorrect)
                         .onChange(of: autocorrect) { _, enabled in
@@ -116,6 +139,7 @@ struct KeyboardSettingsCard: View {
         autocorrectEnglish = TyprSettings().autocorrectEnglish
         hideSuggestionBar = TyprSettings().hideSuggestionBar
         globeKey = FullKeyboardSettings().globeKey
+        bottomRow = FullKeyboardSettings().bottomRow
     }
 }
 
@@ -125,6 +149,16 @@ extension GlobeKey {
         case .switches: "Switches keyboards"
         case .spacer: "Spacer"
         case .hidden: "Hidden"
+        }
+    }
+}
+
+extension BottomKey {
+    var title: String {
+        switch self {
+        case .space: "Space bar"
+        case .period: "Period key"
+        case .typr: "Typr key"
         }
     }
 }

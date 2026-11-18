@@ -428,9 +428,11 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     private func refreshFromModel() {
         typrKey.isWarm = model.hasFullAccess && model.isWarmAvailable
-        if engine.showsGlobe != model.needsGlobeKey || engine.globeKey != model.globeKey {
+        if engine.showsGlobe != model.needsGlobeKey || engine.globeKey != model.globeKey
+            || engine.bottomRow != model.bottomRow {
             engine.showsGlobe = model.needsGlobeKey
             engine.globeKey = model.globeKey
+            engine.bottomRow = model.bottomRow
             setNeedsLayout()
         }
         let recording = model.stagePhase == .recording || model.stagePhase == .transcribing

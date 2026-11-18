@@ -13,6 +13,8 @@ struct FullKeyboardSettings {
         static let autocorrect = "settings.keyboardAutocorrect"
         static let swipeTyping = "settings.keyboardSwipeTyping"
         static let globeKey = "settings.keyboardGlobeKey"
+        static let bottomRowOrder = "settings.keyboardBottomRowOrder"
+        static let periodKey = "settings.keyboardPeriodKey"
     }
 
     private let defaults: UserDefaults?
@@ -43,6 +45,21 @@ struct FullKeyboardSettings {
     var globeKey: GlobeKey {
         get { defaults?.string(forKey: Key.globeKey).flatMap(GlobeKey.init(rawValue:)) ?? .switches }
         nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.globeKey) }
+    }
+
+    /// The keys around the space bar. Space then Typr, no period key, by default.
+    var bottomRow: BottomRow {
+        get {
+            let order = (defaults?.stringArray(forKey: Key.bottomRowOrder) ?? []).compactMap(BottomKey.init(rawValue:))
+            return BottomRow(
+                order: BottomKey.arranged(order),
+                periodKey: defaults?.object(forKey: Key.periodKey) as? Bool ?? false
+            )
+        }
+        nonmutating set {
+            defaults?.set(newValue.order.map(\.rawValue), forKey: Key.bottomRowOrder)
+            defaults?.set(newValue.periodKey, forKey: Key.periodKey)
+        }
     }
 
     /// Simulator scenes pass `--experiment-full-keyboard` to turn the experiment on.

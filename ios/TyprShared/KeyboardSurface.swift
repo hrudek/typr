@@ -50,6 +50,7 @@ final class KeyboardViewModel: ObservableObject {
     @Published var hasFullAccess = true
     @Published var needsGlobeKey = true
     @Published var globeKey = GlobeKey.switches
+    @Published var bottomRow = BottomRow()
     @Published var returnKeyLabel = "Return"
     @Published var isModelInstalled = false
     @Published private(set) var isWarmAvailable = false

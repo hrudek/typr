@@ -159,6 +159,14 @@ are Typr-specific hardening, not additional upstream code or data. No upstream f
 resources, neural weights or dependencies are included. The single full MIT notice
 below (Copyright (c) 2026 Bassim Shahidy) covers this adaptation.
 
+Settings › Bottom row adapts the drag-handle reorder rows of `App/Design/OrderRows.swift`
+(into `ios/Typr/SettingsOrderRows.swift`), `BottomKey.arranged` from
+`Packages/KeyboardModules/Sources/KeyboardCore/Typing/CustomKeys.swift` and the period
+key's punctuation list from `Keys/Alternates.swift` at
+[`73c2ed9016b802e5bf017a2d595d037d1e748ccf`](https://github.com/AVGVSTVS96/iikb/tree/73c2ed9016b802e5bf017a2d595d037d1e748ccf).
+License verified at that revision: MIT, Copyright (c) 2026 Bassim Shahidy; the MIT
+notice below applies.
+
 From [AVGVSTVS96/iikb](https://github.com/AVGVSTVS96/iikb/blob/f0f1e1f7a29ba915918729115d782ae494fc7244/LICENSE).
 
 ```text

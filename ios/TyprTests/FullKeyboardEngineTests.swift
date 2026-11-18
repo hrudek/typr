@@ -130,6 +130,27 @@ final class FullKeyboardEngineTests: XCTestCase {
         XCTAssertEqual(target.text, ".")
     }
 
+    func testThePeriodKeyTypesAPeriodAndItsHoldOffersMorePunctuation() throws {
+        engine.bottomRow = BottomRow(order: BottomKey.standard, periodKey: true)
+        tap(.character("."))
+        XCTAssertEqual(target.text, ".")
+
+        down(1, .character("."))
+        XCTAssertTrue(engine.openAccentMenuIfEligible(forTouch: 1))
+        let menu = try XCTUnwrap(engine.activeAccentMenu)
+        XCTAssertEqual(Set(menu.options), Set(AccentCatalog.periodKey))
+        let cell = menu.cellFrames[try XCTUnwrap(menu.options.firstIndex(of: ","))]
+        engine.touchMoved(id: 1, to: CGPoint(x: cell.midX, y: cell.midY))
+        engine.touchEnded(id: 1, at: CGPoint(x: cell.midX, y: cell.midY))
+        XCTAssertEqual(target.text, ".,")
+
+        tap(.layerSwitch(.numbers))
+        down(1, .character("."))
+        XCTAssertTrue(engine.openAccentMenuIfEligible(forTouch: 1))
+        XCTAssertEqual(Set(try XCTUnwrap(engine.activeAccentMenu).options), Set(AccentCatalog.options(for: ".", uppercase: false) ?? []))
+        engine.cancelAllTouches()
+    }
+
     func testGlobeSpacerDoesNothingWhenTapped() {
         engine.showsGlobe = true
         engine.globeKey = .spacer

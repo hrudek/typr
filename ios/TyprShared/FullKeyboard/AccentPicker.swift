@@ -24,6 +24,9 @@ nonisolated enum AccentCatalog {
         "/": ["/", "\\"],
     ]
 
+    /// The bottom row's period key: the punctuation the letters lack.
+    static let periodKey = [".", ",", "?", "!", "'", "-", "&", "%"]
+
     static func options(for base: String, uppercase: Bool) -> [String]? {
         guard let list = table[base.lowercased()] else { return nil }
         guard uppercase else { return list }
