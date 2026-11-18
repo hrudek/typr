@@ -7,6 +7,7 @@ import UIKit
 /// field's `keyboardAppearance` first, then the host's interface style.
 struct FullKeyboardPalette: Equatable {
     let isDark: Bool
+    var design = KeyboardDesign.standard
 
     static func isDark(appearance: UIKeyboardAppearance?, traits: UITraitCollection) -> Bool {
         switch appearance {
@@ -176,6 +177,10 @@ struct JoinedSpaceKeycap {
     }
 
     func draw(in context: CGContext, palette: FullKeyboardPalette, spacePressed: Bool, typrPressed: Bool) {
+        if palette.design == .mechanical {
+            drawMechanical(in: context, palette: palette, spacePressed: spacePressed, typrPressed: typrPressed)
+            return
+        }
         let line = Self.lineWidth
         let outline = UIBezierPath(roundedRect: frame.insetBy(dx: line / 2, dy: line / 2), cornerRadius: radius)
         context.saveGState()
@@ -202,7 +207,112 @@ struct JoinedSpaceKeycap {
     }
 }
 
+extension JoinedSpaceKeycap {
+    fileprivate func drawMechanical(in context: CGContext, palette: FullKeyboardPalette, spacePressed: Bool, typrPressed: Bool) {
+        let mechanical = MechanicalKeycap(isDark: palette.isDark)
+        let spaceFace = spacePressed ? palette.keyPressedFill : palette.keyFill
+        let typrFace = typrPressed ? palette.keyPressedFill : palette.keyFill
+        mechanical.drawCap(in: context, rect: frame, radius: radius)
+        let face = mechanical.faceRect(frame)
+        let faceRadius = mechanical.faceRadius(radius)
+        context.saveGState()
+        UIBezierPath(roundedRect: face, cornerRadius: faceRadius).addClip()
+        mechanical.fillFace(in: context, rect: face, color: spaceFace)
+        Self.typrRegion(cap: typr, radius: radius).addClip()
+        mechanical.fillFace(in: context, rect: face, color: typrFace)
+        context.restoreGState()
+        context.saveGState()
+        UIBezierPath(roundedRect: frame, cornerRadius: radius).addClip()
+        let seam = Self.seam(cap: typr, radius: radius)
+        seam.lineWidth = MechanicalKeycap.seamWidth
+        mechanical.rim.setStroke()
+        seam.stroke()
+        context.restoreGState()
+    }
+}
+
+struct MechanicalKeycap {
+    let isDark: Bool
+
+    static let seamWidth: CGFloat = 3.5
+
+    var rim: UIColor { isDark ? UIColor(white: 0.07, alpha: 1) : UIColor(white: 0.74, alpha: 1) }
+
+    func faceRect(_ cap: CGRect) -> CGRect {
+        CGRect(x: cap.minX + 3, y: cap.minY + 2.5, width: cap.width - 6, height: cap.height - 7)
+    }
+
+    func faceRadius(_ radius: CGFloat) -> CGFloat { max(2, radius - 2.5) }
+
+    func inkFrame(_ cap: CGRect) -> CGRect { cap.offsetBy(dx: 0, dy: -1) }
+
+    func drawCap(in context: CGContext, rect: CGRect, radius: CGFloat) {
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: 1), blur: 2.5, color: UIColor(white: 0, alpha: isDark ? 0.55 : 0.22).cgColor)
+        context.addPath(path)
+        context.setFillColor(rim.cgColor)
+        context.fillPath()
+        context.restoreGState()
+        context.saveGState()
+        context.addPath(path)
+        context.clip()
+        let top = UIColor(white: isDark ? 0.17 : 0.88, alpha: 1)
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: [top.cgColor, rim.cgColor] as CFArray,
+            locations: [0, 0.45]
+        ) {
+            context.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: rect.midX, y: rect.minY),
+                end: CGPoint(x: rect.midX, y: rect.maxY),
+                options: []
+            )
+        }
+        context.restoreGState()
+    }
+
+    func fillFace(in context: CGContext, rect: CGRect, color: UIColor) {
+        context.setFillColor(color.cgColor)
+        context.fill(rect)
+        context.saveGState()
+        context.clip(to: rect)
+        if let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: [UIColor(white: 1, alpha: isDark ? 0.07 : 0.5).cgColor, UIColor(white: 1, alpha: 0).cgColor] as CFArray,
+            locations: [0, 1]
+        ) {
+            context.drawLinearGradient(
+                gradient,
+                start: CGPoint(x: rect.midX, y: rect.minY),
+                end: CGPoint(x: rect.midX, y: rect.minY + rect.height * 0.5),
+                options: []
+            )
+        }
+        context.restoreGState()
+    }
+
+    func draw(in context: CGContext, rect: CGRect, face color: UIColor, radius: CGFloat) {
+        drawCap(in: context, rect: rect, radius: radius)
+        let face = faceRect(rect)
+        context.saveGState()
+        UIBezierPath(roundedRect: face, cornerRadius: faceRadius(radius)).addClip()
+        fillFace(in: context, rect: face, color: color)
+        context.restoreGState()
+    }
+}
+
 extension CGContext {
+    func fillKeycap(_ rect: CGRect, palette: FullKeyboardPalette, fill: UIColor, radius: CGFloat = FullKeyboardPalette.cornerRadius) {
+        switch palette.design {
+        case .standard:
+            fillKeycap(rect, fill: fill, radius: radius)
+        case .mechanical:
+            MechanicalKeycap(isDark: palette.isDark).draw(in: self, rect: rect, face: fill, radius: radius)
+        }
+    }
+
     /// Draws a continuous-corner iOS 26 Liquid Glass keycap with no legacy under-shadow.
     func fillKeycap(_ rect: CGRect, fill: UIColor, shadow: UIColor = .clear, radius: CGFloat = FullKeyboardPalette.cornerRadius) {
         let path = UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath

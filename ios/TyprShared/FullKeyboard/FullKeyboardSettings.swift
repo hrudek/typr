@@ -1,5 +1,10 @@
 import Foundation
 
+nonisolated enum KeyboardDesign: String, CaseIterable, Sendable {
+    case standard = "default"
+    case mechanical
+}
+
 /// The full keyboard's switches in the shared App Group.
 ///
 /// Without Full Access the keyboard cannot read the App Group, so `isEnabled` reads
@@ -15,6 +20,7 @@ struct FullKeyboardSettings {
         static let globeKey = "settings.keyboardGlobeKey"
         static let bottomRowOrder = "settings.keyboardBottomRowOrder"
         static let periodKey = "settings.keyboardPeriodKey"
+        static let design = "settings.keyboardDesign"
     }
 
     private let defaults: UserDefaults?
@@ -60,6 +66,11 @@ struct FullKeyboardSettings {
             defaults?.set(newValue.order.map(\.rawValue), forKey: Key.bottomRowOrder)
             defaults?.set(newValue.periodKey, forKey: Key.periodKey)
         }
+    }
+
+    var design: KeyboardDesign {
+        get { defaults?.string(forKey: Key.design).flatMap(KeyboardDesign.init(rawValue:)) ?? .standard }
+        nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.design) }
     }
 
     /// Simulator scenes pass `--experiment-full-keyboard` to turn the experiment on.

@@ -77,7 +77,7 @@ final class KeyboardKeyPlaneView: UIView {
                 // The pressed key is drawn by its balloon in portrait.
                 if key.kind == preview { continue }
                 let fill = pressed.contains(key.kind) ? palette.keyPressedFill : palette.keyFill
-                context.fillKeycap(key.frame, fill: fill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: fill, radius: radius)
                 guard !hideGlyphs else { continue }
                 let label = engine.displayLabel(for: key)
                 let isWidePunctuation = key.frame.width > layout.letterWidth * 1.2
@@ -92,7 +92,7 @@ final class KeyboardKeyPlaneView: UIView {
                 let yOffset: CGFloat = isUpperLetter ? 0 : (isLandscape ? -0.5 : -1)
                 drawText(
                     label,
-                    in: key.frame,
+                    in: inkFrame(key.frame),
                     font: .systemFont(ofSize: fontSize, weight: .regular),
                     color: palette.textBase,
                     yOffset: yOffset
@@ -100,7 +100,7 @@ final class KeyboardKeyPlaneView: UIView {
             case .space:
                 if joined != nil { continue }
                 let fill = pressed.contains(.space) ? palette.keyPressedFill : palette.keyFill
-                context.fillKeycap(key.frame, fill: fill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: fill, radius: radius)
             case .returnKey:
                 let isPressed = pressed.contains(.returnKey) && returnIsEnabled
                 let activeAction = returnIsAction && returnIsEnabled && !hideGlyphs
@@ -114,51 +114,55 @@ final class KeyboardKeyPlaneView: UIView {
                 } else {
                     palette.textBase
                 }
-                context.fillKeycap(key.frame, fill: fill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: fill, radius: radius)
                 guard !hideGlyphs else { continue }
                 if let symbol = returnSymbol {
                     drawSymbol(
                         symbol,
-                        in: key.frame,
+                        in: inkFrame(key.frame),
                         color: ink,
                         pointSize: isLandscape ? 15.5 : 17.5,
                         weight: activeAction ? .medium : .regular
                     )
                 } else {
-                    drawText(returnLabel, in: key.frame, font: .systemFont(ofSize: isLandscape ? 14.5 : 15.5), color: ink)
+                    drawText(returnLabel, in: inkFrame(key.frame), font: .systemFont(ofSize: isLandscape ? 14.5 : 15.5), color: ink)
                 }
             case .shift:
                 let state = engine.shift.state
                 let isPressed = pressed.contains(.shift)
-                context.fillKeycap(key.frame, fill: isPressed ? palette.keyPressedFill : palette.keyFill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: isPressed ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
                 let symbol = switch state {
                 case .off: engine.shift.isHeld ? "shift.fill" : "shift"
                 case .on: "shift.fill"
                 case .locked: "capslock.fill"
                 }
-                drawSymbol(symbol, in: key.frame, color: palette.textBase, pointSize: isLandscape ? 16 : 18)
+                drawSymbol(symbol, in: inkFrame(key.frame), color: palette.textBase, pointSize: isLandscape ? 16 : 18)
             case .delete:
                 let lit = pressed.contains(.delete)
-                context.fillKeycap(key.frame, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawSymbol(lit ? "delete.left.fill" : "delete.left", in: key.frame, color: palette.textBase, pointSize: isLandscape ? 16 : 18)
+                drawSymbol(lit ? "delete.left.fill" : "delete.left", in: inkFrame(key.frame), color: palette.textBase, pointSize: isLandscape ? 16 : 18)
             case .layerSwitch:
                 let lit = pressed.contains(key.kind)
-                context.fillKeycap(key.frame, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawText(key.label, in: key.frame, font: .systemFont(ofSize: isLandscape ? 14.5 : 15.5), color: palette.textBase)
+                drawText(key.label, in: inkFrame(key.frame), font: .systemFont(ofSize: isLandscape ? 14.5 : 15.5), color: palette.textBase)
             case .globe:
                 let lit = pressed.contains(.globe)
-                context.fillKeycap(key.frame, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawSymbol("globe", in: key.frame, color: palette.textBase, pointSize: isLandscape ? 16 : 18)
+                drawSymbol("globe", in: inkFrame(key.frame), color: palette.textBase, pointSize: isLandscape ? 16 : 18)
             case .globeSpacer:
-                context.fillKeycap(key.frame, fill: palette.keyFill, radius: radius)
+                context.fillKeycap(key.frame, palette: palette, fill: palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawSymbol("globe", in: key.frame, color: palette.textBase.withAlphaComponent(0.35), pointSize: isLandscape ? 16 : 18)
+                drawSymbol("globe", in: inkFrame(key.frame), color: palette.textBase.withAlphaComponent(0.35), pointSize: isLandscape ? 16 : 18)
             }
         }
+    }
+
+    private func inkFrame(_ frame: CGRect) -> CGRect {
+        palette.design == .mechanical ? MechanicalKeycap(isDark: palette.isDark).inkFrame(frame) : frame
     }
 
     private func drawText(_ text: String, in frame: CGRect, font: UIFont, color: UIColor, yOffset: CGFloat = 0) {

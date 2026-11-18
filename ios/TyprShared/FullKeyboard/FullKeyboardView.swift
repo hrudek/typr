@@ -50,6 +50,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     private var styleMenu: TyprStyleMenuView?
     private var palette = FullKeyboardPalette(isDark: false)
     private var didApplyPalette = false
+    private var design = KeyboardDesign.standard
     private var subscriptions: Set<AnyCancellable> = []
     private var showsRecording = false
     private let haptics = UIImpactFeedbackGenerator(style: .light)
@@ -190,6 +191,11 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         // Learning switch and app reset epochs; never per keystroke.
         engine.autocorrect.syncLearning()
         applySuggestionBarSetting()
+        let wantsDesign = FullKeyboardSettings().design
+        if wantsDesign != design {
+            design = wantsDesign
+            applyAppearance()
+        }
         let wantsAutocorrect = FullKeyboardSettings().autocorrect
         if engine.autocorrect.isEnabled != wantsAutocorrect {
             engine.autocorrect.isEnabled = wantsAutocorrect
@@ -380,7 +386,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     private func applyAppearance() {
         let isDark = appearanceOverride
             ?? FullKeyboardPalette.isDark(appearance: engine.target.keyboardAppearance, traits: traitCollection)
-        let next = FullKeyboardPalette(isDark: isDark)
+        let next = FullKeyboardPalette(isDark: isDark, design: design)
         backgroundColor = drawsBackdrop ? next.backdrop : .clear
         stripView.inSystemPlatter = !drawsBackdrop
         guard next != palette || !didApplyPalette else { return }

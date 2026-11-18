@@ -13,6 +13,7 @@ struct KeyboardSettingsCard: View {
     @State private var autocorrectEnglish = TyprSettings().autocorrectEnglish
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
     @State private var globeKey = FullKeyboardSettings().globeKey
+    @State private var design = FullKeyboardSettings().design
     @State private var bottomRow = FullKeyboardSettings().bottomRow
 
     static let swipeNotice = "Swipe typing powered by FUTO Swipe."
@@ -42,6 +43,15 @@ struct KeyboardSettingsCard: View {
                 Text(Self.swipeNotice)
                     .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                     .padding(.horizontal, 16)
+            }
+            SettingsSection(title: "Keyboard design") {
+                ForEach(Array(KeyboardDesign.allCases.enumerated()), id: \.element) { index, choice in
+                    if index > 0 { SettingsDivider() }
+                    SettingsChoiceRow(title: choice.title, isSelected: design == choice) {
+                        design = choice
+                        FullKeyboardSettings().design = choice
+                    }
+                }
             }
             VStack(alignment: .leading, spacing: 8) {
                 SettingsSection(title: "Globe key") {
@@ -139,6 +149,7 @@ struct KeyboardSettingsCard: View {
         autocorrectEnglish = TyprSettings().autocorrectEnglish
         hideSuggestionBar = TyprSettings().hideSuggestionBar
         globeKey = FullKeyboardSettings().globeKey
+        design = FullKeyboardSettings().design
         bottomRow = FullKeyboardSettings().bottomRow
     }
 }
@@ -149,6 +160,15 @@ extension GlobeKey {
         case .switches: "Switches keyboards"
         case .spacer: "Spacer"
         case .hidden: "Hidden"
+        }
+    }
+}
+
+extension KeyboardDesign {
+    var title: String {
+        switch self {
+        case .standard: "Default"
+        case .mechanical: "Mechanical"
         }
     }
 }
