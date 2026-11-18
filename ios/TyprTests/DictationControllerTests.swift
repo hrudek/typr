@@ -656,6 +656,42 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertNotNil(bridge.snapshot().resultID)
     }
 
+    func testKeyboardStillSeesALongTranscriptionAfterTheMicIsReleased() async throws {
+        var now = 14_000.0
+        let audio = FakeAudioManager()
+        audio.isOtherAudioPlaying = true
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        let controller = DictationController(
+            audio: audio,
+            keyboardBridge: bridge,
+            transcriber: transcriber,
+            transcriberFactory: { transcriber },
+            now: { now },
+            autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.setWarmDuration(.off)
+        controller.handleKeyboardLaunch(
+            .startRecording(jobID: "media-job", requestedAt: now - 0.3, style: .polished, host: nil)
+        )
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+
+        await transcriber.armSuspension()
+        bridge.send(.stop, jobID: "media-job", sentAt: now)
+        try await waitForState("keyboard Done stopped the recording") { controller.phase == .transcribing }
+        try await asrSuspended(transcriber)
+
+        now += 5
+        try await waitForState("transcription heartbeat") { bridge.snapshot().heartbeat == now }
+        XCTAssertEqual(bridge.snapshot().live(at: now).state, .transcribing)
+
+        await transcriber.resumeSuspended(with: "ship it")
+        try await transcribed(controller)
+    }
+
     func testMeterRecoversAfterCaptureStartsTemporarilyNotRecording() async throws {
         try await checkMeterRecovery(initiallyRecording: false)
     }

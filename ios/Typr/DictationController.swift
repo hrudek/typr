@@ -111,7 +111,7 @@ final class DictationController {
     private let statistics: UsageDictationRecorder?
     private let languageSettings: TyprSettings
     private var pendingCleanupJob: CleanupJob?
-    private var cleanupHeartbeat: Task<Void, Never>?
+    private var transcriptionHeartbeat: Task<Void, Never>?
     private let dictationLog: DictationLogStore?
     private var transcribingLog: DictationLogRecording?
     @ObservationIgnored private var loudestAverageDBFS: Float?
@@ -122,8 +122,8 @@ final class DictationController {
             job.finish()
         }
         pendingCleanupJob = nil
-        cleanupHeartbeat?.cancel()
-        cleanupHeartbeat = nil
+        transcriptionHeartbeat?.cancel()
+        transcriptionHeartbeat = nil
     }
 
     private var jobGeneration: UInt64 = 0
@@ -1229,14 +1229,12 @@ final class DictationController {
         }
         transcribingLog = recording
         phase = .transcribing
-        if let job = session.cleanupJob {
-            job.begin()
-            cleanupHeartbeat = Task { [weak self] in
-                while !Task.isCancelled {
-                    do { try await Task.sleep(for: .seconds(1)) } catch { return }
-                    guard let self, self.jobGeneration == captureGeneration, self.phase == .transcribing else { return }
-                    self.publishKeyboardSnapshot()
-                }
+        session.cleanupJob?.begin()
+        transcriptionHeartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                guard let self, self.jobGeneration == captureGeneration, self.phase == .transcribing else { return }
+                self.publishKeyboardSnapshot()
             }
         }
         liveActivity.markTranscribing(startedAt: Date(timeIntervalSince1970: session.startedAt))

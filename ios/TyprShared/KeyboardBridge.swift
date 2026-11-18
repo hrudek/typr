@@ -271,6 +271,13 @@ nonisolated struct KeyboardSnapshot: Codable, Equatable, Sendable {
         return expiresAt > now
     }
 
+    /// A recording or transcription is over once its heartbeat stops: the app was suspended,
+    /// killed or the phone restarted, and the stored snapshot is all that is left of it.
+    func live(at now: TimeInterval) -> KeyboardSnapshot {
+        guard state == .recording || state == .transcribing, !isAvailable(at: now) else { return self }
+        return .offline
+    }
+
     /// Accepted jobs keep their completed transcript deliverable even after a one-shot or expiring session closes.
     func hasDeliverableResult(at now: TimeInterval = Date().timeIntervalSince1970) -> Bool {
         guard let resultID, !resultID.isEmpty,
