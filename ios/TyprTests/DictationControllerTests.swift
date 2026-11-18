@@ -658,92 +658,80 @@ final class DictationControllerTests: XCTestCase {
     }
 
     func testLowerVolumeDucksOnlyWhileRecordingAndRewarmsInForeground() async throws {
-        try await assertLowerVolumeDucksOnlyWhileRecording(foreground: true)
-    }
+        for foreground in [true, false] {
+            let now = 9_300.0
+            let audio = FakeAudioManager()
+            audio.isOtherAudioPlaying = true
+            let transcriber = ControlledTranscriber()
+            let bridge = KeyboardBridge(defaults: defaults)
+            bridge.mediaOnDictation = .lowerVolume
+            let controller = DictationController(
+                audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+                transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+            )
+            drainAtTeardown(controller)
+            try await ready(controller)
+            controller.selectWarmDuration(.fifteenMinutes)
+            try await activationSettled(controller)
+            XCTAssertTrue(controller.keyboardSessionEnabled)
+            XCTAssertFalse(audio.isDucking, "idle warm input must not duck media")
+            audio.canStartInput = foreground
 
-    func testLowerVolumeDucksOnlyWhileRecordingAndEndsWarmSessionInBackground() async throws {
-        try await assertLowerVolumeDucksOnlyWhileRecording(foreground: false)
-    }
-
-    private func assertLowerVolumeDucksOnlyWhileRecording(foreground: Bool) async throws {
-        let now = 9_300.0
-        let audio = FakeAudioManager()
-        audio.isOtherAudioPlaying = true
-        let transcriber = ControlledTranscriber()
-        let bridge = KeyboardBridge(defaults: defaults)
-        bridge.mediaOnDictation = .lowerVolume
-        let controller = DictationController(
-            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
-            transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
-        controller.selectWarmDuration(.fifteenMinutes)
-        try await activationSettled(controller)
-        XCTAssertTrue(controller.keyboardSessionEnabled)
-        XCTAssertFalse(audio.isDucking, "idle warm input must not duck media")
-        audio.canStartInput = foreground
-
-        bridge.send(.start, jobID: "duck", style: .polished, sentAt: now)
-        controller.processPendingKeyboardCommandForTesting()
-        try await activationSettled(controller)
-        XCTAssertEqual(controller.phase, .recording)
-        XCTAssertTrue(audio.isDucking)
-        controller.finishRecording()
-        XCTAssertFalse(audio.isDucking, "release restores the volume before transcription")
-        XCTAssertGreaterThan(audio.deactivateCount, 0)
-        XCTAssertEqual(controller.keyboardSessionEnabled, foreground, "background cannot restart input")
-        XCTAssertEqual(audio.isKeepaliveRunning, foreground)
-        try await transcribed(controller)
-        XCTAssertEqual(audio.duckCount, 1)
+            bridge.send(.start, jobID: "duck", style: .polished, sentAt: now)
+            controller.processPendingKeyboardCommandForTesting()
+            try await activationSettled(controller)
+            XCTAssertEqual(controller.phase, .recording)
+            XCTAssertTrue(audio.isDucking)
+            controller.finishRecording()
+            XCTAssertFalse(audio.isDucking, "release restores the volume before transcription")
+            XCTAssertGreaterThan(audio.deactivateCount, 0)
+            XCTAssertEqual(controller.keyboardSessionEnabled, foreground, "background cannot restart input")
+            XCTAssertEqual(audio.isKeepaliveRunning, foreground)
+            try await transcribed(controller)
+            XCTAssertEqual(audio.duckCount, 1)
+        }
     }
 
     func testMediaChoiceChangedWhileRecordingAppliesWhenCaptureEnds() async throws {
-        try await assertMediaChoiceChangedWhileRecordingApplies(foreground: true)
-    }
+        for foreground in [true, false] {
+            let now = 9_400.0
+            let audio = FakeAudioManager()
+            let transcriber = ControlledTranscriber()
+            let bridge = KeyboardBridge(defaults: defaults)
+            bridge.mediaOnDictation = .pause
+            let controller = DictationController(
+                audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+                transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+            )
+            drainAtTeardown(controller)
+            try await ready(controller)
+            controller.selectWarmDuration(.fifteenMinutes)
+            try await activationSettled(controller)
 
-    func testMediaChoiceChangedWhileRecordingInBackgroundAppliesWhenCaptureEnds() async throws {
-        try await assertMediaChoiceChangedWhileRecordingApplies(foreground: false)
-    }
+            bridge.send(.start, jobID: "switch", style: .polished, sentAt: now)
+            controller.processPendingKeyboardCommandForTesting()
+            try await activationSettled(controller)
+            XCTAssertEqual(controller.phase, .recording)
+            controller.setMediaOnDictation(.keepPlaying)
+            XCTAssertEqual(audio.appliedMedia, .pause, "a running capture keeps its session")
 
-    private func assertMediaChoiceChangedWhileRecordingApplies(foreground: Bool) async throws {
-        let now = 9_400.0
-        let audio = FakeAudioManager()
-        let transcriber = ControlledTranscriber()
-        let bridge = KeyboardBridge(defaults: defaults)
-        bridge.mediaOnDictation = .pause
-        let controller = DictationController(
-            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
-            transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
-        controller.selectWarmDuration(.fifteenMinutes)
-        try await activationSettled(controller)
+            audio.canStartInput = foreground
+            controller.finishRecording()
+            XCTAssertEqual(audio.appliedMedia, foreground ? .keepPlaying : nil)
+            XCTAssertEqual(controller.keyboardSessionEnabled, foreground, "background cannot restart input")
+            try await transcribed(controller)
+            if !foreground { continue }
 
-        bridge.send(.start, jobID: "switch", style: .polished, sentAt: now)
-        controller.processPendingKeyboardCommandForTesting()
-        try await activationSettled(controller)
-        XCTAssertEqual(controller.phase, .recording)
-        controller.setMediaOnDictation(.keepPlaying)
-        XCTAssertEqual(audio.appliedMedia, .pause, "a running capture keeps its session")
-
-        audio.canStartInput = foreground
-        controller.finishRecording()
-        XCTAssertEqual(audio.appliedMedia, foreground ? .keepPlaying : nil)
-        XCTAssertEqual(controller.keyboardSessionEnabled, foreground, "background cannot restart input")
-        try await transcribed(controller)
-        guard foreground else { return }
-
-        audio.isOtherAudioPlaying = true
-        bridge.send(.start, jobID: "mixed", style: .polished, sentAt: now)
-        controller.processPendingKeyboardCommandForTesting()
-        try await activationSettled(controller)
-        XCTAssertEqual(controller.phase, .recording)
-        XCTAssertTrue(audio.isOtherAudioPlaying, "the next capture uses the new choice")
-        controller.finishRecording()
-        try await transcribed(controller)
-        XCTAssertTrue(controller.keyboardSessionEnabled)
+            audio.isOtherAudioPlaying = true
+            bridge.send(.start, jobID: "mixed", style: .polished, sentAt: now)
+            controller.processPendingKeyboardCommandForTesting()
+            try await activationSettled(controller)
+            XCTAssertEqual(controller.phase, .recording)
+            XCTAssertTrue(audio.isOtherAudioPlaying, "the next capture uses the new choice")
+            controller.finishRecording()
+            try await transcribed(controller)
+            XCTAssertTrue(controller.keyboardSessionEnabled)
+        }
     }
 
     func testMediaChoiceChangedWhileTranscribingAppliesImmediately() async throws {
