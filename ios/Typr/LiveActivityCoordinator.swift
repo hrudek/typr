@@ -5,6 +5,10 @@ import Foundation
 final class LiveActivityCoordinator {
     private var currentActivityID: String?
 
+    init() {
+        endEarlierActivities()
+    }
+
     func startRecording(startedAt: Date) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let state = TyprDictationActivityAttributes.ContentState(
@@ -26,6 +30,18 @@ final class LiveActivityCoordinator {
             pushType: nil
         ) {
             currentActivityID = created.id
+            endEarlierActivities()
+        }
+    }
+
+    /// Activities outlive the process that started them, also across a restart. One whose
+    /// recording ended with an earlier process would otherwise keep showing it.
+    private func endEarlierActivities() {
+        var ids = Set(Activity<TyprDictationActivityAttributes>.activities.map(\.id))
+        if let currentActivityID { ids.remove(currentActivityID) }
+        guard !ids.isEmpty else { return }
+        Task.detached {
+            await Self.end(ids: ids)
         }
     }
 
@@ -60,10 +76,11 @@ final class LiveActivityCoordinator {
     }
 
     func endImmediately() {
-        let id = currentActivityID
+        let ids = currentActivityID.map { Set([$0]) }
+            ?? Set(Activity<TyprDictationActivityAttributes>.activities.map(\.id))
         currentActivityID = nil
         Task.detached {
-            await Self.endAllOrMatching(id: id)
+            await Self.end(ids: ids)
         }
     }
 
@@ -93,13 +110,13 @@ final class LiveActivityCoordinator {
         )
     }
 
-    nonisolated private static func endAllOrMatching(id: String?) async {
+    nonisolated private static func end(ids: Set<String>) async {
         let state = TyprDictationActivityAttributes.ContentState(
             stage: .copied,
             startedAt: Date(),
             subtitle: "Done"
         )
-        for activity in Activity<TyprDictationActivityAttributes>.activities where id == nil || activity.id == id {
+        for activity in Activity<TyprDictationActivityAttributes>.activities where ids.contains(activity.id) {
             await activity.end(
                 ActivityContent(state: state, staleDate: nil),
                 dismissalPolicy: .immediate
