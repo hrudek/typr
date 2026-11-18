@@ -42,6 +42,9 @@ private final class FakeAudioManager: AudioManaging {
     var nextCaptureIsRecording = true
     var deactivateCount = 0
     var createdCaptures: [FakeAudioCapture] = []
+    var media = MediaOnDictation.pause
+    var isDucking = false
+    var duckCount = 0
 
     var onSystemEvent: ((AudioSystemEvent) -> Void)?
     var onUnexpectedCaptureEnd: ((URL, Bool) -> Void)?
@@ -62,8 +65,17 @@ private final class FakeAudioManager: AudioManaging {
             throw CocoaError(.coderInvalidValue)
         }
         isKeepaliveRunning = true
-        // Activating input interrupts media, so subsequent queries no longer see it.
-        isOtherAudioPlaying = false
+        // Only Pause's input interrupts media, so subsequent queries no longer see it.
+        if media == .pause { isOtherAudioPlaying = false }
+    }
+
+    func setMediaOnDictation(_ media: MediaOnDictation) {
+        self.media = media
+    }
+
+    func duckOthers(allowBluetooth: Bool) throws {
+        duckCount += 1
+        isDucking = true
     }
 
     func stopKeepalive() {
@@ -72,6 +84,7 @@ private final class FakeAudioManager: AudioManaging {
 
     func deactivateSession() {
         isKeepaliveRunning = false
+        isDucking = false
         deactivateCount += 1
     }
 
@@ -578,6 +591,94 @@ final class DictationControllerTests: XCTestCase {
         controller.handleAudioSystemEvent(.interruptionEnded(shouldResume: true))
         XCTAssertEqual(audio.startKeepaliveCount, 1, "do not interrupt media to restore idle input")
         XCTAssertTrue(audio.isOtherAudioPlaying)
+    }
+
+    func testMediaChoiceIsPersistedAndDefaultsToPause() {
+        let bridge = KeyboardBridge(defaults: defaults)
+        let audio = FakeAudioManager()
+        let controller = DictationController(
+            audio: audio, keyboardBridge: bridge, transcriber: ControlledTranscriber(), autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        XCTAssertEqual(controller.mediaOnDictation, .pause)
+        controller.setMediaOnDictation(.lowerVolume)
+        XCTAssertEqual(audio.media, .lowerVolume)
+
+        let relaunchedAudio = FakeAudioManager()
+        let relaunched = DictationController(
+            audio: relaunchedAudio, keyboardBridge: KeyboardBridge(defaults: defaults),
+            transcriber: ControlledTranscriber(), autoPrepareOnInit: false
+        )
+        drainAtTeardown(relaunched)
+        XCTAssertEqual(relaunched.mediaOnDictation, .lowerVolume)
+        XCTAssertEqual(relaunchedAudio.media, .lowerVolume)
+    }
+
+    func testKeepPlayingWarmsAndDictatesWhileMediaPlays() async throws {
+        let now = 9_200.0
+        let audio = FakeAudioManager()
+        audio.isOtherAudioPlaying = true
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        bridge.mediaOnDictation = .keepPlaying
+        let controller = DictationController(
+            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+            transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.selectWarmDuration(.fifteenMinutes)
+        try await activationSettled(controller)
+        XCTAssertTrue(controller.keyboardSessionEnabled, "mixing input may stay warm during media")
+        XCTAssertTrue(audio.isKeepaliveRunning)
+        audio.canStartInput = false
+
+        bridge.send(.start, jobID: "mix", style: .polished, sentAt: now)
+        controller.processPendingKeyboardCommandForTesting()
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+        controller.finishRecording()
+        try await transcribed(controller)
+        XCTAssertTrue(controller.keyboardSessionEnabled)
+        XCTAssertTrue(audio.isKeepaliveRunning)
+        XCTAssertTrue(audio.isOtherAudioPlaying)
+        XCTAssertEqual(audio.duckCount, 0)
+        XCTAssertEqual(audio.deactivateCount, 0)
+    }
+
+    func testLowerVolumeDucksOnlyWhileRecordingAndRewarmsInForeground() async throws {
+        for foreground in [true, false] {
+            let now = 9_300.0
+            let audio = FakeAudioManager()
+            audio.isOtherAudioPlaying = true
+            let transcriber = ControlledTranscriber()
+            let bridge = KeyboardBridge(defaults: defaults)
+            bridge.mediaOnDictation = .lowerVolume
+            let controller = DictationController(
+                audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+                transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+            )
+            drainAtTeardown(controller)
+            try await ready(controller)
+            controller.selectWarmDuration(.fifteenMinutes)
+            try await activationSettled(controller)
+            XCTAssertTrue(controller.keyboardSessionEnabled)
+            XCTAssertFalse(audio.isDucking, "idle warm input must not duck media")
+            audio.canStartInput = foreground
+
+            bridge.send(.start, jobID: "duck", style: .polished, sentAt: now)
+            controller.processPendingKeyboardCommandForTesting()
+            try await activationSettled(controller)
+            XCTAssertEqual(controller.phase, .recording)
+            XCTAssertTrue(audio.isDucking)
+            controller.finishRecording()
+            XCTAssertFalse(audio.isDucking, "release restores the volume before transcription")
+            XCTAssertGreaterThan(audio.deactivateCount, 0)
+            XCTAssertEqual(controller.keyboardSessionEnabled, foreground, "background cannot restart input")
+            XCTAssertEqual(audio.isKeepaliveRunning, foreground)
+            try await transcribed(controller)
+            XCTAssertEqual(audio.duckCount, 1)
+        }
     }
 
     func testRecordedWAVFixtureIsValidSilentTestInput() throws {

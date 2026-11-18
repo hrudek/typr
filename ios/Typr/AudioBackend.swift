@@ -41,10 +41,16 @@ protocol AudioManaging: AnyObject {
     func stopKeepalive()
     func deactivateSession()
     func beginCapture(at url: URL, maxDuration: TimeInterval, allowBluetooth: Bool) throws -> any ActiveAudioCapture
+    /// Applies to the next `startKeepalive`.
+    func setMediaOnDictation(_ media: MediaOnDictation)
+    /// Lowers other audio until `deactivateSession()`.
+    func duckOthers(allowBluetooth: Bool) throws
 }
 
 extension AudioManaging {
     var isOtherAudioPlaying: Bool { false }
+    func setMediaOnDictation(_ media: MediaOnDictation) {}
+    func duckOthers(allowBluetooth: Bool) throws {}
 
     func ensureKeepalive(allowBluetooth: Bool) throws {
         guard !isKeepaliveRunning else { return }
@@ -293,6 +299,7 @@ final class SystemAudioManager: AudioManaging {
     private var inputGraph = TyprAudioInput()
     private let audioSession = DictationAudioSession()
     private var keepaliveAllowsBluetooth: Bool?
+    private var mediaOnDictation = MediaOnDictation.pause
     private let tapRouter = TapRouter()
     nonisolated(unsafe) private var observers: [NSObjectProtocol] = []
 
@@ -327,7 +334,7 @@ final class SystemAudioManager: AudioManaging {
 
     func startKeepalive(allowBluetooth: Bool) throws {
         stopKeepalive()
-        try audioSession.activate(allowBluetooth: allowBluetooth)
+        try audioSession.activate(allowBluetooth: allowBluetooth, media: mediaOnDictation)
 
         try inputGraph.start(bufferHandler: Self.tapBlock(routingTo: tapRouter))
         keepaliveAllowsBluetooth = allowBluetooth
@@ -348,6 +355,14 @@ final class SystemAudioManager: AudioManaging {
     func deactivateSession() {
         stopKeepalive()
         audioSession.deactivate()
+    }
+
+    func setMediaOnDictation(_ media: MediaOnDictation) {
+        mediaOnDictation = media
+    }
+
+    func duckOthers(allowBluetooth: Bool) throws {
+        try audioSession.duckOthers(allowBluetooth: allowBluetooth)
     }
 
     func beginCapture(
