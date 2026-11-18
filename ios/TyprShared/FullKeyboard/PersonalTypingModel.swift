@@ -72,6 +72,8 @@ final class PersonalTypingModel {
         var keys: [String: TouchStats] = [:]
         // Optional only for schema-1 decoding. New labels create this aggregate.
         var global: TouchStats?
+        /// x in half bar widths (gap included), y in row pitches.
+        var space: TouchStats?
 
         /// Within-key pooled covariance, not between-key center differences. Each key
         /// contributes at most 256 effective observations; iteration order is fixed.
@@ -124,8 +126,9 @@ final class PersonalTypingModel {
                 guard id == signature.id, ["portrait", "landscape"].contains(signature.orientation),
                       (8...4096).contains(signature.widthBucket), signature.widthBucket % 8 == 0,
                       layout.lastUpdated.timeIntervalSinceReferenceDate.isFinite,
-                      !layout.keys.isEmpty, layout.keys.count <= 26,
-                      layout.global == nil || layout.global?.isValid == true else { return nil }
+                      !layout.keys.isEmpty || layout.space != nil, layout.keys.count <= 26,
+                      layout.global == nil || layout.global?.isValid == true,
+                      layout.space == nil || layout.space?.isValid == true else { return nil }
                 for (key, stats) in layout.keys {
                     guard key.count == 1, key.utf8.count == 1,
                           key.utf8.allSatisfy({ (97...122).contains($0) }), stats.isValid else { return nil }
@@ -165,7 +168,8 @@ final class PersonalTypingModel {
                     key.utf8.count == 1 && key.utf8.allSatisfy { (97...122).contains($0) } && stats.isValid
                 }
                 if layout.global?.isValid == false { layout.global = nil }
-                if layout.keys.isEmpty { layouts.removeValue(forKey: id) }
+                if layout.space?.isValid == false { layout.space = nil }
+                if layout.keys.isEmpty && layout.space == nil { layouts.removeValue(forKey: id) }
                 else { layouts[id] = layout }
             }
             return layouts != original
@@ -376,6 +380,29 @@ final class PersonalTypingModel {
         return outcome
     }
 
+    @discardableResult
+    func learnSpace(_ point: CGPoint, layout: KeyboardLayout) -> LearnOutcome {
+        guard isLearningEnabled else { return LearnOutcome(rejected: [.learningOff: 1]) }
+        guard layout.layer == .letters, layout.field == .text,
+              layout.width.isFinite, (8...4096).contains(layout.width),
+              let space = layout.key(.space) else { return LearnOutcome(rejected: [.layoutMismatch: 1]) }
+        let x = Double((point.x - space.frame.midX) / (space.frame.width / 2 + layout.metrics.gap))
+        let y = Double((point.y - space.frame.midY) / (space.frame.height + layout.metrics.rowGap))
+        guard x.isFinite, y.isFinite else { return LearnOutcome(rejected: [.nonFinite: 1]) }
+        guard abs(x) <= 1, abs(y) <= 1 else { return LearnOutcome(rejected: [.outlier: 1]) }
+        let signature = KeyboardLayoutSignature(layout)
+        if state.layouts[signature.id] == nil, state.layouts.count >= 4,
+           let oldest = state.layouts.min(by: {
+               $0.value.lastUpdated == $1.value.lastUpdated ? $0.key < $1.key : $0.value.lastUpdated < $1.value.lastUpdated
+           })?.key { state.layouts.removeValue(forKey: oldest) }
+        var stats = state.layouts[signature.id] ?? LayoutStats(signature: signature, lastUpdated: now())
+        stats.space = stats.space ?? TouchStats()
+        stats.space?.update(x: x, y: y)
+        stats.lastUpdated = now()
+        state.layouts[signature.id] = stats
+        return LearnOutcome(accepted: 1)
+    }
+
     func calibration(for layout: KeyboardLayout) -> SpatialTouchCalibration? {
         guard isLearningEnabled, layout.layer == .letters, layout.field == .text,
               layout.width.isFinite, (8...4096).contains(layout.width),
@@ -396,7 +423,13 @@ final class PersonalTypingModel {
             // The shared drift reaches every key immediately, including rare and unseen keys.
             keys[character] = Self.tempered(features[character].map { drift.prediction(slow: slow, features: $0) } ?? slow)
         }
-        return keys.isEmpty ? nil : SpatialTouchCalibration(keys: keys)
+        let space = stats.space.map { taps in
+            let w = Double(taps.n) / Double(taps.n + 20)
+            let prior = SpatialTouchCalibration.referenceSpread * SpatialTouchCalibration.referenceSpread
+            let sigma = sqrt(w * taps.varianceY + (1 - w) * prior)
+            return Self.tempered(.init(offsetX: 0, offsetY: w * taps.meanY, sigmaX: sigma, sigmaY: sigma))
+        }
+        return keys.isEmpty ? nil : SpatialTouchCalibration(keys: keys, space: space)
     }
 
     // Explicit keeps remain available while learning is off. Counting is a separate trusted event.

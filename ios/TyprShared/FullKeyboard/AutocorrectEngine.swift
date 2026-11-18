@@ -130,6 +130,17 @@ final class AutocorrectEngine {
 
     private var rejectionContext: String? = nil
 
+    /// A Space tap after `word`, with the field text right after it.
+    private struct SpaceTap {
+        let point: CGPoint
+        let layout: KeyboardLayout
+        let word: String
+        let after: String
+        let epoch: Int
+    }
+    private var typedSpace: SpaceTap?
+    private var spaceBeforeWord: SpaceTap?
+
     /// One automatic-correction decision; a boundary records it exactly once.
     private struct Decision {
         var text: String?
@@ -466,6 +477,8 @@ final class AutocorrectEngine {
             pendingPairChoice = nil
         }
         touchInput.clear()
+        typedSpace = nil
+        spaceBeforeWord = nil
         decodeCache = nil
         completionCache = nil
         boundaryCache = nil
@@ -495,6 +508,10 @@ final class AutocorrectEngine {
     /// The next word's first letter arrives: trust the previous word only
     /// if it is still intact right before the cursor.
     func settleFeedback(beforeInput: String?, insertedLetter: String, afterInput: String?) {
+        if let space = typedSpace {
+            typedSpace = nil
+            if beforeInput == space.after { spaceBeforeWord = space }
+        }
         reversibleRejection = nil
         reversibleBoundary = nil
         if let choice = pendingPairChoice {
@@ -524,6 +541,27 @@ final class AutocorrectEngine {
         learnIdentity(evidence, literal: pending.literal, source: .literalValid)
         learning.confirmLiteral(pending.literal)
         learning.recordWord(pending.literal)
+    }
+
+    /// A real Space tap was inserted. The previous Space tap is learned once the word after it
+    /// ends with this one and both words are still separate, so a Space later joined into a
+    /// word ("a out" → "about") never teaches. Translated from iikb TypingEngine+Words.swift
+    /// `PendingWord.ending` at 73c2ed9016b802e5bf017a2d595d037d1e748ccf (MIT © 2026 Bassim Shahidy).
+    func spaceTyped(at point: CGPoint, layout: KeyboardLayout, afterInput: String?) {
+        let earlier = spaceBeforeWord
+        spaceBeforeWord = nil
+        typedSpace = nil
+        guard let afterInput, afterInput.hasSuffix(" ") else { return }
+        let text = String(afterInput.dropLast())
+        guard let word = Self.currentToken(in: text) else { return }
+        if let earlier, earlier.epoch == learning.feedbackEpoch, learning.isLearningEnabled {
+            let rest = String(text.dropLast(word.count))
+            if rest.hasSuffix(" "), Self.currentToken(in: String(rest.dropLast())) == earlier.word {
+                learning.learnSpace(earlier.point, layout: earlier.layout)
+            }
+        }
+        typedSpace = SpaceTap(point: point, layout: layout, word: word, after: afterInput,
+                              epoch: learning.feedbackEpoch)
     }
 
     /// Backspace restored the typed word right after an automatic replacement.

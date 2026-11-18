@@ -65,19 +65,22 @@ nonisolated struct KeyboardBoundaryTouch: Equatable, Sendable {
     }
 
     /// Predictive Space prior: uniform horizontal mass across the bar, Gaussian vertical
-    /// aim around its centre (.35 row pitch). Unlike a giant circular key Gaussian this
-    /// does not prefer the bar's centre over an ordinary left/right thumb Space. There is
-    /// no trusted Space-training channel in Typr; do not infer labels to create one.
-    static func spaceDensity(_ point: CGPoint, layout: KeyboardLayout) -> Double? {
+    /// aim around its centre (.35 row pitch), or around the learned Space aim. Unlike a giant
+    /// circular key Gaussian this does not prefer the bar's centre over an ordinary
+    /// left/right thumb Space.
+    static func spaceDensity(_ point: CGPoint, layout: KeyboardLayout,
+                             calibration: SpatialTouchCalibration? = nil) -> Double? {
         guard point.x.isFinite, point.y.isFinite, let space = layout.key(.space) else { return nil }
         let pitchX = layout.letterWidth + layout.metrics.gap
         let pitchY = space.frame.height + layout.metrics.rowGap
         guard pitchX > 0, pitchY > 0,
               point.x >= space.frame.minX - layout.metrics.gap,
               point.x <= space.frame.maxX + layout.metrics.gap else { return nil }
-        let y = Double((point.y - space.frame.midY) / pitchY)
-        guard abs(y) <= 1 else { return nil }
-        let sigma = SpatialTouchCalibration.staticSigma
+        let row = Double((point.y - space.frame.midY) / pitchY)
+        guard abs(row) <= 1 else { return nil }
+        let aim = calibration?.space
+        let sigma = aim?.sigmaY ?? SpatialTouchCalibration.staticSigma
+        let y = row - (aim?.offsetY ?? 0)
         let width = Double((space.frame.width + 2 * layout.metrics.gap) / pitchX)
         return -0.5 * y * y / (sigma * sigma) - log(sqrt(2 * Double.pi) * sigma * width)
     }

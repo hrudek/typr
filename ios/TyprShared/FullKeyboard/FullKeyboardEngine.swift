@@ -991,6 +991,9 @@ final class FullKeyboardEngine {
             autocorrect.touchInput.clear()
             target.insertText(inserted)
             autocorrect.recordAppliedCorrection(original: original, insertedText: inserted)
+            if let sample {
+                autocorrect.spaceTyped(at: sample.point, layout: layout, afterInput: target.documentContextBeforeInput)
+            }
             lastSpaceAt = now
             layerState.didInsert(" ")
             rebuildLayoutIfNeeded()
@@ -998,8 +1001,9 @@ final class FullKeyboardEngine {
             return
         }
         autocorrect.clearPendingUndo()
-        if let sample, let asSpace = KeyboardBoundaryTouch.spaceDensity(sample.point, layout: layout) {
-            let calibration = autocorrect.learning.calibration(for: layout)
+        let calibration = sample == nil ? nil : autocorrect.learning.calibration(for: layout)
+        if let sample, let asSpace = KeyboardBoundaryTouch.spaceDensity(sample.point, layout: layout,
+                                                                        calibration: calibration) {
             let ambiguous = KeyboardBoundaryTouch.adjacentLetters(in: layout).contains { key in
                 guard let density = KeyboardBoundaryTouch.letterDensity(sample.point, key: key, layout: layout,
                                                                          calibration: calibration) else { return false }
@@ -1010,7 +1014,11 @@ final class FullKeyboardEngine {
             if ambiguous { autocorrect.discardFeedback() }
         }
         statistics?.direct(" ")
+        let tapLayout = layout
         insert(" ", sample: sample, keepsFeedback: true)
+        if let sample {
+            autocorrect.spaceTyped(at: sample.point, layout: tapLayout, afterInput: target.documentContextBeforeInput)
+        }
         lastSpaceAt = now
     }
 
