@@ -622,6 +622,40 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertFalse(audio.isKeepaliveRunning)
     }
 
+    func testOneShotColdStartFromAnotherAppStopsOnKeyboardDone() async throws {
+        let now = 13_000.0
+        let audio = FakeAudioManager()
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        let controller = DictationController(
+            audio: audio,
+            keyboardBridge: bridge,
+            transcriber: transcriber,
+            transcriberFactory: { transcriber },
+            now: { now },
+            autoPrepareOnInit: false,
+            hostReturner: HostReturner(openByBundleID: { _ in true }, openURL: { _ in false })
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.setWarmDuration(.off)
+
+        controller.handleKeyboardLaunch(
+            .startRecording(jobID: "notes-job", requestedAt: now - 0.3, style: .polished, host: "com.apple.mobilenotes")
+        )
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+        XCTAssertFalse(controller.keyboardSessionEnabled)
+        XCTAssertEqual(bridge.snapshot().jobID, "notes-job")
+
+        bridge.send(.stop, jobID: "notes-job", sentAt: now)
+        try await waitForState("keyboard Done stopped the recording") { controller.phase != .recording }
+        try await transcribed(controller)
+        XCTAssertEqual(controller.phase, .ready)
+        XCTAssertNotEqual(bridge.snapshot().state, .recording)
+        XCTAssertNotNil(bridge.snapshot().resultID)
+    }
+
     func testMeterRecoversAfterCaptureStartsTemporarilyNotRecording() async throws {
         try await checkMeterRecovery(initiallyRecording: false)
     }

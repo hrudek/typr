@@ -777,6 +777,7 @@ final class DictationController {
                     copyToPasteboard: false,
                     attemptAutoReturnOnStart: handoff?.attemptAutoReturn ?? false
                 )
+                startKeyboardSessionLoop()
             } else {
                 handoffNotice = "Timed out"
                 autoReturnState = .swipeFallback
@@ -1461,10 +1462,10 @@ final class DictationController {
         keyboardSessionTask?.cancel()
         keyboardSessionTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let self, self.keyboardSessionEnabled else { return }
+                guard let self, self.keyboardSessionEnabled || self.activeKeyboardJobID != nil else { return }
 
                 // Never expire an in-flight recording or accepted transcription mid-work.
-                if self.phase != .recording && self.phase != .transcribing {
+                if self.keyboardSessionEnabled, self.phase != .recording && self.phase != .transcribing {
                     let remaining = self.keyboardSessionExpiresAt - self.now()
                     if remaining <= 0 {
                         self.endWarmSession()
