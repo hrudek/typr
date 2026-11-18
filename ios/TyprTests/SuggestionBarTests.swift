@@ -28,7 +28,7 @@ final class SuggestionBarTests: XCTestCase {
         XCTAssertTrue(settings.personalLearning)
         XCTAssertTrue(settings.autocorrectGerman)
         XCTAssertTrue(settings.autocorrectEnglish)
-        XCTAssertTrue(settings.dictationFeedbackStrip)
+        XCTAssertFalse(settings.dictationFeedbackStrip)
     }
 
     func testSettingDefaultsOffAndPersists() {

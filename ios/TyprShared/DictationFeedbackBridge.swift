@@ -26,7 +26,7 @@ final class DictationFeedbackBridge: @unchecked Sendable {
     var switchesEnabled: Bool {
         guard let defaults else { return false }
         return (defaults.object(forKey: "typr.dictationLog") as? Bool ?? true)
-            && (defaults.object(forKey: Self.stripKey) as? Bool ?? true)
+            && (defaults.object(forKey: Self.stripKey) as? Bool ?? false)
     }
     /// Only the app calls this, once its archive lineage is known. No queue I/O blocks output.
     func publish(_ permission: DictationFeedbackPermission) {
