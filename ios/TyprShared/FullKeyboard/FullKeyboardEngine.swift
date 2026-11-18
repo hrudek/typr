@@ -724,7 +724,7 @@ final class FullKeyboardEngine {
     func takeNextKeyboardHold(forTouch id: Int) -> Bool {
         guard layout.layerKeyHoldSwitchesKeyboard,
               let touch = touches[id], !touch.committed,
-              case .layerSwitch = touch.key.kind, touch.key.row == layout.bottomRowIndex else { return false }
+              case .layerSwitch = touch.key.kind, touch.key.row == touch.evidenceLayout.bottomRowIndex else { return false }
         let dx = touch.point.x - touch.startPoint.x
         let dy = touch.point.y - touch.startPoint.y
         guard (dx * dx + dy * dy).squareRoot() <= Self.accentSlop else { return false }
