@@ -24,24 +24,10 @@ final class DictationAudioSession {
         self.setActive = setActive
     }
 
-    /// Pause interrupts other audio. The other choices mix with it; `.record` cannot mix, and
-    /// `.defaultToSpeaker` keeps other apps' playback off the receiver under `.playAndRecord`.
-    func activate(allowBluetooth: Bool, media: MediaOnDictation) throws {
-        let bluetooth: AVAudioSession.CategoryOptions = allowBluetooth ? [.allowBluetoothHFP] : []
-        if media == .pause {
-            try setCategory(.record, .measurement, bluetooth)
-        } else {
-            try setCategory(.playAndRecord, .measurement, bluetooth.union([.mixWithOthers, .defaultToSpeaker]))
-        }
+    func activate(allowBluetooth: Bool) throws {
+        let options: AVAudioSession.CategoryOptions = allowBluetooth ? [.allowBluetoothHFP] : []
+        try setCategory(.record, .measurement, options)
         try setPreferredSampleRate(16_000)
-        try setActive(true, [])
-    }
-
-    /// iOS applies ducking on activation and lifts it only on deactivation, so the caller
-    /// must `deactivate()` to restore the other app's volume.
-    func duckOthers(allowBluetooth: Bool) throws {
-        let bluetooth: AVAudioSession.CategoryOptions = allowBluetooth ? [.allowBluetoothHFP] : []
-        try setCategory(.playAndRecord, .measurement, bluetooth.union([.duckOthers, .defaultToSpeaker]))
         try setActive(true, [])
     }
 
