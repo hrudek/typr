@@ -47,12 +47,6 @@ struct ContentView: View {
     var setupRequestID: UUID? = nil
     @State private var setupMonitor = KeyboardSetupMonitor()
     @State private var feedbackRouter = TyprFeedbackRouter.shared
-    @State private var historyStore: DictationLogStore = {
-        #if targetEnvironment(simulator)
-        if DictationHistoryFixture.isRequested(arguments: ProcessInfo.processInfo.arguments) { return DictationHistoryFixture.store() }
-        #endif
-        return DictationLogStore.shared
-    }()
     @State private var practiceText = ""
     @State private var settingsPath: [SettingsDestination] = {
         #if targetEnvironment(simulator)
@@ -165,7 +159,7 @@ struct ContentView: View {
                         StatisticsView()
                         #endif
                     } else if destination == .history {
-                        DictationHistoryView(store: historyStore, router: feedbackRouter)
+                        DictationHistoryView(store: Self.historyStore, router: feedbackRouter)
                     } else if destination == .keyboardLearnedWords {
                         KeyboardLearnedWordsView(
                             fixture: Self.learnedWordsUsesFixture(arguments: ProcessInfo.processInfo.arguments))
@@ -202,6 +196,13 @@ struct ContentView: View {
         }
         .tint(TyprTheme.agentBlue)
     }
+
+    private static let historyStore: DictationLogStore = {
+        #if targetEnvironment(simulator)
+        if DictationHistoryFixture.isRequested(arguments: ProcessInfo.processInfo.arguments) { return DictationHistoryFixture.store() }
+        #endif
+        return DictationLogStore.shared
+    }()
 
     private func openHistory() {
         if settingsPath.last != .history { settingsPath = [.history] }

@@ -59,7 +59,7 @@ struct DictationHistoryView: View {
         .toolbar(.visible, for: .navigationBar)
         .toolbar { ToolbarItem(placement: .primaryAction) { actionsMenu } }
         .navigationDestination(item: $openEntry) { id in
-            DictationLogDetail(store: store, entryID: id, focusesNote: focusesNote)
+            DictationLogDetail(store: store, entryID: id, focusesNote: focusesNote).id(id)
         }
         .confirmationDialog("Delete all dictations?", isPresented: $confirmingDeleteAll, titleVisibility: .visible) {
             Button("Delete all", role: .destructive) { store.clear() }
