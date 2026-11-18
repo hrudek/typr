@@ -158,12 +158,13 @@ final class TyprKeyControl: UIControl {
                 radius: cornerRadius
             )
         }
-        let markRect = TyprMarkPath.frame(in: cap)
+        let isMechanical = palette.design == .mechanical
+        let markRect = isMechanical ? MechanicalKeycap(isDark: palette.isDark).markFrame(in: cap) : TyprMarkPath.frame(in: cap)
         if isWarm {
             TyprMarkPath.draw(in: context, rect: markRect, color: palette.textBase, coreColor: palette.warmCore)
         } else {
             // Dark matches the reference: a white mark and a thin white ↗.
-            let ink = palette.isDark ? palette.textBase : palette.textMuted
+            let ink = isMechanical ? palette.keyGlyph : (palette.isDark ? palette.textBase : palette.textMuted)
             TyprMarkPath.draw(in: context, rect: markRect, color: ink, coreColor: nil)
             TyprMarkPath.drawArrow(in: context, rect: TyprMarkPath.arrowFrame(in: cap), color: ink)
         }
@@ -339,7 +340,7 @@ final class PanelKeyButton: UIControl {
             ? palette.keyPressedFill
             : (isPrimary ? palette.keyFill : palette.functionFill)
         context.fillKeycap(bounds, palette: palette, fill: fill, radius: cornerRadius)
-        let ink = isEnabled ? palette.textBase : palette.textMuted
+        let ink = isEnabled ? palette.keyGlyph : palette.textMuted
         if let symbol {
             let config = UIImage.SymbolConfiguration(pointSize: 16.5, weight: .medium)
             if let image = UIImage(systemName: symbol, withConfiguration: config)?

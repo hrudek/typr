@@ -37,8 +37,22 @@ struct FullKeyboardPalette: Equatable {
 
     /// One keycap fill across letters and modifiers. Dark is opaque so the keys
     /// keep the reference colour regardless of the platter behind them.
-    var keyFill: UIColor { isDark ? Self.rgb(0x2D2D2D) : .white }
-    var keyPressedFill: UIColor { isDark ? Self.rgb(0x474747) : Self.rgb(0xD8DCE4) }
+    var keyFill: UIColor {
+        if design == .mechanical { return isDark ? Self.rgb(0x262626) : Self.rgb(0xE9EAEE) }
+        return isDark ? Self.rgb(0x2D2D2D) : .white
+    }
+    var keyPressedFill: UIColor {
+        if design == .mechanical { return isDark ? Self.rgb(0x3A3A3A) : Self.rgb(0xD3D6DC) }
+        return isDark ? Self.rgb(0x474747) : Self.rgb(0xD8DCE4)
+    }
+    var keyLabel: UIColor {
+        guard design == .mechanical else { return textBase }
+        return isDark ? Self.rgb(0x929292) : Self.rgb(0x6A6D74)
+    }
+    var keyGlyph: UIColor {
+        guard design == .mechanical else { return textBase }
+        return isDark ? Self.rgb(0xA8A8A8) : Self.rgb(0x5A5D64)
+    }
     /// Secondary fill for non-key chips and the recording panel's cancel pill.
     var functionFill: UIColor { isDark ? UIColor(white: 1, alpha: 0.07) : UIColor(white: 0, alpha: 0.065) }
     var keyShadow: UIColor { .clear }
@@ -60,7 +74,7 @@ struct FullKeyboardPalette: Equatable {
     /// Apple system keyboard action blue (`#007AFF`).
     var actionFill: UIColor { Self.rgb(0x007AFF) }
     var actionPressedFill: UIColor { Self.rgb(0x0062CC) }
-    var warmCore: UIColor { Self.rgb(0xFF9500) }
+    var warmCore: UIColor { design == .mechanical ? Self.rgb(0xD67A1F) : Self.rgb(0xFF9500) }
     var recordingDot: UIColor { Self.rgb(0xE54D42) }
 
     static let cornerRadius: CGFloat = 8.5
@@ -208,98 +222,141 @@ struct JoinedSpaceKeycap {
 }
 
 extension JoinedSpaceKeycap {
+    func mechanicalSeamX(atY y: CGFloat, face: CGRect) -> CGFloat {
+        (space.maxX + typr.minX) / 2 + MechanicalKeycap.seamSlant * (face.midY - y)
+    }
+
     fileprivate func drawMechanical(in context: CGContext, palette: FullKeyboardPalette, spacePressed: Bool, typrPressed: Bool) {
         let mechanical = MechanicalKeycap(isDark: palette.isDark)
-        let spaceFace = spacePressed ? palette.keyPressedFill : palette.keyFill
-        let typrFace = typrPressed ? palette.keyPressedFill : palette.keyFill
-        mechanical.drawCap(in: context, rect: frame, radius: radius)
+        let base = UIBezierPath(roundedRect: frame, cornerRadius: radius)
+        mechanical.drawBase(in: context, path: base, rect: frame)
         let face = mechanical.faceRect(frame)
+        let half = MechanicalKeycap.seamGap / 2
+        func seam(_ y: CGFloat, _ dx: CGFloat) -> CGPoint {
+            CGPoint(x: mechanicalSeamX(atY: y, face: face) + dx, y: y)
+        }
+        context.saveGState()
+        base.addClip()
+        context.addLines(between: [
+            seam(frame.minY, -half), seam(frame.minY, half), seam(frame.maxY, half), seam(frame.maxY, -half),
+        ])
+        context.setFillColor(mechanical.seamFill.cgColor)
+        context.fillPath()
+        context.restoreGState()
         let faceRadius = mechanical.faceRadius(radius)
-        context.saveGState()
-        UIBezierPath(roundedRect: face, cornerRadius: faceRadius).addClip()
-        mechanical.fillFace(in: context, rect: face, color: spaceFace)
-        Self.typrRegion(cap: typr, radius: radius).addClip()
-        mechanical.fillFace(in: context, rect: face, color: typrFace)
-        context.restoreGState()
-        context.saveGState()
-        UIBezierPath(roundedRect: frame, cornerRadius: radius).addClip()
-        let seam = Self.seam(cap: typr, radius: radius)
-        seam.lineWidth = MechanicalKeycap.seamWidth
-        mechanical.rim.setStroke()
-        seam.stroke()
-        context.restoreGState()
+        let spaceFace = MechanicalKeycap.roundedPolygon([
+            CGPoint(x: face.minX, y: face.minY), seam(face.minY, -half),
+            seam(face.maxY, -half), CGPoint(x: face.minX, y: face.maxY),
+        ], radius: faceRadius)
+        let typrFace = MechanicalKeycap.roundedPolygon([
+            seam(face.minY, half), CGPoint(x: face.maxX, y: face.minY),
+            CGPoint(x: face.maxX, y: face.maxY), seam(face.maxY, half),
+        ], radius: faceRadius)
+        mechanical.drawFace(in: context, path: spaceFace, rect: face, color: spacePressed ? palette.keyPressedFill : palette.keyFill)
+        mechanical.drawFace(in: context, path: typrFace, rect: face, color: typrPressed ? palette.keyPressedFill : palette.keyFill)
     }
 }
 
 struct MechanicalKeycap {
     let isDark: Bool
 
-    static let seamWidth: CGFloat = 3.5
+    static let seamGap: CGFloat = 3.5
+    static let seamSlant: CGFloat = 0.21
+    static let highlightWidth: CGFloat = 0.5
 
-    var rim: UIColor { isDark ? UIColor(white: 0.07, alpha: 1) : UIColor(white: 0.74, alpha: 1) }
+    var seamFill: UIColor { UIColor(white: isDark ? 0.05 : 0.7, alpha: 1) }
 
-    func faceRect(_ cap: CGRect) -> CGRect {
-        CGRect(x: cap.minX + 3, y: cap.minY + 2.5, width: cap.width - 6, height: cap.height - 7)
+    private var baseStops: [(CGFloat, UIColor)] {
+        let stops: [(CGFloat, CGFloat)] = isDark
+            ? [(0, 0.18), (0.06, 0.165), (0.15, 0.085), (0.6, 0.08), (0.92, 0.06), (1, 0.035)]
+            : [(0, 0.97), (0.06, 0.93), (0.15, 0.8), (0.6, 0.78), (0.92, 0.72), (1, 0.66)]
+        return stops.map { ($0.0, UIColor(white: $0.1, alpha: 1)) }
     }
 
-    func faceRadius(_ radius: CGFloat) -> CGFloat { max(2, radius - 2.5) }
+    private var faceStops: [(CGFloat, UIColor)] {
+        let stops: [(CGFloat, CGFloat)] = isDark
+            ? [(0, 0.12), (0.25, 0.055), (0.5, 0.02), (0.62, 0), (0.82, 0), (1, 0.08)]
+            : [(0, 0.75), (0.3, 0.35), (0.6, 0), (0.85, 0), (1, 0.25)]
+        return stops.map { ($0.0, UIColor(white: 1, alpha: $0.1)) }
+    }
 
-    func inkFrame(_ cap: CGRect) -> CGRect { cap.offsetBy(dx: 0, dy: -1) }
+    private var highlight: UIColor { UIColor(white: 1, alpha: isDark ? 0.28 : 1) }
+    private var shadow: UIColor { UIColor(white: 0, alpha: isDark ? 0.6 : 0.22) }
 
-    func drawCap(in context: CGContext, rect: CGRect, radius: CGFloat) {
-        let path = UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath
+    func faceRect(_ cap: CGRect) -> CGRect {
+        let side = cap.height * 0.062
+        let top = cap.height * 0.062
+        let bottom = cap.height * 0.105
+        return CGRect(x: cap.minX + side, y: cap.minY + top, width: cap.width - 2 * side, height: cap.height - top - bottom)
+    }
+
+    func faceRadius(_ radius: CGFloat) -> CGFloat { max(2, radius - 2) }
+
+    func inkFrame(_ cap: CGRect) -> CGRect { faceRect(cap) }
+
+    func markFrame(in cap: CGRect) -> CGRect {
+        let face = faceRect(cap)
+        let width = min(cap.width * 0.62, cap.height * 0.66)
+        let height = width / TyprMarkPath.aspect
+        return CGRect(x: face.midX - width / 2, y: face.midY + cap.height * 0.05 - height / 2, width: width, height: height)
+    }
+
+    static func roundedPolygon(_ points: [CGPoint], radius: CGFloat) -> UIBezierPath {
+        let path = CGMutablePath()
+        let first = points[0], last = points[points.count - 1]
+        path.move(to: CGPoint(x: (last.x + first.x) / 2, y: (last.y + first.y) / 2))
+        for (index, corner) in points.enumerated() {
+            path.addArc(tangent1End: corner, tangent2End: points[(index + 1) % points.count], radius: radius)
+        }
+        path.closeSubpath()
+        return UIBezierPath(cgPath: path)
+    }
+
+    private func drawGradient(in context: CGContext, rect: CGRect, stops: [(CGFloat, UIColor)]) {
+        guard let gradient = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(),
+            colors: stops.map { $0.1.cgColor } as CFArray,
+            locations: stops.map { $0.0 }
+        ) else { return }
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: rect.midX, y: rect.minY),
+            end: CGPoint(x: rect.midX, y: rect.maxY),
+            options: []
+        )
+    }
+
+    func drawBase(in context: CGContext, path: UIBezierPath, rect: CGRect) {
         context.saveGState()
-        context.setShadow(offset: CGSize(width: 0, height: 1), blur: 2.5, color: UIColor(white: 0, alpha: isDark ? 0.55 : 0.22).cgColor)
-        context.addPath(path)
-        context.setFillColor(rim.cgColor)
+        context.setShadow(offset: CGSize(width: 0, height: 1.5), blur: 4, color: shadow.cgColor)
+        context.addPath(path.cgPath)
+        context.setFillColor(seamFill.cgColor)
         context.fillPath()
         context.restoreGState()
         context.saveGState()
-        context.addPath(path)
-        context.clip()
-        let top = UIColor(white: isDark ? 0.17 : 0.88, alpha: 1)
-        if let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: [top.cgColor, rim.cgColor] as CFArray,
-            locations: [0, 0.45]
-        ) {
-            context.drawLinearGradient(
-                gradient,
-                start: CGPoint(x: rect.midX, y: rect.minY),
-                end: CGPoint(x: rect.midX, y: rect.maxY),
-                options: []
-            )
-        }
+        path.addClip()
+        drawGradient(in: context, rect: rect, stops: baseStops)
         context.restoreGState()
     }
 
-    func fillFace(in context: CGContext, rect: CGRect, color: UIColor) {
+    func drawFace(in context: CGContext, path: UIBezierPath, rect: CGRect, color: UIColor) {
+        context.saveGState()
+        path.addClip()
+        context.setFillColor(highlight.cgColor)
+        context.fill(rect)
+        let lowered = UIBezierPath(cgPath: path.cgPath)
+        lowered.apply(CGAffineTransform(translationX: 0, y: Self.highlightWidth))
+        lowered.addClip()
         context.setFillColor(color.cgColor)
         context.fill(rect)
-        context.saveGState()
-        context.clip(to: rect)
-        if let gradient = CGGradient(
-            colorsSpace: CGColorSpaceCreateDeviceRGB(),
-            colors: [UIColor(white: 1, alpha: isDark ? 0.07 : 0.5).cgColor, UIColor(white: 1, alpha: 0).cgColor] as CFArray,
-            locations: [0, 1]
-        ) {
-            context.drawLinearGradient(
-                gradient,
-                start: CGPoint(x: rect.midX, y: rect.minY),
-                end: CGPoint(x: rect.midX, y: rect.minY + rect.height * 0.5),
-                options: []
-            )
-        }
+        drawGradient(in: context, rect: rect, stops: faceStops)
         context.restoreGState()
     }
 
     func draw(in context: CGContext, rect: CGRect, face color: UIColor, radius: CGFloat) {
-        drawCap(in: context, rect: rect, radius: radius)
+        drawBase(in: context, path: UIBezierPath(roundedRect: rect, cornerRadius: radius), rect: rect)
         let face = faceRect(rect)
-        context.saveGState()
-        UIBezierPath(roundedRect: face, cornerRadius: faceRadius(radius)).addClip()
-        fillFace(in: context, rect: face, color: color)
-        context.restoreGState()
+        drawFace(in: context, path: UIBezierPath(roundedRect: face, cornerRadius: faceRadius(radius)), rect: face, color: color)
     }
 }
 

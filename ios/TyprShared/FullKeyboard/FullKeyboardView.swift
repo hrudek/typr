@@ -29,6 +29,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     var onShowCompactBar: (() -> Void)?
     /// Fixtures force the suggestion bar on or off; the keyboard follows Typr's switch.
     var suggestionBarOverride: Bool? { didSet { applySuggestionBarSetting() } }
+    var designOverride: KeyboardDesign?
     /// How long Fix in Typr stays after Problem before the panel closes itself.
     var problemPanelDuration: TimeInterval {
         get { model.problemPanelDuration }
@@ -191,7 +192,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         // Learning switch and app reset epochs; never per keystroke.
         engine.autocorrect.syncLearning()
         applySuggestionBarSetting()
-        let wantsDesign = FullKeyboardSettings().design
+        let wantsDesign = designOverride ?? FullKeyboardSettings().design
         if wantsDesign != design {
             design = wantsDesign
             applyAppearance()
