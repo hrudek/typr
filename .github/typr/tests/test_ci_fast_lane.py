@@ -15,11 +15,10 @@ def job(name):
     return re.split(r'\n  \S', source.split(f'\n  {name}:\n', 1)[1], maxsplit=1)[0]
 
 
-def condition(name, event, changed='true', only_testing='', test_changed=None):
+def condition(name, changed='true', only_testing='', test_changed=None):
     # Evaluate the actual single-line scheduling expression, not a copied policy.
     expression = re.search(r'^    if: (.+)$', job(name), re.M).group(1)
     values = {
-        'github.event_name': event,
         'needs.decide.outputs.build': changed,
         'needs.decide.outputs.test': changed if test_changed is None else test_changed,
         'inputs.only_testing': only_testing,
@@ -43,17 +42,16 @@ class FastLaneContracts(unittest.TestCase):
         self.assertNotIn('only_testing:', SOURCE)
 
     def test_post_merge_keeps_tests_and_device_builds(self):
-        self.assertTrue(condition('test', 'push'))
-        self.assertTrue(condition('build', 'push'))
-        self.assertFalse(condition('test', 'push', changed='false'))
-        self.assertFalse(condition('build', 'push', changed='false'))
+        self.assertTrue(condition('test'))
+        self.assertTrue(condition('build'))
+        self.assertFalse(condition('test', changed='false'))
+        self.assertFalse(condition('build', changed='false'))
         self.assertIn('needs: [decide, build]', job('sign'))
 
     def test_nothing_is_scheduled_and_manual_preview_has_no_device_archive(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
             self.assertNotRegex(path.read_text(), re.compile(r'^  schedule:', re.M), path.name)
-        self.assertTrue(condition('test', 'workflow_dispatch'))
-        self.assertFalse(condition('test', 'workflow_dispatch', only_testing='none'))
+        self.assertFalse(condition('test', only_testing='none'))
         self.assertIn('DISTRIBUTION: simulator', SIMULATOR)
         self.assertIn('simulator) ;;', DECIDE)
 
@@ -84,13 +82,10 @@ class FastLaneContracts(unittest.TestCase):
         self.assertIn('exit 1', DECIDE.split('Cannot compare app inputs;', 1)[1])
 
     def test_test_only_merges_skip_archive_but_keep_simulator(self):
-        self.assertTrue(condition('test', 'push', changed='false', test_changed='true'))
-        self.assertFalse(condition('build', 'push', changed='false', test_changed='true'))
-        self.assertFalse(condition('test', 'push', changed='false',
+        self.assertTrue(condition('test', changed='false', test_changed='true'))
+        self.assertFalse(condition('build', changed='false', test_changed='true'))
+        self.assertFalse(condition('test', changed='false',
                                    test_changed='true', only_testing='none'))
-
-    def test_manual_testflight_still_builds(self):
-        self.assertTrue(condition('build', 'workflow_dispatch'))
 
     def test_screenshots_are_manual_artifacts_not_pr_comments(self):
         simulator = job('test')
