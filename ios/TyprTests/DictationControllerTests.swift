@@ -43,7 +43,6 @@ private final class FakeAudioManager: AudioManaging {
     var deactivateCount = 0
     var createdCaptures: [FakeAudioCapture] = []
     var media = MediaOnDictation.pause
-    /// The choice the running input was started with, like the real session's category.
     var appliedMedia: MediaOnDictation?
     var isDucking = false
     var duckCount = 0

@@ -35,9 +35,8 @@ protocol AudioManaging: AnyObject {
     func requestPermission() async -> Bool
     func startKeepalive(allowBluetooth: Bool) throws
     /// Starts the keepalive only when it isn't already running with these options and the
-    /// current media choice. Never
-    /// restarts a running input: iOS refuses to start microphone input in the background,
-    /// so a restart there would end the warm session.
+    /// current media choice. A restart fails in the background, where iOS refuses to start
+    /// microphone input, which ends the warm session.
     func ensureKeepalive(allowBluetooth: Bool) throws
     func stopKeepalive()
     func deactivateSession()
