@@ -247,7 +247,7 @@ struct ContentView: View {
                 SettingsSection(title: "Statistics") {
                     NavigationLink(value: SettingsDestination.statistics) {
                         HStack(spacing: 12) {
-                            Image(systemName: "hand.tap").foregroundStyle(TyprTheme.agentBlue)
+                            Image(systemName: "chart.bar.xaxis").foregroundStyle(TyprTheme.agentBlue)
                             Text("Statistics").foregroundStyle(TyprTheme.textBase)
                             Spacer()
                             Image(systemName: "chevron.right").foregroundStyle(TyprTheme.textMuted)
