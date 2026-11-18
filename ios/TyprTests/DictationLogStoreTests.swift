@@ -173,6 +173,26 @@ final class DictationLogStoreTests: XCTestCase {
         await env.dispose()
     }
 
+    func testExpiryDuringUnfinishedMigrationScrubsLegacyCopyAndKeepsUnresolvedEntry() async throws {
+        let env = LogTestEnvironment(); await env.storage.flush()
+        let now = Date()
+        var expired = entry(createdAt: now - 11 * Self.day); expired.revision = nil
+        var unresolved = entry(createdAt: now - 11 * Self.day); unresolved.revision = nil
+        try Data("unreadable newer copy".utf8)
+            .write(to: env.storage.root.appendingPathComponent("entries/\(unresolved.id.uuidString).json"))
+        try JSONEncoder().encode(DictationLogDocument(entries: [expired, unresolved])).write(to: env.storage.url)
+        let disk = DictationLogStorage(url: env.storage.url)
+        let migrated = DictationLogStore(storage: disk, settings: env.settings, now: { now })
+        try await waitForState("migrated copy expired") {
+            await disk.flush(); await mainActorBarrier()
+            return !migrated.isLoading && migrated.metadata.isEmpty
+        }
+        let legacy = try JSONDecoder().decode(DictationLogDocument.self, from: Data(contentsOf: env.storage.url))
+        XCTAssertEqual(legacy.entries, [unresolved])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: disk.root
+            .appendingPathComponent("entries/\(expired.id.uuidString).json").path))
+        await env.dispose()
+    }
     func testCorruptAndUnknownLegacyIsPreservedAndDoesNotBlockNewCaptures() async throws {
         for data in [Data("not JSON".utf8), Data(repeating: 32, count: 1_000_001),
                      Data(#"{"schemaVersion":999,"entries":[]}"#.utf8)] {
@@ -376,6 +396,84 @@ final class DictationLogStoreTests: XCTestCase {
             recording.finish(text: "ignored", beforeSpelling: "ignored")
             XCTAssertEqual(env.store.entries.first, terminal)
         }
+        await env.dispose()
+    }
+
+    private static let day: TimeInterval = 24 * 60 * 60
+    private func entry(createdAt: Date) -> DictationLogEntry {
+        var context = DictationLogContext(); context.createdAt = createdAt
+        var entry = DictationLogEntry(context: context); entry.status = .finished
+        return entry
+    }
+    func testLaunchDeletesEntriesOlderThanTenDaysIncludingLegacyArchive() async throws {
+        let env = LogTestEnvironment(); try await settle(env.store)
+        let now = Date()
+        let kept = entry(createdAt: now - 9 * Self.day), expired = entry(createdAt: now - 11 * Self.day)
+        for saved in [kept, expired] {
+            let success = await withCheckedContinuation { c in env.storage.save(saved) { c.resume(returning: $0) } }
+            XCTAssertTrue(success)
+        }
+        var legacyKept = entry(createdAt: now - 9 * Self.day), legacyExpired = entry(createdAt: now - 11 * Self.day)
+        legacyKept.revision = nil; legacyExpired.revision = nil
+        try JSONEncoder().encode(DictationLogDocument(entries: [legacyKept, legacyExpired])).write(to: env.storage.url)
+        let disk = DictationLogStorage(url: env.storage.url)
+        let reopened = DictationLogStore(storage: disk, settings: env.settings, now: { now })
+        try await waitForState("expired entries purged on launch") {
+            await disk.flush(); await mainActorBarrier()
+            return !reopened.isLoading && Set(reopened.metadata.map(\.id)) == [kept.id, legacyKept.id]
+        }
+        for id in [expired.id, legacyExpired.id] {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: disk.root.appendingPathComponent("entries/\(id.uuidString).json").path))
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: disk.url.path))
+        let result: Result<URL, any Error> = await withCheckedContinuation { continuation in
+            disk.export(ids: nil, build: "synthetic-test") { continuation.resume(returning: $0) }
+        }
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: result.get())) as? [String: Any])
+        let exported = try XCTUnwrap(object["entries"] as? [[String: Any]]).compactMap { $0["id"] as? String }
+        XCTAssertEqual(Set(exported), [kept.id.uuidString, legacyKept.id.uuidString])
+        await env.dispose()
+    }
+    func testCaptureAndForegroundDeleteEntriesOnceOlderThanTenDaysEvenWhenOff() async throws {
+        final class Clock { var now = Date() }
+        let env = LogTestEnvironment(); try await settle(env.store)
+        let clock = Clock(), start = clock.now
+        let store = DictationLogStore(storage: DictationLogStorage(url: env.storage.url), settings: env.settings,
+                                      now: { clock.now })
+        try await settle(store)
+        func capture() throws -> UUID {
+            var context = DictationLogContext(); context.createdAt = clock.now
+            let recording = try XCTUnwrap(store.begin(token: store.token(), context: context))
+            recording.finish(text: "synthetic", beforeSpelling: "synthetic")
+            return recording.entryID
+        }
+        let first = try capture()
+        clock.now = start + 9 * Self.day
+        let second = try capture()
+        try await settle(store)
+        XCTAssertEqual(Set(store.metadata.map(\.id)), [first, second])
+        clock.now = start + 11 * Self.day
+        let third = try capture()
+        try await waitForState("capture purged the 11-day-old entry") {
+            await store.storage.flush(); await mainActorBarrier()
+            return Set(store.metadata.map(\.id)) == [second, third]
+        }
+        store.setEnabled(false)
+        clock.now = start + 22 * Self.day
+        store.purgeExpired()
+        try await waitForState("foreground purge with history off") {
+            await store.storage.flush(); await mainActorBarrier()
+            return store.metadata.isEmpty
+        }
+        XCTAssertEqual(env.persistedEntryCount, 0)
+        await env.dispose()
+    }
+    func testHistoryOffPersistsNoCapture() async throws {
+        let env = LogTestEnvironment(enabled: false); try await settle(env.store)
+        XCTAssertNil(env.store.begin(token: env.store.token(), context: .init()))
+        await env.storage.flush()
+        XCTAssertTrue(env.store.metadata.isEmpty)
+        XCTAssertEqual(env.persistedEntryCount, 0)
         await env.dispose()
     }
 }
