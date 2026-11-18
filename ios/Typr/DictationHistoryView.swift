@@ -28,7 +28,6 @@ struct DictationHistoryDay: Identifiable, Equatable {
     }
 }
 
-/// Settings → History & feedback: the two switches, then the history itself.
 @MainActor
 struct DictationHistoryView: View {
     let store: DictationLogStore

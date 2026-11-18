@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Tapping the selected rating again removes it; categories, note and desired text stay.
 struct DictationRatingSection: View {
     let store: DictationLogStore
     let entry: DictationLogEntry
@@ -44,7 +43,6 @@ struct DictationRatingSection: View {
     }
 }
 
-/// One dictation text with an explicit Copy button. Copying happens only on tap.
 struct DictationCopyableTextSection: View {
     let title: String
     let field: DictationLogText?
@@ -89,7 +87,6 @@ struct DictationCopyableTextSection: View {
     }
 }
 
-/// Note and desired text are both optional. An unchanged field is passed as nil so the store keeps it as saved.
 struct DictationFeedbackEditor: View {
     let store: DictationLogStore
     let entry: DictationLogEntry

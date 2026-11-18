@@ -45,7 +45,6 @@ extension DictationLogEntry {
     }
 }
 
-/// Final text first, then rating and feedback; every pipeline stage stays one tap away.
 struct DictationLogDetail: View {
     let store: DictationLogStore
     let entryID: UUID
@@ -106,8 +105,8 @@ struct DictationLogDetail: View {
         stage("Cleanup output used", entry.cleanupOutput, previous: entry.aiAnswer ?? entry.aiInput ?? entry.recognized)
         stage("After style formatting", entry.formattedText, previous: entry.cleanupOutput)
         ForEach(entry.improvementLines, id: \.self) { Text($0).font(.footnote).textSelection(.enabled) }
-        replacements("Vocabulary before cleanup", entry.spellingLines(entry.firstSpellingPass), pass: entry.firstSpellingPass)
-        replacements("Vocabulary after formatting", entry.spellingLines(entry.secondSpellingPass), pass: entry.secondSpellingPass)
+        replacements("Vocabulary before cleanup", entry, entry.firstSpellingPass)
+        replacements("Vocabulary after formatting", entry, entry.secondSpellingPass)
     }
 
     @ViewBuilder
@@ -125,11 +124,11 @@ struct DictationLogDetail: View {
     }
 
     @ViewBuilder
-    private func replacements(_ title: String, _ lines: [String], pass: DictationLogSpellingPass?) -> some View {
+    private func replacements(_ title: String, _ entry: DictationLogEntry, _ pass: DictationLogSpellingPass?) -> some View {
         if let pass, pass.totalChanges > 0 {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.footnote.weight(.medium)).foregroundStyle(TyprTheme.textMuted)
-                ForEach(lines, id: \.self) { Text($0).font(.footnote).textSelection(.enabled) }
+                ForEach(Array(entry.spellingLines(pass).enumerated()), id: \.offset) { Text($0.element).font(.footnote).textSelection(.enabled) }
             }
         }
     }
