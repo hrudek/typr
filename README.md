@@ -16,16 +16,30 @@ An explicit engine or language choice never silently falls back to another.
   such as share sheets require **Keep mic warm** instead.
 - **Keep mic warm** keeps microphone input running so repeated dictations can start
   without leaving the keyboard. The duration is 5 minutes, 15 minutes or 1 hour.
-  If iOS reports another app playing audio before
-  microphone activation, Typr leaves idle input cold. Dictate then opens Typr to
-  start recording and interrupt that audio. Stopping or cancelling the recording
-  fully releases the audio session with `notifyOthersOnDeactivation`, before
-  transcription, so the interrupted app can resume. That capture ends the warm
-  session; another cold dictation may require opening Typr again. When no other
-  audio is playing, normal warm behavior is preserved without changing category
-  options on a running input. Later playback/interruption events are also checked
-  before restarting idle input. Detection is a momentary iOS audio signal, not a
-  per-app media inventory; actual resumption is controlled by the media app and iOS.
+- **Media while dictating** decides what happens to audio another app is playing
+  (YouTube, Music, ...). Detection is a momentary iOS audio signal, not a per-app
+  media inventory; actual resumption is controlled by the media app and iOS.
+  - **Pause** (default): if iOS reports other audio before microphone activation,
+    Typr leaves idle input cold. Dictate then opens Typr to start recording and
+    interrupt that audio. Stopping or cancelling the recording fully releases the
+    audio session with `notifyOthersOnDeactivation`, before transcription, so the
+    interrupted app can resume. That capture ends the warm session; another cold
+    dictation may require opening Typr again. Later playback/interruption events
+    are also checked before restarting idle input.
+  - **Keep playing**: the input mixes with other audio (`playAndRecord`,
+    `mixWithOthers`), so mic warm stays on while media plays and its volume is
+    never changed.
+  - **Lower volume**: idle warm input mixes like Keep playing. A recording that
+    starts while media plays adds `duckOthers` to the running session. iOS lifts
+    ducking only on deactivation, so the release after the recording restores
+    the volume and Typr then restarts warm input. iOS allows that restart only
+    while Typr is in the foreground; after a keyboard dictation the warm session
+    ends.
+    If iOS refuses to lower the volume, the recording continues and the keyboard
+    shows "Could not lower media volume."
+  - Changing the choice restarts warm input with the new session options, which
+    only happens in the app, where iOS allows it. During a recording the new
+    choice applies when the recording ends.
 - Text processing combines vocabulary corrections, optional AI cleanup and
   formatting styles. Cleanup runs on-device with Apple Intelligence (iOS 26+,
   default) or, with your own Anthropic API key (stored in the Keychain), with

@@ -564,6 +564,24 @@ struct ContentView: View {
             .tint(TyprTheme.success)
             .padding(.horizontal, 16)
             .frame(minHeight: 50)
+
+            rowDivider
+
+            HStack(spacing: 8) {
+                rowTitle("Media while dictating")
+                Spacer(minLength: 8)
+                Picker("Media while dictating", selection: Binding(
+                    get: { dictation.mediaOnDictation },
+                    set: { dictation.setMediaOnDictation($0) }
+                )) {
+                    ForEach(MediaOnDictation.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .accessibilityIdentifier("media-on-dictation")
+            }
+            .padding(.horizontal, 16)
+            .frame(minHeight: 50)
         }
         .background(
             TyprTheme.bgBase,

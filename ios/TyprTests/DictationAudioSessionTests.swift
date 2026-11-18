@@ -32,7 +32,7 @@ final class DictationAudioSessionTests: XCTestCase {
     func testActivationUsesProvenInputOnlyMeasurementSession() throws {
         let spy = SessionSpy()
         let session = spy.makeSession()
-        try session.activate(allowBluetooth: false)
+        try session.activate(allowBluetooth: false, media: .pause)
         XCTAssertEqual(spy.categories, [.record])
         XCTAssertEqual(spy.modes, [.measurement])
         XCTAssertEqual(spy.options, [[]])
@@ -44,7 +44,7 @@ final class DictationAudioSessionTests: XCTestCase {
     func testBluetoothIsTheOnlyOptionalCategoryFlag() throws {
         let spy = SessionSpy()
         let session = spy.makeSession()
-        try session.activate(allowBluetooth: true)
+        try session.activate(allowBluetooth: true, media: .pause)
         XCTAssertEqual(spy.categories, [.record])
         XCTAssertEqual(spy.options, [[.allowBluetoothHFP]])
     }
@@ -52,20 +52,47 @@ final class DictationAudioSessionTests: XCTestCase {
     func testReleaseNotifiesInterruptedAppsBeforeNextActivation() throws {
         let spy = SessionSpy()
         let session = spy.makeSession()
-        try session.activate(allowBluetooth: false)
+        try session.activate(allowBluetooth: false, media: .pause)
         session.deactivate()
         XCTAssertEqual(spy.activations, [true, false])
         XCTAssertEqual(spy.activationOptions.last, .notifyOthersOnDeactivation)
-        try session.activate(allowBluetooth: false)
+        try session.activate(allowBluetooth: false, media: .pause)
         XCTAssertEqual(spy.activations, [true, false, true])
         XCTAssertEqual(spy.options, [[], []])
+    }
+
+    func testKeepPlayingAndLowerVolumeMixWithoutDuckingWhileIdle() throws {
+        for media in [MediaOnDictation.keepPlaying, .lowerVolume] {
+            let spy = SessionSpy()
+            try spy.makeSession().activate(allowBluetooth: true, media: media)
+            XCTAssertEqual(spy.categories, [.playAndRecord], media.rawValue)
+            XCTAssertEqual(spy.modes, [.measurement], media.rawValue)
+            XCTAssertEqual(spy.options, [[.allowBluetoothHFP, .mixWithOthers, .defaultToSpeaker]], media.rawValue)
+            XCTAssertEqual(spy.activations, [true], media.rawValue)
+        }
+    }
+
+    func testDuckingReactivatesAndOnlyDeactivationLiftsIt() throws {
+        let spy = SessionSpy()
+        let session = spy.makeSession()
+        try session.activate(allowBluetooth: false, media: .lowerVolume)
+        try session.duckOthers(allowBluetooth: false)
+        XCTAssertEqual(spy.categories, [.playAndRecord, .playAndRecord])
+        XCTAssertEqual(spy.options, [[.mixWithOthers, .defaultToSpeaker], [.duckOthers, .defaultToSpeaker]])
+        XCTAssertEqual(spy.activations, [true, true])
+        session.deactivate()
+        XCTAssertEqual(spy.activations, [true, true, false])
+        XCTAssertEqual(spy.activationOptions.last, .notifyOthersOnDeactivation)
+        try session.activate(allowBluetooth: false, media: .lowerVolume)
+        XCTAssertEqual(spy.options.count, 3)
+        XCTAssertFalse(spy.options[2].contains(.duckOthers), "a new warm session must not duck")
     }
 
     func testConfigurationFailureDoesNotActivateAnUnknownSession() {
         let spy = SessionSpy()
         let session = spy.makeSession()
         spy.failCategory = true
-        XCTAssertThrowsError(try session.activate(allowBluetooth: false))
+        XCTAssertThrowsError(try session.activate(allowBluetooth: false, media: .pause))
         XCTAssertTrue(spy.activations.isEmpty)
     }
 }
