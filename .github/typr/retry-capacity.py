@@ -16,6 +16,7 @@ WORKFLOWS = {
     '.github/workflows/typr-simulator.yml',
 }
 DELAYS = (300, 600, 1200)
+HOSTED_MACOS_LABELS = ('macos-', 'xcode-')  # e.g. macos-26, xcode-27
 CAPACITY_ERROR = 'The job was not acquired by Runner of type hosted even after multiple attempts'
 
 
@@ -56,7 +57,7 @@ def eligible_job(job, annotations):
         job['conclusion'] in ('cancelled', 'failure')
         and job.get('runner_id', 0) == 0
         and not job.get('steps')
-        and any(label.startswith('macos-') for label in job.get('labels', []))
+        and any(label.startswith(HOSTED_MACOS_LABELS) for label in job.get('labels', []))
         and any(item.get('annotation_level') == 'failure'
                 and item.get('message', '').strip() == CAPACITY_ERROR for item in annotations)
     )

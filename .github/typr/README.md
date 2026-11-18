@@ -56,7 +56,9 @@ Review: every same-repo PR commit → Claude (read-only) → sticky comment
   `typr`; team `2ZNGF24932`; App Store Connect **Typr Keyboard** (`6832515139`),
   TestFlight group **Typr Internal**. Profiles `Typr App Store <bundle>`;
   environments `typr-testflight`, `typr-agent`.
-- **Runners:** variable `MACOS_RUNNER` overrides the default `macos-26`.
+- **Runners:** build, signing and simulator jobs default to the `xcode-27`
+  image; `select-xcode.sh` fails below Xcode 27.0. Variables `MACOS_BUILD_RUNNER`
+  (build, signing), `MACOS_RUNNER` (simulator) and `XCODE_PATH` override this.
 
 ## Owner commands
 

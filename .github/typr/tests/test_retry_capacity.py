@@ -21,7 +21,7 @@ class CapacityTests(unittest.TestCase):
             'head_sha': 'a' * 40, 'head_branch': 'dev', 'html_url': 'https://example/run/42',
         }
         self.job = {'id': 9, 'name': 'Simulator tests', 'runner_id': 0,
-                    'steps': [], 'labels': ['macos-26'], 'conclusion': 'cancelled'}
+                    'steps': [], 'labels': ['xcode-27'], 'conclusion': 'cancelled'}
         self.annotations = [{'annotation_level': 'failure', 'message': capacity.CAPACITY_ERROR}]
 
     def test_only_failed_same_repo_allowlisted_runs_with_budget(self):
@@ -42,6 +42,7 @@ class CapacityTests(unittest.TestCase):
 
     def test_requires_exact_failure_and_no_runner_or_executed_steps(self):
         self.assertTrue(capacity.eligible_job(self.job, self.annotations))
+        self.assertTrue(capacity.eligible_job({**self.job, 'labels': ['macos-26']}, self.annotations))
         for change in ({'runner_id': 123}, {'steps': [{'name': 'Run tests'}]},
                        {'labels': ['self-hosted', 'macOS']}, {'labels': ['ubuntu-latest']},
                        {'conclusion': 'success'}):
