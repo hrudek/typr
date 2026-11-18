@@ -508,13 +508,18 @@ final class AutocorrectEngine {
         }
         guard let pending = pendingFeedback else { return }
         pendingFeedback = nil
-        guard pending.learnable, pending.epoch == learning.feedbackEpoch,
+        guard pending.epoch == learning.feedbackEpoch,
               insertedLetter.count == 1, insertedLetter.first?.isLetter == true,
               afterInput?.hasSuffix(pending.suffix + insertedLetter) == true,
               let evidence = pending.evidence, let beforeInput, beforeInput.hasSuffix(pending.suffix),
               beforeInput.dropLast(pending.suffix.count).last?.isLetter != true else {
             learning.breakWordSequence(); return
         }
+        if pending.finalText == pending.literal, learning.isLearningEnabled, !evidence.retyped.isEmpty {
+            let labels = evidence.retyped.sorted { $0.key < $1.key }.map(\.value)
+            learning.learn(labels, layout: evidence.layout, source: .retype)
+        }
+        guard pending.learnable else { learning.breakWordSequence(); return }
         learning.settleTrustedWord(pending.literal, beforeInput: beforeInput)
         learnIdentity(evidence, literal: pending.literal, source: .literalValid)
         learning.confirmLiteral(pending.literal)

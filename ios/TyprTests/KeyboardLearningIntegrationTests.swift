@@ -132,7 +132,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertEqual(engine.autocorrect.learning.diagnostics.acceptedLabels, 0)
     }
 
-    func testDeleteRetypeEvidenceCanDecodeButNeverTeach() {
+    func testDeleteRetypeEvidenceCanDecodeButNeverTeachTheWord() {
         for choice in 0..<3 {
             let (engine, _) = keyboard()
             type("hella", engine)
@@ -155,6 +155,84 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         type("hello w", engine)
         XCTAssertTrue(engine.autocorrect.learning.model.lexicon.counts.isEmpty)
         XCTAssertEqual(engine.autocorrect.learning.diagnostics.acceptedLabels, 0)
+    }
+
+    /// A tap on p's edge next to o, erased and retyped as o.
+    private func missOThenRetype(_ engine: FullKeyboardEngine) throws {
+        let p = try XCTUnwrap(engine.layout.key(.character("p")))
+        let miss = CGPoint(x: p.frame.minX + 1, y: p.frame.midY)
+        engine.touchBegan(id: 1, at: miss)
+        engine.touchEnded(id: 1, at: miss)
+        tap(.delete, engine)
+        type("o", engine)
+    }
+
+    func testRetypedMissTeachesTheErasedTapOnceTheWordSettles() throws {
+        let session = KeyboardLearningSession()
+        let (engine, target) = keyboard(session: session)
+        type("hell", engine)
+        try missOThenRetype(engine)
+        type(" ", engine)
+        XCTAssertEqual(session.diagnostics.acceptedLabels, 0, "nothing is learned before the word settles")
+        type("w", engine)
+        XCTAssertEqual(target.text, "hello w")
+        XCTAssertEqual(session.diagnostics.acceptedBySource["retype"], 1)
+        XCTAssertEqual(session.diagnostics.acceptedLabels, 1, "the edited word itself still never teaches")
+        XCTAssertTrue(session.model.lexicon.counts.isEmpty)
+        let stats = try XCTUnwrap(session.model.state.layouts.values.first?.keys["o"])
+        XCTAssertEqual(stats.n, 1)
+        let o = try XCTUnwrap(engine.layout.key(.character("o")))
+        let edge = Double(o.frame.width / 2 / (o.frame.width + engine.layout.metrics.gap))
+        XCTAssertGreaterThan(stats.meanX, edge, "the label sits where the miss landed, past o's right edge")
+    }
+
+    func testRetypeDoesNotTeachFarTapsSameLettersUnsettledOrCorrectedWords() throws {
+        var text = ""
+        func retypeLabels(_ run: (FullKeyboardEngine) throws -> Void) rethrows -> Int? {
+            let session = KeyboardLearningSession()
+            let (engine, target) = keyboard(session: session)
+            try run(engine)
+            text = target.text
+            return session.diagnostics.acceptedBySource["retype"]
+        }
+        XCTAssertNil(retypeLabels { engine in
+            type("hellp", engine); tap(.delete, engine); type("o w", engine)
+        }, "a tap in the middle of p is no miss of o")
+        XCTAssertNil(try retypeLabels { engine in
+            type("hell", engine); try missOThenRetype(engine)
+            tap(.delete, engine); type("o w", engine)
+        }, "deleting the retyped letter drops its label")
+        XCTAssertNil(try retypeLabels { engine in
+            type("hell", engine); try missOThenRetype(engine)
+            tap(.returnKey, engine); type("w", engine)
+        }, "a word that never settles teaches nothing")
+        XCTAssertNil(try retypeLabels { engine in
+            type("hell", engine); try missOThenRetype(engine)
+            engine.textDidChange(); type(" w", engine)
+        }, "a cursor or host change drops the evidence")
+        XCTAssertNil(retypeLabels { engine in
+            type("te", engine)
+            let j = engine.layout.key(.character("j"))!
+            let miss = CGPoint(x: j.frame.minX + 1, y: j.frame.midY)
+            engine.touchBegan(id: 1, at: miss)
+            engine.touchEnded(id: 1, at: miss)
+            tap(.delete, engine)
+            type("h w", engine)
+        }, "an automatic replacement teaches nothing")
+        XCTAssertEqual(text, "the w")
+    }
+
+    func testRetypeAfterDeletingTheWholeWordStillLabelsTheFirstTap() throws {
+        let session = KeyboardLearningSession()
+        let (engine, target) = keyboard(session: session)
+        let g = try XCTUnwrap(engine.layout.key(.character("g")))
+        let miss = CGPoint(x: g.frame.maxX - 1, y: g.frame.midY)
+        engine.touchBegan(id: 1, at: miss)
+        engine.touchEnded(id: 1, at: miss)
+        tap(.delete, engine)
+        type("hello w", engine)
+        XCTAssertEqual(target.text, "hello w")
+        XCTAssertEqual(session.diagnostics.acceptedBySource["retype"], 1)
     }
 
     func testAutomaticOutputNeverTeachesWithoutFeedback() {

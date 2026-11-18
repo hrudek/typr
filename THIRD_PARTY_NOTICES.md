@@ -159,6 +159,13 @@ are Typr-specific hardening, not additional upstream code or data. No upstream f
 resources, neural weights or dependencies are included. The single full MIT notice
 below (Copyright (c) 2026 Bassim Shahidy) covers this adaptation.
 
+Backspace-retype touch labels translate `WordTaps.erased`/`retyped` and
+`PendingWord` from `Typing/TypingEngine+Words.swift` and `KeyGrid.reaches` from
+`Keys/KeyGrid.swift` (under `Packages/KeyboardModules/Sources/KeyboardCore/`) at
+[`73c2ed9016b802e5bf017a2d595d037d1e748ccf`](https://github.com/AVGVSTVS96/iikb/tree/73c2ed9016b802e5bf017a2d595d037d1e748ccf).
+Typr adds its own different-letter and unchanged-settled-word gates. No upstream files
+are copied; the MIT notice below (Copyright (c) 2026 Bassim Shahidy) applies.
+
 Settings › Bottom row adapts the drag-handle reorder rows of `App/Design/OrderRows.swift`
 (into `ios/Typr/SettingsOrderRows.swift`), `BottomKey.arranged` from
 `Packages/KeyboardModules/Sources/KeyboardCore/Typing/CustomKeys.swift` and the period

@@ -13,8 +13,10 @@ nonisolated struct KeyboardTouchWord: Equatable, Sendable {
 
     let layout: KeyboardLayout
     var samples: [Sample]
-    /// Aligned edits may still decode, but deletion/retyping must never teach.
+    /// Aligned edits may still decode, but deletion/retyping must never teach the word itself.
     var learningIntact = true
+    /// Erased taps relabeled by a different letter retyped at their position, by position.
+    var retyped: [Int: TouchLabel] = [:]
     var text: String { samples.map(\.text).joined() }
 }
 
@@ -28,12 +30,25 @@ final class KeyboardTouchInput {
     private var space: KeyboardTouchWord.Sample?
     // Survives loss of all samples, so delete-all/retype cannot regain learning trust.
     private var editedWord = false
+    private var erased: [Int: KeyboardTouchWord.Sample] = [:]
+    private var erasedLayout: KeyboardLayout?
     var isLearningIntact: Bool { !editedWord }
     // One RAM-only bit, independent of complete tap evidence (also covers partial words).
     // Backspacing is explicit disagreement: the rest of this word must stay geometric.
     private(set) var attributionSuppressed = false
 
-    func clear() { word = nil; previous = nil; space = nil; editedWord = false }
+    func clear() { word = nil; previous = nil; space = nil; editedWord = false; forgetErased() }
+
+    private func forgetErased() { erased = [:]; erasedLayout = nil }
+
+    /// iikb KeyGrid.reaches (73c2ed9016b802e5bf017a2d595d037d1e748ccf, MIT © 2026 Bassim Shahidy).
+    static func reaches(_ point: CGPoint, letter: String, in layout: KeyboardLayout) -> Bool {
+        guard let key = layout.key(.character(letter)) else { return false }
+        let cell = key.frame.insetBy(dx: -layout.metrics.gap / 2, dy: -layout.metrics.rowGap / 2)
+        let dx = max(cell.minX - point.x, 0, point.x - cell.maxX)
+        let dy = max(cell.minY - point.y, 0, point.y - cell.maxY)
+        return dx <= cell.width / 4 && dy <= cell.height / 4
+    }
 
     func boundaryEvidence(beforeInput: String?) -> KeyboardBoundaryTouch? {
         guard let current = evidence(beforeInput: beforeInput) else { return nil }
@@ -90,13 +105,13 @@ final class KeyboardTouchInput {
               point.x.isFinite, point.y.isFinite, layout.layer == .letters,
               layout.field == .text, (attributedKey ?? key).character?.lowercased() == text.lowercased(),
               AutocorrectEngine.currentToken(in: after) == (AutocorrectEngine.currentToken(in: before) ?? "") + text else {
-            word = nil; previous = nil; space = nil
+            word = nil; previous = nil; space = nil; forgetErased()
             return
         }
         if let token = AutocorrectEngine.currentToken(in: before) {
             guard let current = evidence(beforeInput: before), current.text == token,
                   current.layout == layout, current.samples.count < Self.maxSamples else {
-                word = nil; previous = nil; space = nil
+                word = nil; previous = nil; space = nil; forgetErased()
                 return
             }
         } else {
@@ -104,6 +119,13 @@ final class KeyboardTouchInput {
                 self.previous = nil; space = nil
             }
             word = KeyboardTouchWord(layout: layout, samples: [], learningIntact: !editedWord)
+        }
+        let position = word?.samples.count ?? 0
+        let letter = text.lowercased()
+        if let tap = erased.removeValue(forKey: position), erasedLayout == layout,
+           tap.text.lowercased() != letter, let character = letter.first,
+           Self.reaches(tap.point, letter: letter, in: layout) {
+            word?.retyped[position] = TouchLabel(point: tap.point, letter: character)
         }
         word?.samples.append(.init(text: text, point: point, key: key, attributedKey: attributedKey))
         if (previous?.samples.count ?? 0) + (word?.samples.count ?? 0) + 1 > KeyboardBoundaryTouch.maxSamples {
@@ -116,12 +138,16 @@ final class KeyboardTouchInput {
         let evidence = evidence(beforeInput: before)
         editedWord = true
         previous = nil; space = nil
-        guard var current = evidence else { return }
+        guard var current = evidence else { forgetErased(); return }
         current.learningIntact = false
-        current.samples.removeLast()
-        guard !current.samples.isEmpty,
-              AutocorrectEngine.currentToken(in: after) == current.text else {
+        let position = current.samples.count - 1
+        erased[position] = current.samples.removeLast()
+        erasedLayout = current.layout
+        current.retyped[position] = nil
+        let token = AutocorrectEngine.currentToken(in: after)
+        guard !current.samples.isEmpty, token == current.text else {
             word = nil
+            if !(current.samples.isEmpty && token == nil) { forgetErased() }
             return
         }
         word = current
