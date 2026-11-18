@@ -1,16 +1,5 @@
-# Typr: Claude reviews every Typr PR, and again after every new commit.
-# Development happens locally (Pi); no agent starts from issues or comments any more.
-#
-#   PR opened / reopened / new commit pushed / marked ready
-#   ├─ sticky PR comment says "reviewing <sha>"
-#   ├─ Claude (Opus, read-only tools) reviews the full PR diff against dev
-#   └─ one unambiguous verdict, for exactly that commit:
-#      ├─ ✅ PASS: nothing to fix          → check "Review" green
-#      └─ ❌ FIX:  numbered list of fixes  → check "Review" red
-#
-# pull_request_target: this file and the token come from dev, so a PR cannot change
-# its own reviewer. The PR head is checked out only to be read; nothing from it runs.
-# Same-repository PRs only. A newer commit cancels the running review of the older one.
+# pull_request_target: workflow and token come from dev, so a PR cannot change its own reviewer.
+# The PR head is checked out only to be read; nothing from it runs.
 name: Review
 run-name: "Review · PR #${{ github.event.pull_request.number }} · ${{ github.event.pull_request.head.sha }}"
 

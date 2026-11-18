@@ -51,9 +51,9 @@ class RoutingTests(unittest.TestCase):
                 self.assertEqual(outputs, {'test': str(tests).lower(),
                                           'build': str(build).lower(),
                                           'sign': 'testflight' if build else ''})
-                self.assertEqual(condition('test', 'push', changed=outputs['build'],
+                self.assertEqual(condition('test', changed=outputs['build'],
                                            test_changed=outputs['test']), tests)
-                self.assertEqual(condition('build', 'push', changed=outputs['build']), build)
+                self.assertEqual(condition('build', changed=outputs['build']), build)
 
     def test_explicit_distributions_ignore_unchanged_baseline(self):
         base = self.git('rev-parse', 'HEAD')
