@@ -313,7 +313,6 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         refreshReturnKey()
     }
 
-    /// Shows other preview values right away.
     func applyPreview(_ preview: Preview) {
         suggestionBarOverride = preview.showsSuggestionBar
         design = preview.design
