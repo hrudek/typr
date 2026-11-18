@@ -153,6 +153,7 @@ final class TyprKeyControl: UIControl {
         if !joinsSpace {
             context.fillKeycap(
                 cap,
+                palette: palette,
                 fill: isHighlighted ? palette.keyPressedFill : palette.keyFill,
                 radius: cornerRadius
             )
@@ -337,7 +338,7 @@ final class PanelKeyButton: UIControl {
         let fill: UIColor = isHighlighted
             ? palette.keyPressedFill
             : (isPrimary ? palette.keyFill : palette.functionFill)
-        context.fillKeycap(bounds, fill: fill, radius: cornerRadius)
+        context.fillKeycap(bounds, palette: palette, fill: fill, radius: cornerRadius)
         let ink = isEnabled ? palette.textBase : palette.textMuted
         if let symbol {
             let config = UIImage.SymbolConfiguration(pointSize: 16.5, weight: .medium)
