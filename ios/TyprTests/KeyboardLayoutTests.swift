@@ -27,7 +27,6 @@ final class KeyboardLayoutTests: XCTestCase {
         return layouts
     }
 
-    /// Every layout, with and without the suggestion bar and the number row.
     private func everyLayout() -> [KeyboardLayout] {
         [false, true].flatMap { numberRow in
             everyPortraitLayout(numberRow: numberRow) + everyPortraitLayout(showsStrip: false, numberRow: numberRow)
