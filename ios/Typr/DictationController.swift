@@ -1893,15 +1893,16 @@ final class DictationController {
 
         case "settings-overview", "settings-keyboard", "settings-writing", "settings-history", "settings-history-sample", "settings-history-sample-detail", "settings-speech-engine",
              "settings-style", "settings-language", "settings-keyboard-learned-words",
+             "settings-keyboard-words-privacy", "settings-autocorrect-languages",
              "settings-statistics", "settings-statistics-empty", "settings-statistics-sparse",
              "settings-statistics-populated", "settings-statistics-unavailable":
             controller.phase = .ready
             controller.warmDuration = .off
             controller.keyboardSessionEnabled = false
 
-        case "settings-keyboard-typing":
+        case "settings-keyboard-typing", "settings-keyboard-off":
             #if targetEnvironment(simulator)
-            FullKeyboardSettings().isEnabled = true
+            FullKeyboardSettings().isEnabled = scene == "settings-keyboard-typing"
             FullKeyboardSettings().autocorrect = true
             TyprSettings().autocorrectGerman = true
             TyprSettings().autocorrectEnglish = true

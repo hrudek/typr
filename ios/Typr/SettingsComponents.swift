@@ -6,6 +6,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
     case keyboardAppearance = "keyboard-appearance"
     case statistics
     case autocorrectLanguages = "autocorrect-languages"
+    case keyboardWordsPrivacy = "keyboard-words-privacy"
     case keyboardLearnedWords = "keyboard-learned-words"
     // Keep the existing simulator scene name; this is not a persisted user setting.
     case textProcessing = "writing"
@@ -20,6 +21,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
         case .keyboardAppearance: "Appearance"
         case .statistics: "Statistics"
         case .autocorrectLanguages: "Autocorrect languages"
+        case .keyboardWordsPrivacy: "Words and privacy"
         case .keyboardLearnedWords: "Manage learned words"
         case .textProcessing: "AI & vocabulary"
         case .history: "History & feedback"
@@ -31,10 +33,10 @@ enum SettingsDestination: String, CaseIterable, Hashable {
 
     var subtitle: String {
         switch self {
-        case .keyboard, .keyboardAppearance, .statistics, .keyboardLearnedWords, .textProcessing, .history: ""
+        case .keyboard, .keyboardAppearance, .keyboardWordsPrivacy, .autocorrectLanguages, .statistics,
+             .keyboardLearnedWords, .textProcessing, .history: ""
         case .speechEngine: "Automatic chooses an engine until you select one. Audio stays on this iPhone."
         case .style: "Choose how Typr formats your dictations. You can also change style from the keyboard."
-        case .autocorrectLanguages: "Choose one or more languages for autocorrect. These choices do not change your dictation language."
         case .language: "Choose the language you dictate in, not a translation language. Your speech engine stays selected."
         }
     }
@@ -45,7 +47,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
     static func snapshotDestination(arguments: [String]) -> Self? {
         guard let index = arguments.firstIndex(of: "--snap-state"), index + 1 < arguments.count else { return nil }
         let scene = arguments[index + 1]
-        if scene == "settings-keyboard-typing" { return .keyboard }
+        if scene == "settings-keyboard-typing" || scene == "settings-keyboard-off" { return .keyboard }
         if scene.hasPrefix("settings-keyboard-appearance-") { return .keyboardAppearance }
         if scene == historySampleScene || scene == historyDetailScene { return .history }
         if StatisticsFixture.launchFixture(arguments: arguments) != nil { return .statistics }
@@ -291,6 +293,35 @@ struct SettingsDisclosureStyle: DisclosureGroupStyle {
                 configuration.content.padding(.bottom, 16)
             }
         }
+    }
+}
+
+struct SettingsFooter: View {
+    let text: String
+
+    init(_ text: String) { self.text = text }
+
+    var body: some View {
+        Text(text)
+            .font(.footnote).foregroundStyle(TyprTheme.textMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 16)
+    }
+}
+
+struct SettingsDisclosure: View {
+    let title: String
+    let text: String
+
+    var body: some View {
+        DisclosureGroup(title) {
+            Text(text)
+                .font(.subheadline).foregroundStyle(TyprTheme.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .disclosureGroupStyle(SettingsDisclosureStyle())
+        .padding(.horizontal, 16)
     }
 }
 

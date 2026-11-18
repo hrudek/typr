@@ -139,7 +139,7 @@ struct KeyboardAppearancePage: View {
                     .disclosureGroupStyle(SettingsDisclosureStyle())
                     .padding(.horizontal, 16)
                 }
-                footer(Self.globeKeyFooter)
+                SettingsFooter(Self.globeKeyFooter)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -158,16 +158,9 @@ struct KeyboardAppearancePage: View {
                     }
                 }
                 .onChange(of: bottomRow) { _, row in FullKeyboardSettings().bottomRow = row }
-                footer(Self.bottomRowFooter)
+                SettingsFooter(Self.bottomRowFooter)
             }
         }
-    }
-
-    private func footer(_ text: String) -> some View {
-        Text(text)
-            .font(.footnote).foregroundStyle(TyprTheme.textMuted)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 16)
     }
 
     private func refresh() {

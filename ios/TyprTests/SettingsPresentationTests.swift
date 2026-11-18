@@ -19,7 +19,7 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertNil(SettingsDestination.snapshotDestination(arguments:
             ["Typr", "--snap-state", "settings-cleanup-prompt"]))
         XCTAssertEqual(Set(SettingsDestination.allCases.map(\.title)),
-                       ["Keyboard", "Appearance", "Statistics", "Autocorrect languages",
+                       ["Keyboard", "Appearance", "Statistics", "Autocorrect languages", "Words and privacy",
                         "Manage learned words", "AI & vocabulary", "History & feedback", "Speech engine", "Style", "Language"])
     }
 

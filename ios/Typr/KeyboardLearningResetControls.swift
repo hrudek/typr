@@ -7,25 +7,25 @@ struct KeyboardLearningResetControls: View {
     @State private var confirmCountersReset = false
 
     var body: some View {
-        SettingsSection(title: "Saved typing data") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Learning stays on this iPhone. Reset it to remove saved typing preferences and imported personal words.")
-                    .font(.footnote)
-                    .foregroundStyle(TyprTheme.textMuted)
-                Button("Reset learning", role: .destructive) { confirmLearningReset = true }
-                    .frame(minHeight: 44, alignment: .leading)
-                SettingsDivider()
-                Button("Reset technical counters", role: .destructive) { confirmCountersReset = true }
-                    .frame(minHeight: 44, alignment: .leading)
-                if let problem = model.resetProblem {
-                    Text(problem)
-                        .font(.footnote)
-                        .foregroundStyle(TyprTheme.danger)
-                        .accessibilityAddTraits(.updatesFrequently)
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSection(title: "Saved typing data") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Button("Reset learning", role: .destructive) { confirmLearningReset = true }
+                        .frame(minHeight: 44, alignment: .leading)
+                    SettingsDivider()
+                    Button("Reset technical counters", role: .destructive) { confirmCountersReset = true }
+                        .frame(minHeight: 44, alignment: .leading)
+                    if let problem = model.resetProblem {
+                        Text(problem)
+                            .font(.footnote)
+                            .foregroundStyle(TyprTheme.danger)
+                            .accessibilityAddTraits(.updatesFrequently)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            SettingsFooter("Learning stays on this iPhone. Resets cannot be undone.")
         }
         .confirmationDialog("Reset learning?", isPresented: $confirmLearningReset, titleVisibility: .visible) {
             Button("Reset learning", role: .destructive) { model.resetLearning() }
