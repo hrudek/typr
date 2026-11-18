@@ -6,6 +6,19 @@ protocol CleanupSession: AnyObject {
     func prewarm() async
     /// The model's answer to the whole prompt (`CleanupPrompt.make`).
     func generate(_ prompt: String) async throws -> String
+    func prompt(for transcript: String, vocabulary: [String], context: CleanupContext) -> String
+    func accepts(_ cleaned: String, for transcript: String) -> Bool
+    func deadline(forUTF8Bytes bytes: Int) -> Duration
+}
+
+extension CleanupSession {
+    func prompt(for transcript: String, vocabulary: [String], context: CleanupContext) -> String {
+        CleanupPrompt.make(transcript, vocabulary: vocabulary, context: context)
+    }
+
+    func accepts(_ cleaned: String, for transcript: String) -> Bool { true }
+
+    func deadline(forUTF8Bytes bytes: Int) -> Duration { CleanupCoordinator.deadline(forUTF8Bytes: bytes) }
 }
 
 @MainActor
@@ -190,7 +203,7 @@ final class CleanupCoordinator {
                 observe(.cancelled, started: started, dependencies: dependencies, diagnostics: diagnostics)
                 return raw
             }
-            let prompt = CleanupPrompt.make(raw, vocabulary: vocabulary, context: context)
+            let prompt = job.session.prompt(for: raw, vocabulary: vocabulary, context: context)
             return await withCheckedContinuation { continuation in
                 pending = Pending(id: job.id, continuation: continuation, raw: raw, started: started,
                                   dependencies: dependencies, diagnostics: diagnostics)
@@ -215,9 +228,9 @@ final class CleanupCoordinator {
                         if cleaned.isEmpty {
                             diagnostics?.modelAnswer(answer, use: .rejected(.emptyOutput), modelMilliseconds: modelMilliseconds)
                             resolve(job.id, value: raw, outcome: .failed(.emptyOutput))
-                        } else if let reason = CleanupGuard.rejection(answer: cleaned, transcript: raw) {
-                            diagnostics?.modelAnswer(answer, use: .rejected(reason), modelMilliseconds: modelMilliseconds)
-                            resolve(job.id, value: raw, outcome: .failed(reason))
+                        } else if !job.session.accepts(cleaned, for: raw) {
+                            diagnostics?.modelAnswer(answer, use: .rejected(.unacceptable), modelMilliseconds: modelMilliseconds)
+                            resolve(job.id, value: raw, outcome: .failed(.unacceptable))
                         } else {
                             let changed = cleaned != raw.trimmingCharacters(in: .whitespacesAndNewlines)
                             dependencies.observer.recordChange(changed)
@@ -237,7 +250,7 @@ final class CleanupCoordinator {
                     release(job.id)
                 }
                 deadlineTask = Task {
-                    do { try await dependencies.sleep(CleanupCoordinator.deadline(forUTF8Bytes: raw.utf8.count)) } catch { return }
+                    do { try await dependencies.sleep(job.session.deadline(forUTF8Bytes: raw.utf8.count)) } catch { return }
                     guard !Task.isCancelled, pending?.id == job.id else { return }
                     cancel(job.id, outcome: .failed(.deadline))
                 }

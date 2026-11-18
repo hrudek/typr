@@ -21,6 +21,8 @@ final class CleanupTestSession: CleanupSession {
         if suspendPrewarm { await withCheckedContinuation { prewarmGate = $0 } }
         cancelled = Task.isCancelled
     }
+    var acceptance: ((String, String) -> Bool)?
+    func accepts(_ cleaned: String, for transcript: String) -> Bool { acceptance?(cleaned, transcript) ?? true }
     /// Every prompt this session was asked, in order.
     private(set) var prompts: [String] = []
     func generate(_ prompt: String) async throws -> String {
