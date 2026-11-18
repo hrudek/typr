@@ -1,7 +1,6 @@
 import AVFAudio
 import Foundation
 import Observation
-import OSLog
 import SwiftUI
 import UIKit
 
@@ -199,7 +198,6 @@ final class DictationController {
     private(set) var warmDuration: WarmSessionDuration
     private(set) var style: DictationStyle
     private(set) var allowBluetoothMic: Bool
-    private(set) var mediaOnDictation: MediaOnDictation
     private(set) var autoReturnState: AutoReturnState = .idle
     private(set) var handoffNotice: String?
     private(set) var engineName = "Local speech"
@@ -271,8 +269,6 @@ final class DictationController {
         self.warmDuration = resolvedBridge.warmDuration
         self.style = resolvedBridge.style
         self.allowBluetoothMic = resolvedBridge.allowBluetoothMic
-        self.mediaOnDictation = resolvedBridge.mediaOnDictation
-        resolvedAudio.setMediaOnDictation(resolvedBridge.mediaOnDictation)
         self.hostReturner = hostReturner ?? .live
 
         let hasCachedModel = ParakeetTranscriber.hasCachedModel
@@ -511,22 +507,6 @@ final class DictationController {
             do { try startWarmInput() }
             catch { endWarmSession() }
         }
-    }
-
-    func setMediaOnDictation(_ media: MediaOnDictation) {
-        guard mediaOnDictation != media else { return }
-        mediaOnDictation = media
-        keyboardBridge.mediaOnDictation = media
-        audio.setMediaOnDictation(media)
-        if keyboardSessionEnabled, phase == .ready || phase == .transcribing {
-            do { try startWarmInput() }
-            catch { endWarmSession() }
-        }
-    }
-
-    /// Only Pause interrupts other audio, so only Pause keeps idle input cold while it plays.
-    private var mediaBlocksWarmInput: Bool {
-        mediaOnDictation == .pause && audio.isOtherAudioPlaying
     }
 
     // MARK: - Standalone & System Actions
@@ -808,7 +788,7 @@ final class DictationController {
         // allowed to interrupt it, but must release the session when capture ends.
         let hasFreshCapture = handoff?.jobID != nil
             && handoff.map { now() - $0.requestedAt <= KeyboardLaunchRequest.handoffWindow } == true
-        if mediaBlocksWarmInput, !hasFreshCapture {
+        if audio.isOtherAudioPlaying, !hasFreshCapture {
             endWarmSession()
             handoffNotice = "Media is playing. Start dictation to use the microphone."
             maybeAutoReturnAfterActivation(allowed: handoff?.attemptAutoReturn ?? false)
@@ -884,7 +864,7 @@ final class DictationController {
             } catch {
                 guard self.jobGeneration == requestGen else { return }
                 audio.deactivateSession()
-                phase = mediaBlocksWarmInput ? .ready : .failed(Self.audioFailureMessage(for: error))
+                phase = audio.isOtherAudioPlaying ? .ready : .failed(Self.audioFailureMessage(for: error))
                 publishKeyboardSnapshot()
             }
         }
@@ -893,7 +873,7 @@ final class DictationController {
     /// Recheck on every warm start, including route changes and interruption retries.
     /// Never seize the microphone just to keep it warm while media is playing.
     private func startWarmInput() throws {
-        guard !mediaBlocksWarmInput else { throw CancellationError() }
+        guard !audio.isOtherAudioPlaying else { throw CancellationError() }
         try audio.startKeepalive(allowBluetooth: allowBluetoothMic)
     }
 
@@ -1128,25 +1108,14 @@ final class DictationController {
 
             do {
                 let capture = try await activateAudio(isCurrent: { self.jobGeneration == captureGeneration }) {
-                    // Read before activating: Pause's activation itself pauses other audio. OR
+                    // Read before activating: activation itself pauses other audio. OR
                     // across retries so a partial activation cannot erase that decision.
-                    let mediaPlaying = self.audio.isOtherAudioPlaying
-                    self.releaseAudioAfterCapture = self.releaseAudioAfterCapture
-                        || (mediaPlaying && self.mediaOnDictation != .keepPlaying)
-                    let capture = try self.audio.beginCapture(
+                    self.releaseAudioAfterCapture = self.releaseAudioAfterCapture || self.audio.isOtherAudioPlaying
+                    return try self.audio.beginCapture(
                         at: captureURL,
                         maxDuration: Self.maxCaptureDuration,
                         allowBluetooth: self.allowBluetoothMic
                     )
-                    if mediaPlaying, self.mediaOnDictation == .lowerVolume {
-                        do {
-                            try self.audio.duckOthers(allowBluetooth: self.allowBluetoothMic)
-                        } catch {
-                            Self.audioLogger.error("Lowering media volume failed: \(error.localizedDescription, privacy: .public)")
-                            if keyboardJobID != nil { self.keyboardMessage = Self.duckFailureMessage }
-                        }
-                    }
-                    return capture
                 }
                 guard self.jobGeneration == captureGeneration else {
                     capture.stop()
@@ -1410,17 +1379,7 @@ final class DictationController {
     }
 
     private func restoreAudioAfterCapture() {
-        if releaseAudioAfterCapture, mediaOnDictation == .lowerVolume, keyboardSessionEnabled, warmDuration != .off {
-            // Only deactivation lifts the duck. Restarting input then works in the foreground;
-            // iOS refuses it in the background, which ends the warm session.
-            releaseAudioAfterCapture = false
-            audio.deactivateSession()
-            do { try startWarmInput() } catch {
-                endWarmSession()
-                return
-            }
-        }
-        if releaseAudioAfterCapture || mediaBlocksWarmInput {
+        if releaseAudioAfterCapture || audio.isOtherAudioPlaying {
             // The writer is already stopped. Release before ASR, including short,
             // cancelled and failed captures; do not let the warm loop restart input.
             endWarmSession()
@@ -1513,7 +1472,7 @@ final class DictationController {
                     }
                     self.keyboardSessionRemaining = remaining
 
-                    if self.phase == .ready && self.mediaBlocksWarmInput {
+                    if self.phase == .ready && self.audio.isOtherAudioPlaying {
                         self.endWarmSession()
                         return
                     }
@@ -1680,7 +1639,7 @@ final class DictationController {
             interruptionResumeTask?.cancel()
             interruptionResumeTask = nil
             suspendedWarmSessionOnInterruption = keyboardSessionEnabled
-            if mediaBlocksWarmInput {
+            if audio.isOtherAudioPlaying {
                 if activeCapture == nil {
                     endWarmSession()
                     return
@@ -1704,7 +1663,7 @@ final class DictationController {
         case .interruptionEnded(let shouldResume):
             interruptionInProgress = false
             guard suspendedWarmSessionOnInterruption else { return }
-            if mediaBlocksWarmInput {
+            if audio.isOtherAudioPlaying {
                 endWarmSession()
                 return
             }
@@ -1831,9 +1790,6 @@ final class DictationController {
     nonisolated static func isAudioBusy(_ error: any Error) -> Bool {
         [0x2170_6C61, 0x2170_7269, 0x2169_6E74].contains((error as NSError).code)
     }
-
-    static let duckFailureMessage = "Could not lower media volume."
-    private static let audioLogger = Logger(subsystem: "dev.rudek.typr", category: "Audio")
 
     nonisolated static func audioFailureMessage(for error: any Error) -> String {
         isAudioBusy(error) ? audioBusyMessage : error.localizedDescription

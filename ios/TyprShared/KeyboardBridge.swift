@@ -42,21 +42,6 @@ nonisolated enum WarmSessionDuration: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// What happens to audio another app is playing while Typr records.
-nonisolated enum MediaOnDictation: String, CaseIterable, Sendable {
-    case keepPlaying
-    case pause
-    case lowerVolume
-
-    var title: String {
-        switch self {
-        case .keepPlaying: "Keep playing"
-        case .pause: "Pause"
-        case .lowerVolume: "Lower volume"
-        }
-    }
-}
-
 nonisolated enum KeyboardCommandKind: String, Codable, Sendable {
     case start
     case stop
@@ -315,7 +300,6 @@ struct KeyboardBridge {
         static let warmDuration = "settings.warmDuration"
         static let style = "settings.dictationStyle"
         static let allowBluetoothMic = "settings.allowBluetoothMic"
-        static let mediaOnDictation = "settings.mediaOnDictation"
         static let feedbackJobs = "keyboard.feedbackJobs"
         static let lastInsertedResultID = "keyboard.lastInsertedResultID"
         static let fullAccessSeenAt = "keyboard.fullAccessSeenAt"
@@ -408,15 +392,6 @@ struct KeyboardBridge {
         }
         nonmutating set {
             defaults?.set(newValue, forKey: Key.allowBluetoothMic)
-        }
-    }
-
-    var mediaOnDictation: MediaOnDictation {
-        get {
-            defaults?.string(forKey: Key.mediaOnDictation).flatMap(MediaOnDictation.init(rawValue:)) ?? .pause
-        }
-        nonmutating set {
-            defaults?.set(newValue.rawValue, forKey: Key.mediaOnDictation)
         }
     }
 
