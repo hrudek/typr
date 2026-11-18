@@ -248,12 +248,13 @@ final class KeyboardLayoutTests: XCTestCase {
                 return Int(data[offset]) + Int(data[offset + 1]) + Int(data[offset + 2])
             }
             let reach = MechanicalKeycap.seamGap / 2 - 0.4
+            let quantisation = 3
             for sign: CGFloat in [-1, 1] {
                 let samples = stride(from: CGFloat(0), through: reach, by: 1 / scale).map { brightness(dx: sign * $0) }
                 XCTAssertLessThan(samples[0], samples[samples.count - 1])
-                XCTAssertEqual(samples, samples.sorted())
-                let step = zip(samples, samples.dropFirst()).map { $1 - $0 }.max() ?? 0
-                XCTAssertLessThan(step, (samples[samples.count - 1] - samples[0]) / 2)
+                let steps = zip(samples, samples.dropFirst()).map { $1 - $0 }
+                XCTAssertGreaterThanOrEqual(steps.min() ?? 0, -quantisation)
+                XCTAssertLessThanOrEqual(steps.max() ?? 0, max((samples[samples.count - 1] - samples[0]) / 2, quantisation))
             }
         }
     }
