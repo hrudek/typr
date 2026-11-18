@@ -109,7 +109,7 @@ nonisolated struct TouchLabel: Equatable, Sendable {
 }
 
 nonisolated enum TouchLabelSource: String, Codable, CaseIterable, Sendable {
-    case literalValid, keep, undo, manualPick, retype, space
+    case literalValid, keep, undo, manualPick, retype, space, autocorrect
 }
 
 nonisolated enum TouchLabelRejection: String, Codable, CaseIterable, Sendable {

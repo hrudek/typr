@@ -297,7 +297,33 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         }
     }
 
-    func testAutomaticOutputNeverTeachesWithoutFeedback() {
+    func testSettledNearbySubstitutionTeachesTheCorrectedLetters() throws {
+        func run(_ finish: (FullKeyboardEngine) -> Void) throws -> (KeyboardLearningSession, String) {
+            let session = KeyboardLearningSession()
+            let (engine, target) = keyboard(session: session, checker: Checker(answers: ["hellp": ["hello"]]))
+            type("hell", engine)
+            let p = try XCTUnwrap(engine.layout.key(.character("p")))
+            let miss = CGPoint(x: p.frame.minX + 1, y: p.frame.midY)
+            engine.touchBegan(id: 1, at: miss)
+            engine.touchEnded(id: 1, at: miss)
+            type(" ", engine)
+            finish(engine)
+            return (session, target.text)
+        }
+        let (settled, text) = try run { engine in type("w", engine) }
+        XCTAssertEqual(text, "hello w")
+        XCTAssertEqual(settled.diagnostics.acceptedBySource["autocorrect"], 5)
+        XCTAssertTrue(settled.model.lexicon.counts.isEmpty, "an automatic correction still counts no word")
+        let o = try XCTUnwrap(settled.model.state.layouts.values.first?.keys["o"])
+        XCTAssertGreaterThan(o.meanX, 0.25, "the miss is learned as o, right of its centre")
+        let (undone, undoneText) = try run { engine in tap(.delete, engine); type(" w", engine) }
+        XCTAssertEqual(undoneText, "hellp w")
+        XCTAssertNil(undone.diagnostics.acceptedBySource["autocorrect"])
+        let (unsettled, _) = try run { engine in tap(.returnKey, engine); type("w", engine) }
+        XCTAssertNil(unsettled.diagnostics.acceptedBySource["autocorrect"])
+    }
+
+    func testRewritesThatAreNotNearbySubstitutionsTeachNothing() {
         for (typed, checker, counter) in [
             ("teh", Checker(), KeyboardDiagnostics.Counter.autoRule),
             ("helo", Checker(answers: ["helo": ["hello"]]), .autoSpellingFallback)
