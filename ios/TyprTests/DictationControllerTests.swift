@@ -622,6 +622,76 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertFalse(audio.isKeepaliveRunning)
     }
 
+    func testOneShotColdStartFromAnotherAppStopsOnKeyboardDone() async throws {
+        let now = 13_000.0
+        let audio = FakeAudioManager()
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        let controller = DictationController(
+            audio: audio,
+            keyboardBridge: bridge,
+            transcriber: transcriber,
+            transcriberFactory: { transcriber },
+            now: { now },
+            autoPrepareOnInit: false,
+            hostReturner: HostReturner(openByBundleID: { _ in true }, openURL: { _ in false })
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.setWarmDuration(.off)
+
+        controller.handleKeyboardLaunch(
+            .startRecording(jobID: "notes-job", requestedAt: now - 0.3, style: .polished, host: "com.apple.mobilenotes")
+        )
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+        XCTAssertFalse(controller.keyboardSessionEnabled)
+        XCTAssertEqual(bridge.snapshot().jobID, "notes-job")
+
+        bridge.send(.stop, jobID: "notes-job", sentAt: now)
+        try await waitForState("keyboard Done stopped the recording") { controller.phase != .recording }
+        try await transcribed(controller)
+        XCTAssertEqual(controller.phase, .ready)
+        XCTAssertNotEqual(bridge.snapshot().state, .recording)
+        XCTAssertNotNil(bridge.snapshot().resultID)
+    }
+
+    func testKeyboardStillSeesALongTranscriptionAfterTheMicIsReleased() async throws {
+        var now = 14_000.0
+        let audio = FakeAudioManager()
+        audio.isOtherAudioPlaying = true
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        let controller = DictationController(
+            audio: audio,
+            keyboardBridge: bridge,
+            transcriber: transcriber,
+            transcriberFactory: { transcriber },
+            now: { now },
+            autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.setWarmDuration(.off)
+        controller.handleKeyboardLaunch(
+            .startRecording(jobID: "media-job", requestedAt: now - 0.3, style: .polished, host: nil)
+        )
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+
+        await transcriber.armSuspension()
+        bridge.send(.stop, jobID: "media-job", sentAt: now)
+        try await waitForState("keyboard Done stopped the recording") { controller.phase == .transcribing }
+        try await asrSuspended(transcriber)
+
+        now += 5
+        try await waitForState("transcription heartbeat") { bridge.snapshot().heartbeat == now }
+        XCTAssertEqual(bridge.snapshot().live(at: now).state, .transcribing)
+
+        await transcriber.resumeSuspended(with: "ship it")
+        try await transcribed(controller)
+    }
+
     func testMeterRecoversAfterCaptureStartsTemporarilyNotRecording() async throws {
         try await checkMeterRecovery(initiallyRecording: false)
     }

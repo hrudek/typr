@@ -16,6 +16,29 @@ final class KeyboardBridgeTests: XCTestCase {
         XCTAssertTrue(transcribingAfterSessionEnd.isAvailable(at: now))
     }
 
+    func testKeyboardLeavesARecordingWhoseAppStoppedPublishing() {
+        let now = 1_000.0
+        let model = KeyboardViewModel()
+        func show(_ snapshot: KeyboardSnapshot) {
+            model.applyBridgeState(hasFullAccess: true, snapshot: snapshot, isModelInstalled: true,
+                                   style: .polished, now: now, animated: false)
+        }
+
+        show(KeyboardSnapshot(state: .recording, heartbeat: now - 0.1, expiresAt: 0, jobID: "live"))
+        XCTAssertEqual(model.stagePhase, .recording)
+
+        show(KeyboardSnapshot(state: .recording, heartbeat: now - 3600, expiresAt: 0, jobID: "stuck"))
+        XCTAssertEqual(model.stagePhase, .idle)
+        XCTAssertNil(model.currentSnapshot.jobID)
+
+        show(KeyboardSnapshot(state: .transcribing, heartbeat: now - 3600, expiresAt: 0, jobID: "stuck"))
+        XCTAssertEqual(model.stagePhase, .idle)
+
+        show(KeyboardSnapshot(state: .failed, heartbeat: 0, expiresAt: 0, message: "Microphone unavailable"))
+        XCTAssertEqual(model.stagePhase, .failed)
+        XCTAssertEqual(model.statusMessage, "Microphone unavailable")
+    }
+
     func testWarmDurationPersistsAndUnknownValueFallsBack() {
         let suite = "typr.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

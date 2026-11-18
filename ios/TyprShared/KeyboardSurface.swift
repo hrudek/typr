@@ -143,13 +143,14 @@ final class KeyboardViewModel: ObservableObject {
 
     func applyBridgeState(
         hasFullAccess newFullAccess: Bool,
-        snapshot newSnapshot: KeyboardSnapshot,
+        snapshot storedSnapshot: KeyboardSnapshot,
         isModelInstalled newModelInstalled: Bool,
         style newStyle: DictationStyle,
         now: TimeInterval,
         clearPending: Bool = false,
         animated: Bool
     ) {
+        let newSnapshot = storedSnapshot.live(at: now)
         currentTimestamp = now
         currentSnapshot = newSnapshot
         liveLoudnessDB = newSnapshot.state == .recording ? newSnapshot.effectiveLoudnessDB : -62.0
