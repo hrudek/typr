@@ -55,7 +55,7 @@ final class KeyboardLayoutTests: XCTestCase {
                 continue
             }
             XCTAssertEqual(joined.frame, space.frame.union(typr.frame))
-            XCTAssertEqual(joined.frame.height, layout.metrics.keyHeight)
+            XCTAssertEqual(joined.frame.height, space.frame.height)
             XCTAssertEqual(joined.radius, layout.metrics.cornerRadius)
             // The visual seam must not replace the original straight touch boundary.
             let boundary = space.hitFrame.maxX
@@ -415,7 +415,7 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
-    func testBalloonsStayInsideThe253PointKeyboard() {
+    func testBalloonsStayInsideTheKeyboard() {
         for layout in everyPortraitLayout() + everyPortraitLayout(numberRow: true) {
             let bounds = CGRect(x: 0, y: 0, width: layout.width, height: layout.totalHeight)
             for key in layout.keys where key.character != nil {
@@ -672,7 +672,7 @@ final class KeyboardLayoutTests: XCTestCase {
                     XCTAssertEqual(kinds.last, .returnKey, name)
                     let dots = kinds.filter { $0 == .character(".") }.count
                     XCTAssertEqual(dots, layout.field != .text || (periodKey && layout.layer == .letters) ? 1 : 0, name)
-                    let row = layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }
+                    let row = layout.keys.filter { $0.row == layout.bottomRowIndex }.sorted { $0.frame.minX < $1.frame.minX }
                     for (a, b) in zip(row, row.dropFirst()) {
                         XCTAssertLessThan(a.frame.maxX, b.frame.minX, name)
                         XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, name)
@@ -692,7 +692,7 @@ final class KeyboardLayoutTests: XCTestCase {
     }
 
     private func bottomRow(_ layout: KeyboardLayout) -> [KeyKind] {
-        layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }.map(\.kind)
+        layout.keys.filter { $0.row == layout.bottomRowIndex }.sorted { $0.frame.minX < $1.frame.minX }.map(\.kind)
     }
 
     private func describe(_ layout: KeyboardLayout) -> String {
