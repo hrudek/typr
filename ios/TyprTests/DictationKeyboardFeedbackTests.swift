@@ -218,6 +218,23 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let pending = await f.pending(); XCTAssertTrue(pending.isEmpty)
         await f.dispose()
     }
+    func testExpiredEntryDropsQueuedFeedbackWithoutRecreatingEntry() async throws {
+        let f = Fixture(); try await f.ready(); let offer = f.offer()
+        let queued = await f.enqueue(event(offer)); XCTAssertTrue(queued)
+        await f.store.storage.flush()
+        let later = Date().addingTimeInterval(DictationLogStore.retention + 24 * 60 * 60)
+        let reloaded = DictationLogStore(storage: DictationLogStorage(url: f.store.storage.url), settings: f.settings,
+                                         feedbackBridge: f.bridge, now: { later })
+        try await waitForState("expired entry and its queued feedback removed") {
+            reloaded.drainKeyboardFeedback(force: true)
+            await reloaded.storage.flush(); await f.bridge.flush(); await mainActorBarrier()
+            let pending = await f.pending()
+            return !reloaded.isLoading && reloaded.metadata.isEmpty && pending.isEmpty
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: reloaded.storage.root
+            .appendingPathComponent("entries/\(offer.entryID.uuidString).json").path))
+        await f.dispose()
+    }
     func testSourceWriteFailureKeepsEventUntilDurableRetry() async throws {
         let f = Fixture(); try await f.ready(); let offer = f.offer()
         await f.store.storage.flush()

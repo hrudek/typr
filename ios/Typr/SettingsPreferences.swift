@@ -133,7 +133,7 @@ struct HistorySettingsCard: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Text("Kept until you delete it; switching off keeps saved entries. Export JSON to keep a copy. App removal or device loss is not covered.")
+                Text("Entries are deleted after 10 days; switching off keeps saved entries until then. Export JSON to keep a copy. App removal or device loss is not covered.")
                     .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)

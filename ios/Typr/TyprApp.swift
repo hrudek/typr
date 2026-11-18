@@ -70,6 +70,7 @@ struct TyprApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active {
+                        DictationLogStore.shared.purgeExpired()
                         PersonalLexiconImporter.shared.refresh(force: true)
                         dictation.noteSceneDidBecomeActive()
                     }

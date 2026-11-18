@@ -188,17 +188,19 @@ final class DictationLogStorage: @unchecked Sendable {
             } catch { completion(false) }
         }
     }
-    func delete(_ id: UUID, completion: @escaping @Sendable (Bool) -> Void) {
+    func delete(_ ids: [UUID], completion: @escaping @Sendable (Bool) -> Void) {
         queue.async {
             do {
                 try self.initialize()
-                // A tombstone must precede removal: unfinished migration or a downgrade's
-                // reappearing schema-1 file must never re-import an explicitly deleted UUID.
-                try self.write(Data(id.uuidString.utf8), to: self.deletedURL.appendingPathComponent(id.uuidString + ".deleted"))
-                self.tombstones.insert(id)
-                let file = self.entryURL(id)
-                if self.fm.fileExists(atPath: file.path) { try self.fm.removeItem(at: file) }
-                self.metadata[id] = nil
+                for id in ids {
+                    // A tombstone must precede removal: unfinished migration or a downgrade's
+                    // reappearing schema-1 file must never re-import an explicitly deleted UUID.
+                    try self.write(Data(id.uuidString.utf8), to: self.deletedURL.appendingPathComponent(id.uuidString + ".deleted"))
+                    self.tombstones.insert(id)
+                    let file = self.entryURL(id)
+                    if self.fm.fileExists(atPath: file.path) { try self.fm.removeItem(at: file) }
+                    self.metadata[id] = nil
+                }
                 if self.fm.fileExists(atPath: self.exportsURL.path) { try self.fm.removeItem(at: self.exportsURL) }
                 try self.writeIndex(); completion(true)
             } catch { completion(false) }

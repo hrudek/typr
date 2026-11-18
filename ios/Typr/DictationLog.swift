@@ -334,6 +334,7 @@ final class DictationLogStore {
     static let shared = DictationLogStore(storage: DictationLogStorage(url: URL.applicationSupportDirectory
         .appendingPathComponent("Typr", isDirectory: true).appendingPathComponent("dictation-log.json")), feedbackBridge: .shared)
     static let maximumEntries = 50 // full-entry cache, NOT archive retention
+    static let retention: TimeInterval = 10 * 24 * 60 * 60
     private(set) var entries: [DictationLogEntry] = []
     private(set) var metadata: [DictationLogMetadata] = []
     private(set) var epoch: UInt64 = 0
@@ -376,6 +377,7 @@ final class DictationLogStore {
     private var failedDeletes = Set<UUID>()
     private var dirty: [UUID: DictationLogEntry] = [:]
     private let settings: TyprSettings
+    private let now: () -> Date
     let storage: DictationLogStorage
     private func clearResolvedProblem() {
         if !lastLoadProblem && dirty.isEmpty && failedDeletes.isEmpty { storageProblem = nil }
@@ -383,8 +385,8 @@ final class DictationLogStore {
     private static let problem = "Some dictation log files could not be read, saved or deleted. Originals are preserved when possible. Retry; dictation still works."
 
     init(storage: DictationLogStorage, settings: TyprSettings = TyprSettings(),
-         feedbackBridge: DictationFeedbackBridge? = nil) {
-        self.storage = storage; self.settings = settings; self.feedbackBridge = feedbackBridge
+         feedbackBridge: DictationFeedbackBridge? = nil, now: @escaping () -> Date = { Date() }) {
+        self.storage = storage; self.settings = settings; self.feedbackBridge = feedbackBridge; self.now = now
         isEnabled = settings.dictationLog
         reload()
     }
@@ -402,6 +404,7 @@ final class DictationLogStore {
                 self.lastLoadProblem = result.problem
                 if result.problem { self.storageProblem = Self.problem }
                 else { self.clearResolvedProblem() }
+                self.purgeExpired()
                 self.loadRecent()
                 self.syncFeedbackPermission()
                 self.drainKeyboardFeedback(force: true)
@@ -493,10 +496,21 @@ final class DictationLogStore {
         }
     }
 
+    /// Deletes entries older than `retention`, also while history is off.
+    func purgeExpired() {
+        guard !isLoading, !isClearing else { return }
+        let cutoff = now().addingTimeInterval(-Self.retention)
+        let expired = metadata.filter { $0.date < cutoff && !deleted.contains($0.id) }.map(\.id)
+        guard !expired.isEmpty else { return }
+        delete(expired)
+        drainKeyboardFeedback(force: true)
+    }
+
     func token() -> DictationLogToken { DictationLogToken(enabled: isEnabled, epoch: epoch) }
     func begin(token: DictationLogToken, context: DictationLogContext,
                stoppedAt: ContinuousClock.Instant? = nil,
                clock: @escaping @MainActor () -> ContinuousClock.Instant = { .now }) -> DictationLogRecording? {
+        purgeExpired()
         guard token.enabled, isEnabled, token.epoch == epoch else { return nil }
         var entry = DictationLogEntry(context: context)
         let engine = CleanupEnginePreferences().engine
@@ -544,20 +558,22 @@ final class DictationLogStore {
             }
         }
     }
-    func delete(_ id: UUID) {
-        deleted.insert(id); exportURL = nil
-        dirty[id] = nil; active.remove(id)
+    func delete(_ id: UUID) { delete([id]) }
+    private func delete(_ ids: [UUID]) {
+        let removed = Set(ids)
+        deleted.formUnion(removed); exportURL = nil
+        for id in ids { dirty[id] = nil }; active.subtract(removed)
         let generation = storageGeneration
-        storage.delete(id) { [weak self] success in
+        storage.delete(ids) { [weak self] success in
             Task { @MainActor [weak self] in
                 guard let self, self.storageGeneration == generation else { return }
                 if success {
-                    self.entries.removeAll { $0.id == id }; self.metadata.removeAll { $0.id == id }
-                    self.dirty[id] = nil; self.active.remove(id)
-                    self.failedDeletes.remove(id)
+                    self.entries.removeAll { removed.contains($0.id) }; self.metadata.removeAll { removed.contains($0.id) }
+                    for id in ids { self.dirty[id] = nil }; self.active.subtract(removed)
+                    self.failedDeletes.subtract(removed)
                     self.clearResolvedProblem()
                 } else {
-                    self.failedDeletes.insert(id); self.storageProblem = Self.problem
+                    self.failedDeletes.formUnion(removed); self.storageProblem = Self.problem
                 }
             }
         }
@@ -647,7 +663,7 @@ final class DictationLogStore {
         }
     }
     func retry() {
-        for id in failedDeletes { delete(id) }
+        if !failedDeletes.isEmpty { delete(Array(failedDeletes)) }
         for entry in dirty.values where !deleted.contains(entry.id) { put(entry) }
         reload()
     }
