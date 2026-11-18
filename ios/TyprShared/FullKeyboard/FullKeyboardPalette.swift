@@ -228,21 +228,25 @@ extension JoinedSpaceKeycap {
 
     fileprivate func drawMechanical(in context: CGContext, palette: FullKeyboardPalette, spacePressed: Bool, typrPressed: Bool) {
         let mechanical = MechanicalKeycap(isDark: palette.isDark)
-        let base = UIBezierPath(roundedRect: frame, cornerRadius: radius)
-        mechanical.drawBase(in: context, path: base, rect: frame)
         let face = mechanical.faceRect(frame)
         let half = MechanicalKeycap.seamGap / 2
         func seam(_ y: CGFloat, _ dx: CGFloat) -> CGPoint {
             CGPoint(x: mechanicalSeamX(atY: y, face: face) + dx, y: y)
         }
-        context.saveGState()
-        base.addClip()
-        context.addLines(between: [
-            seam(frame.minY, -half), seam(frame.minY, half), seam(frame.maxY, half), seam(frame.maxY, -half),
-        ])
+        let spaceBase = MechanicalKeycap.roundedPolygon([
+            CGPoint(x: frame.minX, y: frame.minY), seam(frame.minY, -half),
+            seam(frame.maxY, -half), CGPoint(x: frame.minX, y: frame.maxY),
+        ], radius: radius)
+        let typrBase = MechanicalKeycap.roundedPolygon([
+            seam(frame.minY, half), CGPoint(x: frame.maxX, y: frame.minY),
+            CGPoint(x: frame.maxX, y: frame.maxY), seam(frame.maxY, half),
+        ], radius: radius)
+        let top = frame.minY + radius, bottom = frame.maxY - radius
+        context.addLines(between: [seam(top, -half), seam(top, half), seam(bottom, half), seam(bottom, -half)])
         context.setFillColor(mechanical.seamFill.cgColor)
         context.fillPath()
-        context.restoreGState()
+        mechanical.drawBase(in: context, path: spaceBase, rect: frame)
+        mechanical.drawBase(in: context, path: typrBase, rect: frame)
         let faceRadius = mechanical.faceRadius(radius)
         let spaceFace = MechanicalKeycap.roundedPolygon([
             CGPoint(x: face.minX, y: face.minY), seam(face.minY, -half),
