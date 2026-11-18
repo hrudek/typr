@@ -16,31 +16,27 @@ final class KeyboardBridgeTests: XCTestCase {
         XCTAssertTrue(transcribingAfterSessionEnd.isAvailable(at: now))
     }
 
-    func testAlwaysDurationPersistsAndUnknownValueFallsBack() {
+    func testWarmDurationPersistsAndUnknownValueFallsBack() {
         let suite = "typr.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let bridge = KeyboardBridge(defaults: defaults)
 
-        bridge.warmDuration = .always
-        XCTAssertEqual(defaults.string(forKey: "settings.warmDuration"), "always")
-        XCTAssertEqual(KeyboardBridge(defaults: defaults).warmDuration, .always)
+        bridge.warmDuration = .oneHour
+        XCTAssertEqual(defaults.string(forKey: "settings.warmDuration"), "oneHour")
+        XCTAssertEqual(KeyboardBridge(defaults: defaults).warmDuration, .oneHour)
 
         defaults.set("someFutureValue", forKey: "settings.warmDuration")
         XCTAssertEqual(bridge.warmDuration, .fifteenMinutes)
     }
 
-    func testAlwaysSnapshotSurvivesJSONAndShowsNoCountdown() throws {
-        let now = 1_000.0
-        let snap = snapshot(state: .ready, heartbeat: now, expiresAt: .greatestFiniteMagnitude)
-        let decoded = try JSONDecoder().decode(KeyboardSnapshot.self, from: JSONEncoder().encode(snap))
+    func testLegacyAlwaysDurationReadsAsOneHour() {
+        let suite = "typr.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
 
-        XCTAssertEqual(decoded, snap)
-        XCTAssertTrue(decoded.isAvailable(at: now))
-        XCTAssertEqual(TyprTheme.formatRemaining(decoded.expiresAt - now), "∞")
-        XCTAssertEqual(TyprTheme.formatRemaining(.infinity), "∞")
-        XCTAssertEqual(TyprTheme.formatRemaining(15 * 60), "15m")
-        XCTAssertEqual(WarmSessionDuration.always.shortLabel, "∞")
+        defaults.set("always", forKey: "settings.warmDuration")
+        XCTAssertEqual(KeyboardBridge(defaults: defaults).warmDuration, .oneHour)
     }
 
     func testDeliverableResultSurvivesWarmSessionShutdownUntilTTL() {

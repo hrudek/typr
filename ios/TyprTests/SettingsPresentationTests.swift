@@ -201,10 +201,6 @@ final class SettingsPresentationTests: XCTestCase {
             return host.sizeThatFits(in: CGSize(width: width, height: 10_000))
         }
         XCTAssertEqual(size(width: 353).height, 50, accuracy: 0.5)
-        let always = size(width: 353, selected: .always)
-        XCTAssertGreaterThan(always.height, 50)
-        let stackedAlways = size(width: 280, selected: .always)
-        XCTAssertLessThan(always.height, stackedAlways.height - 30, "controls stay inline beside the title; only the footnote adds height")
         XCTAssertGreaterThan(size(width: 280).height, 50)
         let accessible = size(width: 320, type: .accessibility3)
         XCTAssertGreaterThan(accessible.height, 50)
