@@ -231,7 +231,6 @@ extension JoinedSpaceKeycap {
     }
 }
 
-/// The Mechanical design: a darker cap with a lighter face inset on it, sitting a little high.
 struct MechanicalKeycap {
     let isDark: Bool
 
@@ -245,7 +244,6 @@ struct MechanicalKeycap {
 
     func faceRadius(_ radius: CGFloat) -> CGFloat { max(2, radius - 2.5) }
 
-    /// The key's ink sits in the face, not the cap.
     func inkFrame(_ cap: CGRect) -> CGRect { cap.offsetBy(dx: 0, dy: -1) }
 
     func drawCap(in context: CGContext, rect: CGRect, radius: CGFloat) {
@@ -306,7 +304,6 @@ struct MechanicalKeycap {
 }
 
 extension CGContext {
-    /// A keycap in the palette's design; `fill` is the face colour.
     func fillKeycap(_ rect: CGRect, palette: FullKeyboardPalette, fill: UIColor, radius: CGFloat = FullKeyboardPalette.cornerRadius) {
         switch palette.design {
         case .standard:

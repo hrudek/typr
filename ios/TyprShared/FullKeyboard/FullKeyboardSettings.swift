@@ -1,6 +1,5 @@
 import Foundation
 
-/// How the keys look. Default is the flat Liquid Glass look; Mechanical draws raised keycaps.
 nonisolated enum KeyboardDesign: String, CaseIterable, Sendable {
     case standard = "default"
     case mechanical
@@ -69,7 +68,6 @@ struct FullKeyboardSettings {
         }
     }
 
-    /// The key look. Default unless the stored value names a known design.
     var design: KeyboardDesign {
         get { defaults?.string(forKey: Key.design).flatMap(KeyboardDesign.init(rawValue:)) ?? .standard }
         nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.design) }

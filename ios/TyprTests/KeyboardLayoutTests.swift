@@ -121,8 +121,8 @@ final class KeyboardLayoutTests: XCTestCase {
     func testMechanicalDesignChangesKeycapAndJoinedSpacePixelsOnly() throws {
         let layout = try XCTUnwrap(everyLayout().first { $0.field == .text && JoinedSpaceKeycap(layout: $0) != nil })
         let joined = try XCTUnwrap(JoinedSpaceKeycap(layout: layout))
-        let key = CGRect(x: 4, y: 4, width: 40, height: 44)
-        let size = CGSize(width: 400, height: 60)
+        let key = CGRect(origin: .zero, size: CGSize(width: 40, height: 44))
+        let size = joined.frame.size
 
         func pixels(isDark: Bool, design: KeyboardDesign, joinedKey: Bool) -> Data {
             let palette = FullKeyboardPalette(isDark: isDark, design: design)
@@ -130,9 +130,11 @@ final class KeyboardLayoutTests: XCTestCase {
             format.scale = 1
             let image = UIGraphicsImageRenderer(size: size, format: format).image { renderer in
                 let context = renderer.cgContext
+                context.translateBy(x: -joined.frame.minX, y: -joined.frame.minY)
                 if joinedKey {
                     joined.draw(in: context, palette: palette, spacePressed: false, typrPressed: false)
                 } else {
+                    context.translateBy(x: joined.frame.minX, y: joined.frame.minY)
                     context.fillKeycap(key, palette: palette, fill: palette.keyFill)
                 }
             }
@@ -140,11 +142,9 @@ final class KeyboardLayoutTests: XCTestCase {
         }
 
         for isDark in [false, true] {
-            let legacy = UIGraphicsImageRenderer(size: size, format: {
-                let format = UIGraphicsImageRendererFormat()
-                format.scale = 1
-                return format
-            }()).image { renderer in
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let legacy = UIGraphicsImageRenderer(size: size, format: format).image { renderer in
                 renderer.cgContext.fillKeycap(key, fill: FullKeyboardPalette(isDark: isDark).keyFill)
             }.pngData()
             XCTAssertEqual(pixels(isDark: isDark, design: .standard, joinedKey: false), legacy)
