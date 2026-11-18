@@ -151,7 +151,7 @@ final class UsageStatisticsTests: XCTestCase {
         session.recordHeat(point: CGPoint(x: one.frame.midX, y: one.frame.midY), layout: on)
         session.flush()
         let heat = try XCTUnwrap(store.snapshot().heat.first)
-        XCTAssertEqual(store.snapshot().heat.count, 1)
+        XCTAssertEqual(try store.snapshot().heat.count, 1)
         XCTAssertEqual(heat.cells.filter { $0 > 0 }, [2], "both q taps share one cell; the digit is off the board")
     }
 
