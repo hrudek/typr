@@ -13,9 +13,7 @@ nonisolated struct KeyboardTouchWord: Equatable, Sendable {
 
     let layout: KeyboardLayout
     var samples: [Sample]
-    /// Aligned edits may still decode, but deletion/retyping must never teach the word itself.
     var learningIntact = true
-    /// Erased taps relabeled by a different letter retyped at their position, by position.
     var retyped: [Int: TouchLabel] = [:]
     var text: String { samples.map(\.text).joined() }
 }

@@ -157,7 +157,6 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertEqual(engine.autocorrect.learning.diagnostics.acceptedLabels, 0)
     }
 
-    /// A tap on p's edge next to o, erased and retyped as o.
     private func missOThenRetype(_ engine: FullKeyboardEngine) throws {
         let p = try XCTUnwrap(engine.layout.key(.character("p")))
         let miss = CGPoint(x: p.frame.minX + 1, y: p.frame.midY)
