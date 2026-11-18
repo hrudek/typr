@@ -72,7 +72,6 @@ final class PersonalTypingModel {
         var keys: [String: TouchStats] = [:]
         // Optional only for schema-1 decoding. New labels create this aggregate.
         var global: TouchStats?
-        /// x in half bar widths (gap included), y in row pitches.
         var space: TouchStats?
 
         /// Within-key pooled covariance, not between-key center differences. Each key

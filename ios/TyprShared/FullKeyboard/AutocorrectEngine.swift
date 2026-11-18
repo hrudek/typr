@@ -130,7 +130,6 @@ final class AutocorrectEngine {
 
     private var rejectionContext: String? = nil
 
-    /// A Space tap after `word`, with the field text right after it.
     private struct SpaceTap {
         let point: CGPoint
         let layout: KeyboardLayout
@@ -543,10 +542,8 @@ final class AutocorrectEngine {
         learning.recordWord(pending.literal)
     }
 
-    /// A real Space tap was inserted. The previous Space tap is learned once the word after it
-    /// ends with this one and both words are still separate, so a Space later joined into a
-    /// word ("a out" → "about") never teaches. Translated from iikb TypingEngine+Words.swift
-    /// `PendingWord.ending` at 73c2ed9016b802e5bf017a2d595d037d1e748ccf (MIT © 2026 Bassim Shahidy).
+    /// iikb TypingEngine+Words.swift `PendingWord.ending`
+    /// (73c2ed9016b802e5bf017a2d595d037d1e748ccf, MIT © 2026 Bassim Shahidy).
     func spaceTyped(at point: CGPoint, layout: KeyboardLayout, afterInput: String?) {
         let earlier = spaceBeforeWord
         spaceBeforeWord = nil
