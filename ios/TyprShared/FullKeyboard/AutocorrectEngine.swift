@@ -130,6 +130,16 @@ final class AutocorrectEngine {
 
     private var rejectionContext: String? = nil
 
+    private struct SpaceTap {
+        let point: CGPoint
+        let layout: KeyboardLayout
+        let after: String
+        let epoch: Int
+        var typedThrough: String
+    }
+    private var typedSpace: SpaceTap?
+    private var spaceBeforeWord: SpaceTap?
+
     /// One automatic-correction decision; a boundary records it exactly once.
     private struct Decision {
         var text: String?
@@ -466,6 +476,7 @@ final class AutocorrectEngine {
             pendingPairChoice = nil
         }
         touchInput.clear()
+        forgetSpaceTaps()
         decodeCache = nil
         completionCache = nil
         boundaryCache = nil
@@ -495,6 +506,19 @@ final class AutocorrectEngine {
     /// The next word's first letter arrives: trust the previous word only
     /// if it is still intact right before the cursor.
     func settleFeedback(beforeInput: String?, insertedLetter: String, afterInput: String?) {
+        if let space = typedSpace {
+            typedSpace = nil
+            spaceBeforeWord = space
+        }
+        if let space = spaceBeforeWord {
+            let letter = insertedLetter.count == 1 && insertedLetter.first?.isLetter == true
+            if letter, let beforeInput, beforeInput == space.typedThrough,
+               let afterInput, afterInput == beforeInput + insertedLetter {
+                spaceBeforeWord?.typedThrough = afterInput
+            } else {
+                spaceBeforeWord = nil
+            }
+        }
         reversibleRejection = nil
         reversibleBoundary = nil
         if let choice = pendingPairChoice {
@@ -524,6 +548,28 @@ final class AutocorrectEngine {
         learnIdentity(evidence, literal: pending.literal, source: .literalValid)
         learning.confirmLiteral(pending.literal)
         learning.recordWord(pending.literal)
+    }
+
+    func forgetSpaceTaps() {
+        typedSpace = nil
+        spaceBeforeWord = nil
+    }
+
+    /// iikb TypingEngine+Words.swift `PendingWord.ending`
+    /// (73c2ed9016b802e5bf017a2d595d037d1e748ccf, MIT © 2026 Bassim Shahidy).
+    func spaceTyped(at point: CGPoint, layout: KeyboardLayout, afterInput: String?) {
+        let earlier = spaceBeforeWord
+        spaceBeforeWord = nil
+        typedSpace = nil
+        guard let afterInput, afterInput.hasSuffix(" ") else { return }
+        let text = String(afterInput.dropLast())
+        guard let word = Self.currentToken(in: text) else { return }
+        if let earlier, earlier.epoch == learning.feedbackEpoch, learning.isLearningEnabled,
+           String(text.dropLast(word.count)) == earlier.after {
+            learning.learnSpace(earlier.point, layout: earlier.layout)
+        }
+        typedSpace = SpaceTap(point: point, layout: layout, after: afterInput,
+                              epoch: learning.feedbackEpoch, typedThrough: afterInput)
     }
 
     /// Backspace restored the typed word right after an automatic replacement.

@@ -56,6 +56,7 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     }
 
     let keys: [Character: Key]
+    let space: Key?
     static let staticSigma = 0.35
     /// Physical tap spread (pitches) that the static density and the decoder's prior weight
     /// were tuned for: the fixed spatial evaluation's tune/holdout noise of .18/.22 pitch.
@@ -68,12 +69,13 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     static let maxOffset = 0.5
     static let sigmaRange: ClosedRange<Double> = 0.22...0.50
 
-    init(keys: [Character: Key]) {
+    init(keys: [Character: Key], space: Key? = nil) {
         self.keys = keys.reduce(into: [:]) { result, entry in
             guard entry.key.isLetter, String(entry.key) == String(entry.key).lowercased(),
                   let key = Self.sanitized(entry.value, sigmaRange: Self.sigmaRange) else { return }
             result[entry.key] = key
         }
+        self.space = space.flatMap { Self.sanitized($0, sigmaRange: Self.sigmaRange) }
     }
 
     /// Finite, bounded centres; both covariance eigenvalues inside `sigmaRange`², hence a
@@ -107,7 +109,7 @@ nonisolated struct TouchLabel: Equatable, Sendable {
 }
 
 nonisolated enum TouchLabelSource: String, Codable, CaseIterable, Sendable {
-    case literalValid, keep, undo, manualPick, retype
+    case literalValid, keep, undo, manualPick, retype, space
 }
 
 nonisolated enum TouchLabelRejection: String, Codable, CaseIterable, Sendable {

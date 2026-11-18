@@ -316,6 +316,28 @@ final class PersonalTypingModelTests: XCTestCase {
         XCTAssertNil(diagnostics.rejectedByReason["layoutMismatch"])
     }
 
+    func testLearnedSpaceAimShiftsTheSpaceDensityAndSurvivesValidation() throws {
+        let model = PersonalTypingModel()
+        let space = try XCTUnwrap(layout.key(.space))
+        let pitchY = space.frame.height + layout.metrics.rowGap
+        let low = CGPoint(x: space.frame.minX + 10, y: space.frame.midY + 0.25 * pitchY)
+        let far = CGPoint(x: space.frame.midX, y: space.frame.midY - 2 * pitchY)
+        XCTAssertEqual(model.learnSpace(far, layout: layout).rejected, [.outlier: 1])
+        for _ in 0..<40 { model.learnSpace(low, layout: layout) }
+        let spaceOnly = try XCTUnwrap(model.state.validated())
+        XCTAssertEqual(spaceOnly.layouts.values.first?.keys.isEmpty, true)
+        XCTAssertNil(model.calibration(for: layout), "Space aim applies once the letters are calibrated")
+        model.learn(Array(repeating: try label(), count: 20), layout: layout, source: .keep)
+        let calibration = try XCTUnwrap(model.calibration(for: layout))
+        XCTAssertGreaterThan(try XCTUnwrap(calibration.space).offsetY, 0.1)
+        let learned = try XCTUnwrap(KeyboardBoundaryTouch.spaceDensity(low, layout: layout, calibration: calibration))
+        let fixed = try XCTUnwrap(KeyboardBoundaryTouch.spaceDensity(low, layout: layout))
+        XCTAssertGreaterThan(learned, fixed)
+        let data = try JSONEncoder().encode(model.state)
+        let restored = PersonalTypingModel(state: try JSONDecoder().decode(PersonalTypingModel.State.self, from: data))
+        XCTAssertEqual(restored.calibration(for: layout), calibration)
+    }
+
     func testResetClearsAggregatesAndProtections() throws {
         let model = PersonalTypingModel()
         model.keep("hello"); model.recordWord("hello")

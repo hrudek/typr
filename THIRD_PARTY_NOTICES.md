@@ -166,6 +166,11 @@ Backspace-retype touch labels translate `WordTaps.erased`/`retyped` and
 Typr adds its own different-letter and unchanged-settled-word gates. No upstream files
 are copied; the MIT notice below (Copyright (c) 2026 Bassim Shahidy) applies.
 
+Learned Space aim translates the Space bar's own touch statistics (`TouchModel.swift`
+`space` spread) and the ending Space of `PendingWord` (`Typing/TypingEngine+Words.swift`)
+at the same pin. Typr learns only the vertical aim, after the next word also ends with a
+Space, and keeps the uniform horizontal prior. The MIT notice below applies.
+
 Settings › Bottom row adapts the drag-handle reorder rows of `App/Design/OrderRows.swift`
 (into `ios/Typr/SettingsOrderRows.swift`), `BottomKey.arranged` from
 `Packages/KeyboardModules/Sources/KeyboardCore/Typing/CustomKeys.swift` and the period

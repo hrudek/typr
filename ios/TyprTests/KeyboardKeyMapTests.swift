@@ -234,7 +234,9 @@ final class KeyboardKeyMapTests: XCTestCase {
         tap(center(engine.layout.key(.space)!), engine)
         type("w", engine)
         XCTAssertNil(session.model.lexicon.counts["where"])
-        XCTAssertEqual(session.diagnostics.acceptedLabels, labels + 10, "only independently observed world and hello teach")
+        XCTAssertEqual(session.diagnostics.acceptedLabels, labels + 11,
+                       "only independently observed world and hello teach, plus the Space between them")
+        XCTAssertEqual(session.diagnostics.acceptedBySource["space"], 1)
         XCTAssertEqual(session.model.state.bigrams?.pairCount, 1, "world→hello only; the never becomes an endpoint")
     }
 

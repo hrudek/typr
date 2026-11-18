@@ -259,6 +259,12 @@ final class KeyboardLearningSession {
         if outcome.accepted > 0 { modelChanged() } else { markChanged() }
     }
 
+    func learnSpace(_ point: CGPoint, layout: KeyboardLayout) {
+        let outcome = model.learnSpace(point, layout: layout)
+        diagnostics.recordLabels(outcome, source: .space)
+        if outcome.accepted > 0 { modelChanged() } else { markChanged() }
+    }
+
     func recordRejection(_ reason: TouchLabelRejection, count: Int) {
         guard count > 0 else { return }
         diagnostics.recordRejection(reason, count: count)

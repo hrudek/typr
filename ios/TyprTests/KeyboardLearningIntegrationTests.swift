@@ -234,6 +234,69 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertEqual(session.diagnostics.acceptedBySource["retype"], 1)
     }
 
+    func testSpaceTapTeachesOnceTheNextWordEndsSeparately() throws {
+        let session = KeyboardLearningSession()
+        let (engine, target) = keyboard(session: session)
+        let space = try XCTUnwrap(engine.layout.key(.space))
+        let low = CGPoint(x: space.frame.midX, y: space.frame.maxY - 2)
+        type("hello", engine)
+        engine.touchBegan(id: 1, at: low)
+        engine.touchEnded(id: 1, at: low)
+        type("world", engine)
+        XCTAssertNil(session.diagnostics.acceptedBySource["space"])
+        type(" n", engine)
+        XCTAssertEqual(target.text, "hello world n")
+        XCTAssertEqual(session.diagnostics.acceptedBySource["space"], 1, "the Space after world waits for its next word")
+        XCTAssertGreaterThan(try XCTUnwrap(session.model.state.layouts.values.first?.space).meanY, 0)
+    }
+
+    func testJoinedOrInterruptedSpaceNeverTeaches() throws {
+        func spaceLabels(_ run: (FullKeyboardEngine) -> Void) -> Int? {
+            let session = KeyboardLearningSession()
+            let (engine, _) = keyboard(session: session)
+            run(engine)
+            return session.diagnostics.acceptedBySource["space"]
+        }
+        XCTAssertNil(spaceLabels { engine in
+            type("hello ", engine); engine.textDidChange(); type("world n", engine)
+        }, "a cursor or host change drops the Space")
+        XCTAssertNil(spaceLabels { engine in
+            type("hello world", engine)
+            tap(.layerSwitch(.numbers), engine); tap(.character("."), engine); tap(.layerSwitch(.letters), engine)
+            type(" n", engine)
+        }, "the next word must end with a Space of its own")
+        XCTAssertNil(spaceLabels { engine in
+            type("a o", engine)
+            tap(.delete, engine); tap(.delete, engine)
+            type("bout", engine)
+            engine.typeSpaceFromTyprKey()
+            type("a", engine)
+            engine.typeSpaceFromTyprKey()
+            type("word ", engine)
+        }, "a deleted Space never teaches, even when the text later reads like it again")
+        XCTAssertNil(spaceLabels { engine in
+            type("hello ", engine)
+            tap(.delete, engine)
+            engine.typeSpaceFromTyprKey()
+            type("world ", engine)
+        }, "a Space deleted before the next word starts never teaches")
+        XCTAssertNil(spaceLabels { engine in
+            type("hello wor", engine)
+            engine.deleteWordBackward()
+            type("world ", engine)
+        }, "any deletion after the Space drops its evidence")
+        let ends: [(String, Int?)] = [("about ", nil), ("a out ", 1)]
+        for (end, expected) in ends {
+            XCTAssertEqual(spaceLabels { engine in
+                let ac = engine.autocorrect
+                let point = CGPoint(x: engine.layout.key(.space)!.frame.midX, y: engine.layout.key(.space)!.frame.midY)
+                ac.spaceTyped(at: point, layout: engine.layout, afterInput: "a ")
+                ac.settleFeedback(beforeInput: "a ", insertedLetter: "o", afterInput: "a o")
+                ac.spaceTyped(at: point, layout: engine.layout, afterInput: end)
+            }, expected, end)
+        }
+    }
+
     func testAutomaticOutputNeverTeachesWithoutFeedback() {
         for (typed, checker, counter) in [
             ("teh", Checker(), KeyboardDiagnostics.Counter.autoRule),

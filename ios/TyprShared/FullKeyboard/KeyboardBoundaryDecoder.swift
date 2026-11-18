@@ -277,7 +277,8 @@ nonisolated enum KeyboardBoundaryDecoder {
                           let key = adjacent.first(where: { $0.character == String(letters[index]) }) else { continue }
                     let sample = touch.current.samples[index]
                     guard sample.key == key,
-                          let spaceScore = KeyboardBoundaryTouch.spaceDensity(sample.point, layout: layout),
+                          let spaceScore = KeyboardBoundaryTouch.spaceDensity(sample.point, layout: layout,
+                                                                              calibration: job.calibration),
                           let letterScore = KeyboardBoundaryTouch.letterDensity(sample.point, key: key, layout: layout,
                                                                               calibration: job.calibration) else { continue }
                     let left = String(letters[..<index]), right = String(letters[(index + 1)...])
@@ -298,7 +299,8 @@ nonisolated enum KeyboardBoundaryDecoder {
                 let first = PersonalLexiconSnapshot.normalize(previous.text)
                 let protection = job.kept.contains(first) || job.kept.contains(token)
                     || (job.personal.counts[first] ?? 0) > 0 || (job.personal.counts[token] ?? 0) > 0
-                if !protection, let asSpace = KeyboardBoundaryTouch.spaceDensity(space.point, layout: layout) {
+                if !protection, let asSpace = KeyboardBoundaryTouch.spaceDensity(space.point, layout: layout,
+                                                                                  calibration: job.calibration) {
                     let a = prior(first), b = wholePrior
                     // Two known words require better tap likelihood too (iikb's separate
                     // reading protection). Frequency alone can never reinterpret their Space.
@@ -334,7 +336,8 @@ nonisolated enum KeyboardBoundaryDecoder {
                     var strayLift = 0.0
                     if let touch = job.touch, touch.isUsable, touch.previous?.text == previous,
                        touch.current.text == job.token, let space = touch.space,
-                       let asSpace = KeyboardBoundaryTouch.spaceDensity(space.point, layout: touch.current.layout) {
+                       let asSpace = KeyboardBoundaryTouch.spaceDensity(space.point, layout: touch.current.layout,
+                                                                        calibration: job.calibration) {
                         // A deleted gratuitous tap still pays its best gated density and the
                         // edit penalty. Compare against the same tap interpreted as Space.
                         var stray = asSpace
