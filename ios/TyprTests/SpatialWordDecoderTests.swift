@@ -969,6 +969,37 @@ final class SpatialWordDecoderTests: XCTestCase {
         }
     }
 
+    func testSettledSpatialSubstitutionTeachesOnlyWhenItSettles() {
+        func corrected() -> AutocorrectEngine {
+            let ac = engine()
+            track(evidence("gello", aimedAt: "hello"), in: ac)
+            XCTAssertEqual(replacement(ac), "hello")
+            return ac
+        }
+        let settled = corrected()
+        settled.settleFeedback(beforeInput: "hello ", insertedLetter: "w", afterInput: "hello w")
+        XCTAssertEqual(settled.learning.diagnostics.acceptedBySource["autocorrect"], 5)
+        XCTAssertTrue(settled.learning.model.lexicon.counts.isEmpty, "an automatic correction still counts no word")
+        let undone = corrected()
+        undone.recordUndo(.init(original: "gello", insertedText: "hello ", kind: .autoSpatial))
+        undone.settleFeedback(beforeInput: "gello ", insertedLetter: "w", afterInput: "gello w")
+        XCTAssertNil(undone.learning.diagnostics.acceptedBySource["autocorrect"])
+        let unsettled = corrected()
+        unsettled.settleFeedback(beforeInput: "hello ", insertedLetter: "1", afterInput: "hello 1")
+        XCTAssertNil(unsettled.learning.diagnostics.acceptedBySource["autocorrect"])
+    }
+
+    func testSettledSpatialTranspositionNeverTeaches() {
+        let source = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 4_000_000_000), ("world", 1)])])
+        let ac = AutocorrectEngine(checker: SpatialChecker(valid: ["hello"]), learning: KeyboardLearningSession(),
+                                   spatialDecoder: source)
+        track(evidence("hlelo", aimedAt: "hlelo"), in: ac)
+        XCTAssertEqual(replacement(ac, "hlelo"), "hello")
+        XCTAssertEqual(ac.learning.diagnostics[.autoSpatialEdit], 1)
+        ac.settleFeedback(beforeInput: "hello ", insertedLetter: "w", afterInput: "hello w")
+        XCTAssertNil(ac.learning.diagnostics.acceptedBySource["autocorrect"])
+    }
+
     func testEditedEvidenceStillDecodesButUndoDoesNotTeach() {
         let ac = engine()
         track(evidence("gella", aimedAt: "hella"), in: ac)

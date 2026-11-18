@@ -543,8 +543,9 @@ final class AutocorrectEngine {
             let labels = evidence.retyped.sorted { $0.key < $1.key }.map(\.value)
             learning.learn(labels, layout: evidence.layout, source: .retype)
         }
-        if pending.finalText != pending.literal, learning.isLearningEnabled {
-            learnSubstitutions(evidence, literal: pending.literal, word: pending.finalText)
+        if pending.kind == .autoSpatial, pending.finalText != pending.literal, learning.isLearningEnabled,
+           let alignment = pending.alignment {
+            learnSubstitutions(evidence, literal: pending.literal, word: pending.finalText, alignment: alignment)
         }
         guard pending.learnable else { learning.breakWordSequence(); return }
         learning.settleTrustedWord(pending.literal, beforeInput: beforeInput)
@@ -693,10 +694,12 @@ final class AutocorrectEngine {
         learning.learn(labels, layout: evidence.layout, source: source)
     }
 
-    private func learnSubstitutions(_ evidence: KeyboardTouchWord, literal: String, word: String) {
+    private func learnSubstitutions(_ evidence: KeyboardTouchWord, literal: String, word: String,
+                                    alignment: [Int?]) {
         let typed = Array(literal.lowercased()), intended = Array(word.lowercased())
         guard evidence.learningIntact, evidence.text == literal, evidence.samples.count == typed.count,
-              intended.count == typed.count, intended.allSatisfy({ ("a"..."z").contains($0) }) else { return }
+              intended.count == typed.count, intended.allSatisfy({ ("a"..."z").contains($0) }),
+              alignment.elementsEqual(typed.indices.map { Optional($0) }) else { return }
         for (index, letter) in intended.enumerated() where letter != typed[index] {
             guard KeyboardTouchInput.reaches(evidence.samples[index].point, letter: String(letter),
                                              in: evidence.layout) else { return }
