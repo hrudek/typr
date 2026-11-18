@@ -170,6 +170,7 @@ struct ContentView: View {
                             switch destination {
                             case .keyboard: KeyboardSettingsCard()
                             case .autocorrectLanguages: AutocorrectLanguageSettingsCard()
+                            case .keyboardWordsPrivacy: KeyboardWordsPrivacyCard()
                             case .keyboardAppearance, .keyboardLearnedWords, .statistics, .history:
                                 EmptyView() // Handled above.
                             case .textProcessing: TextProcessingSettingsCard()

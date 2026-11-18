@@ -20,6 +20,9 @@ struct KeyboardLearnedWordsView: View {
         return args[index + 1] == "settings-keyboard-learned-words"
     }
 
+    static let summary = "Saved words and corrections stay on this iPhone. Swipe to delete."
+    static let about = "Typr stores kept words, word counts, rejected corrections with up to two preceding words and which word followed one or two words, including words chosen from suggestions. Undo blocks that correction everywhere for 64 learned word events, then only in its saved context until event 256. Typing the original spelling independently again keeps it. Older saved rejections stay until deleted. Saved word counts and update dates also provide a weak recent German/English usage prior for suggestions. Deleting a word count removes its contribution; Reset learning clears the prior. These associations can reveal short phrases. No sentence archive, apps, websites or typed-text history is stored. Deleting a word removes every context containing it; Reset learning clears all contexts. Without Full Access, learning stays in the keyboard session and cannot be shown here. Imported contacts and dictation words are separate: use Personal names and terms in Words and privacy to delete that list or turn off a source."
+
     nonisolated static let fixtureDate = Date(timeIntervalSince1970: 1_800_000_000)
 
     static func fixtureState() -> PersonalTypingModel.State {
@@ -34,8 +37,10 @@ struct KeyboardLearnedWordsView: View {
     var body: some View {
         List {
             Section {
-                Text("Typr stores kept words, word counts, rejected corrections with up to two preceding words and which word followed one or two words, including words chosen from suggestions. Undo blocks that correction everywhere for 64 learned word events, then only in its saved context until event 256. Typing the original spelling independently again keeps it. Older saved rejections stay until deleted. Saved word counts and update dates also provide a weak recent German/English usage prior for suggestions. Deleting a word count removes its contribution; Reset learning clears the prior. These associations can reveal short phrases. No sentence archive, apps, websites or typed-text history is stored. Deleting a word removes every context containing it; Reset learning clears all contexts. Swipe to delete an entry. Imported contacts and dictation words are separate: use Personal names and terms in Keyboard settings to delete that list or turn off a source.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                Text(Self.summary).font(.footnote).foregroundStyle(.secondary)
+                DisclosureGroup("About saved learning") {
+                    Text(Self.about).font(.footnote).foregroundStyle(.secondary)
+                }
                 if let error { Text(error).foregroundStyle(.red) }
             }
             if let state {
@@ -75,7 +80,7 @@ struct KeyboardLearnedWordsView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                Text("No saved learning available. Without Full Access, learning stays in the keyboard session and cannot be shown here. Full Access may be off, or nothing has been saved yet.")
+                Text("No saved learning available. Full Access may be off, or nothing has been saved yet.")
                     .foregroundStyle(.secondary)
             }
         }

@@ -1,29 +1,45 @@
 import SwiftUI
 import UIKit
 
-/// Keyboard preferences, grouped by purpose rather than feature maturity.
+/// Settings > Keyboard: the master switch, everyday typing switches and links to the detail pages.
 struct KeyboardSettingsCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
-    @State private var fullKeyboard = FullKeyboardSettings().isEnabled
-    @State private var autocorrect = FullKeyboardSettings().autocorrect
-    @State private var swipeTyping = FullKeyboardSettings().swipeTyping
-    @State private var personalLearning = TyprSettings().personalLearning
-    @State private var autocorrectGerman = TyprSettings().autocorrectGerman
-    @State private var autocorrectEnglish = TyprSettings().autocorrectEnglish
-    @State private var design = FullKeyboardSettings().design
-    @State private var periodKey = FullKeyboardSettings().bottomRow.periodKey
+    private let defaults: UserDefaults?
+    @State private var fullKeyboard: Bool
+    @State private var autocorrect: Bool
+    @State private var swipeTyping: Bool
+    @State private var autocorrectGerman: Bool
+    @State private var autocorrectEnglish: Bool
+    @State private var design: KeyboardDesign
+    @State private var periodKey: Bool
 
     static let swipeNotice = "Swipe typing powered by FUTO Swipe."
+    static let fullKeyboardOffFooter = "Off uses the dictation bar. Your typing and appearance settings are kept."
+    static let assistanceOffFooter = "Turn on Full keyboard to use typing assistance."
+
+    init(defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup)) {
+        self.defaults = defaults
+        let keyboard = FullKeyboardSettings(defaults: defaults)
+        let typr = TyprSettings(defaults: defaults)
+        _fullKeyboard = State(initialValue: keyboard.isEnabled)
+        _autocorrect = State(initialValue: keyboard.autocorrect)
+        _swipeTyping = State(initialValue: keyboard.swipeTyping)
+        _autocorrectGerman = State(initialValue: typr.autocorrectGerman)
+        _autocorrectEnglish = State(initialValue: typr.autocorrectEnglish)
+        _design = State(initialValue: keyboard.design)
+        _periodKey = State(initialValue: keyboard.bottomRow.periodKey)
+    }
+
+    private var keyboardSettings: FullKeyboardSettings { FullKeyboardSettings(defaults: defaults) }
+    private var typrSettings: TyprSettings { TyprSettings(defaults: defaults) }
 
     var body: some View {
         VStack(spacing: 24) {
             VStack(alignment: .leading, spacing: 8) {
-                SettingsSection(title: "Keyboard layout") {
+                SettingsSection {
                     SettingsToggle(title: "Full keyboard", detail: "Type with Typr. Hold the Typr key to dictate.", isOn: $fullKeyboard)
-                        .onChange(of: fullKeyboard) { _, enabled in
-                            FullKeyboardSettings().isEnabled = enabled
-                        }
+                        .onChange(of: fullKeyboard) { _, enabled in keyboardSettings.isEnabled = enabled }
                     SettingsDivider()
                     NavigationLink(value: SettingsDestination.keyboardAppearance) {
                         SettingsLink(title: "Appearance", detail: "Design, suggestion bar, globe key and bottom row",
@@ -31,50 +47,39 @@ struct KeyboardSettingsCard: View {
                     }
                     .buttonStyle(.plain)
                 }
-                if !fullKeyboard {
-                    Text("Turn on Full keyboard to configure autocorrect and its languages.")
-                        .font(.footnote).foregroundStyle(TyprTheme.textMuted)
-                        .padding(.horizontal, 16)
-                }
-                // Required end-user notice of the FUTO Model Weights License (SwipeModel/LICENSE-FUTO-SWIPE.txt).
-                Text(Self.swipeNotice)
-                    .font(.footnote).foregroundStyle(TyprTheme.textMuted)
-                    .padding(.horizontal, 16)
+                if !fullKeyboard { SettingsFooter(Self.fullKeyboardOffFooter) }
             }
-            if fullKeyboard {
+
+            VStack(alignment: .leading, spacing: 8) {
                 SettingsSection(title: "Typing assistance") {
                     SettingsToggle(title: "Autocorrect", detail: "Correct contractions, shortcuts and small typos on space.", isOn: $autocorrect)
-                        .onChange(of: autocorrect) { _, enabled in
-                            FullKeyboardSettings().autocorrect = enabled
-                        }
-                    if autocorrect {
-                        SettingsDivider()
-                        NavigationLink(value: SettingsDestination.autocorrectLanguages) {
-                            SettingsLink(title: "Autocorrect languages", detail: "Choose one or more languages",
-                                         value: AutocorrectLanguageSettingsCard.summary(
-                                            german: autocorrectGerman, english: autocorrectEnglish))
-                        }
-                        .buttonStyle(.plain)
-                    }
+                        .onChange(of: autocorrect) { _, enabled in keyboardSettings.autocorrect = enabled }
+                        .enabled(fullKeyboard)
                     SettingsDivider()
-                    SettingsToggle(title: "Swipe typing", detail: "Slide across the letters to type a word.", isOn: $swipeTyping)
-                        .onChange(of: swipeTyping) { _, enabled in
-                            FullKeyboardSettings().swipeTyping = enabled
-                        }
-                    SettingsDivider()
-                    SettingsToggle(title: "Learn from my typing", detail: "Adapts to your taps, chosen words, recent German/English usage and what follows one or two words. Undo remembers rejected corrections and their preceding words.", isOn: $personalLearning)
-                        .onChange(of: personalLearning) { _, enabled in
-                            TyprSettings().personalLearning = enabled
-                        }
-                    SettingsDivider()
-                    NavigationLink(value: SettingsDestination.keyboardLearnedWords) {
-                        SettingsLink(title: "Manage learned words", detail: "Find and delete saved words and corrections")
+                    NavigationLink(value: SettingsDestination.autocorrectLanguages) {
+                        SettingsLink(title: "Autocorrect languages", detail: "Choose the languages autocorrect uses",
+                                     value: AutocorrectLanguageSettingsCard.summary(
+                                        german: autocorrectGerman, english: autocorrectEnglish))
                     }
                     .buttonStyle(.plain)
+                    .enabled(fullKeyboard && autocorrect)
+                    SettingsDivider()
+                    SettingsToggle(title: "Swipe typing", detail: "Slide across the letters to type a word.", isOn: $swipeTyping)
+                        .onChange(of: swipeTyping) { _, enabled in keyboardSettings.swipeTyping = enabled }
+                        .enabled(fullKeyboard)
                 }
+                if !fullKeyboard { SettingsFooter(Self.assistanceOffFooter) }
+                // Required end-user notice of the FUTO Model Weights License (SwipeModel/LICENSE-FUTO-SWIPE.txt).
+                SettingsFooter(Self.swipeNotice)
             }
-            KeyboardLearningResetControls()
-            PersonalLexiconSettingsCard()
+
+            SettingsSection {
+                NavigationLink(value: SettingsDestination.keyboardWordsPrivacy) {
+                    SettingsLink(title: "Words and privacy", detail: "Learning, personal words and saved data")
+                }
+                .buttonStyle(.plain)
+            }
+
             VStack(alignment: .leading, spacing: 8) {
                 SettingsSection(title: "iPhone setup") {
                     Button {
@@ -84,9 +89,7 @@ struct KeyboardSettingsCard: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Text("Add Typr and allow Full Access in iOS Settings.")
-                    .font(.footnote).foregroundStyle(TyprTheme.textMuted)
-                    .padding(.horizontal, 16)
+                SettingsFooter("Add Typr and allow Full Access in iOS Settings.")
             }
         }
         .onAppear(perform: refresh)
@@ -94,14 +97,19 @@ struct KeyboardSettingsCard: View {
     }
 
     private func refresh() {
-        fullKeyboard = FullKeyboardSettings().isEnabled
-        autocorrect = FullKeyboardSettings().autocorrect
-        swipeTyping = FullKeyboardSettings().swipeTyping
-        personalLearning = TyprSettings().personalLearning
-        autocorrectGerman = TyprSettings().autocorrectGerman
-        autocorrectEnglish = TyprSettings().autocorrectEnglish
-        design = FullKeyboardSettings().design
-        periodKey = FullKeyboardSettings().bottomRow.periodKey
+        fullKeyboard = keyboardSettings.isEnabled
+        autocorrect = keyboardSettings.autocorrect
+        swipeTyping = keyboardSettings.swipeTyping
+        autocorrectGerman = typrSettings.autocorrectGerman
+        autocorrectEnglish = typrSettings.autocorrectEnglish
+        design = keyboardSettings.design
+        periodKey = keyboardSettings.bottomRow.periodKey
+    }
+}
+
+private extension View {
+    func enabled(_ isEnabled: Bool) -> some View {
+        disabled(!isEnabled).opacity(isEnabled ? 1 : 0.4)
     }
 }
 
@@ -134,7 +142,7 @@ extension BottomKey {
     }
 }
 
-/// Uses the same checkmark rows as dictation language, but each choice is independent.
+/// Uses the same checkmark rows as dictation language, but each choice is independent and both may be off.
 struct AutocorrectLanguageSettingsCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var german = TyprSettings().autocorrectGerman
@@ -146,17 +154,24 @@ struct AutocorrectLanguageSettingsCard: View {
         return codes.isEmpty ? "None" : codes.joined(separator: ", ")
     }
 
+    static let footer = "For autocorrect only. Your dictation language stays as it is."
+    static let noneSelected = "No autocorrect languages selected."
+
     var body: some View {
-        SettingsSection {
-            SettingsChoiceRow(title: "Deutsch", isSelected: german) {
-                german.toggle()
-                TyprSettings().autocorrectGerman = german
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSection {
+                SettingsChoiceRow(title: "Deutsch", isSelected: german) {
+                    german.toggle()
+                    TyprSettings().autocorrectGerman = german
+                }
+                SettingsDivider()
+                SettingsChoiceRow(title: "English", isSelected: english) {
+                    english.toggle()
+                    TyprSettings().autocorrectEnglish = english
+                }
             }
-            SettingsDivider()
-            SettingsChoiceRow(title: "English", isSelected: english) {
-                english.toggle()
-                TyprSettings().autocorrectEnglish = english
-            }
+            if !german && !english { SettingsFooter(Self.noneSelected) }
+            SettingsFooter(Self.footer)
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
