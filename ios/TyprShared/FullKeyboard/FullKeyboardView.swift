@@ -7,6 +7,12 @@ import UIKit
 /// Dictation state comes from the same `KeyboardViewModel` the dictation bar uses.
 @MainActor
 final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
+    /// The app's settings preview: these values instead of the stored ones, no typing settings and no suggestions.
+    struct Preview: Equatable {
+        var design: KeyboardDesign
+        var showsSuggestionBar: Bool
+    }
+
     let model: KeyboardViewModel
     let engine: FullKeyboardEngine
     weak var hostController: UIInputViewController? {
@@ -51,7 +57,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     private var styleMenu: TyprStyleMenuView?
     private var palette = FullKeyboardPalette(isDark: false)
     private var didApplyPalette = false
-    private var design = KeyboardDesign.standard
+    private(set) var design = KeyboardDesign.standard
     private var subscriptions: Set<AnyCancellable> = []
     private var showsRecording = false
     private let haptics = UIImpactFeedbackGenerator(style: .light)
@@ -63,7 +69,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     var shownPanelContent: TyprFeedbackPanel.Content? { panelContent }
 
     init(model: KeyboardViewModel, target: KeyboardTextTarget, autocorrect: AutocorrectEngine? = nil,
-         statistics: UsageStatisticsSession? = nil) {
+         statistics: UsageStatisticsSession? = nil, preview: Preview? = nil) {
         self.model = model
         engine = FullKeyboardEngine(target: target, autocorrect: autocorrect, statistics: statistics)
         engine.autocorrect.learning.onValidatedLabel = { [weak statistics] label, layout in
@@ -130,16 +136,22 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
             view.setNeedsLayout()
         }
 
-        engine.autocorrect.isEnabled = FullKeyboardSettings().autocorrect
-        engine.swipeTypingEnabled = FullKeyboardSettings().swipeTyping
-        engine.autocorrect.englishEnabled = TyprSettings().autocorrectEnglish
-        if TyprSettings().autocorrectGerman {
-            let instance = GermanAutocorrect.system()
-            cachedGerman = instance
-            engine.autocorrect.german = instance
+        if let preview {
+            engine.suspendSuggestions()
+            engine.refreshAutoCapitalization()
+            applyPreview(preview)
+        } else {
+            engine.autocorrect.isEnabled = FullKeyboardSettings().autocorrect
+            engine.swipeTypingEnabled = FullKeyboardSettings().swipeTyping
+            engine.autocorrect.englishEnabled = TyprSettings().autocorrectEnglish
+            if TyprSettings().autocorrectGerman {
+                let instance = GermanAutocorrect.system()
+                cachedGerman = instance
+                engine.autocorrect.german = instance
+            }
+            applySuggestionBarSetting()
+            engine.configureForField()
         }
-        applySuggestionBarSetting()
-        engine.configureForField()
         applyAppearance()
         refreshFromModel()
     }
@@ -299,6 +311,13 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     func didInsertDictation() {
         engine.textDidChange()
         refreshReturnKey()
+    }
+
+    /// Shows other preview values right away.
+    func applyPreview(_ preview: Preview) {
+        suggestionBarOverride = preview.showsSuggestionBar
+        design = preview.design
+        applyAppearance()
     }
 
     /// Typr: the suggestion bar follows its switch; the keyboard's height changes with it.
