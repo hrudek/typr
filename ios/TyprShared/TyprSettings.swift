@@ -1,7 +1,7 @@
 import Foundation
 
 /// Typr switches, stored in the App Group so the keyboard reads them too.
-/// Switches default on. Dictation log deliberately retains saved history while off;
+/// Each switch documents its default. Dictation log deliberately retains saved history while off;
 /// other switches keep upstream's behavior when off.
 @MainActor
 struct TyprSettings {
@@ -22,9 +22,9 @@ struct TyprSettings {
         self.defaults = defaults
     }
 
-    /// On-device Apple Intelligence cleanup. Off retains the plain transcription path.
+    /// Dictation cleanup. Off by default and retains the plain transcription path.
     var aiCleanup: Bool {
-        get { defaults?.object(forKey: Key.aiCleanup) as? Bool ?? true }
+        get { defaults?.object(forKey: Key.aiCleanup) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.aiCleanup) }
     }
 
@@ -80,9 +80,9 @@ struct TyprSettings {
     }
 
     /// The full keyboard without its suggestion bar: the keys move up and the keyboard gets
-    /// shorter. Autocorrect on space still applies. On by default; off keeps the bar.
+    /// shorter. Autocorrect on space still applies. Off by default; the bar is shown.
     var hideSuggestionBar: Bool {
-        get { defaults?.object(forKey: Key.hideSuggestionBar) as? Bool ?? true }
+        get { defaults?.object(forKey: Key.hideSuggestionBar) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.hideSuggestionBar) }
     }
 }

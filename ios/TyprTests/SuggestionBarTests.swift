@@ -17,11 +17,25 @@ final class SuggestionBarTests: XCTestCase {
         defaults.removePersistentDomain(forName: suite)
     }
 
-    func testSettingDefaultsOnAndPersists() {
+    func testAllKeyboardDefaultsOnEmptyDefaults() {
         let settings = TyprSettings(defaults: defaults)
-        XCTAssertTrue(settings.hideSuggestionBar)
-        settings.hideSuggestionBar = false
-        XCTAssertFalse(TyprSettings(defaults: defaults).hideSuggestionBar)
+        let keyboard = FullKeyboardSettings(defaults: defaults)
+        XCTAssertTrue(keyboard.isEnabled)
+        XCTAssertTrue(keyboard.autocorrect)
+        XCTAssertTrue(keyboard.swipeTyping)
+        XCTAssertFalse(settings.hideSuggestionBar)
+        XCTAssertFalse(settings.aiCleanup)
+        XCTAssertTrue(settings.personalLearning)
+        XCTAssertTrue(settings.autocorrectGerman)
+        XCTAssertTrue(settings.autocorrectEnglish)
+        XCTAssertTrue(settings.dictationFeedbackStrip)
+    }
+
+    func testSettingDefaultsOffAndPersists() {
+        let settings = TyprSettings(defaults: defaults)
+        XCTAssertFalse(settings.hideSuggestionBar)
+        settings.hideSuggestionBar = true
+        XCTAssertTrue(TyprSettings(defaults: defaults).hideSuggestionBar)
     }
 
     private func keyboard(showsBar: Bool, text: String = "") -> (FullKeyboardView, FixtureTextTarget) {

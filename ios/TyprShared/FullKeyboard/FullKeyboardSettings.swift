@@ -20,9 +20,9 @@ struct FullKeyboardSettings {
         self.defaults = defaults
     }
 
-    /// Experiment: Typr shows a full QWERTY keyboard instead of the dictation bar. Off by default.
+    /// Typr shows a full QWERTY keyboard instead of the dictation bar. On by default.
     var isEnabled: Bool {
-        get { defaults?.bool(forKey: Key.fullKeyboard) ?? false }
+        get { defaults.map { $0.object(forKey: Key.fullKeyboard) as? Bool ?? true } ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.fullKeyboard) }
     }
 
