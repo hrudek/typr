@@ -75,7 +75,6 @@ struct SettingsOrderRows<Item: Hashable, Label: View>: View {
             .accessibilityHidden(true)
     }
 
-    /// Lets the lifted row down: in its new place when the drag ended, back where it was when the drag was taken away.
     private func settle(saving: Bool) {
         if saving, let dragging, dragging != items { items = dragging }
         if !saving { withAnimation(.snappy(duration: 0.25)) { dragging = items } }

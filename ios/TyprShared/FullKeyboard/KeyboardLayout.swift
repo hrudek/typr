@@ -242,7 +242,6 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         )
     }
 
-    /// Only on the letters of a text field: numbers, symbols, URL and email fields have a period of their own.
     private static func showsPeriodKey(_ bottomRow: BottomRow, layer: KeyboardLayer, field: KeyboardFieldKind) -> Bool {
         bottomRow.periodKey && layer == .letters && field == .text
     }
