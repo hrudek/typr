@@ -784,6 +784,28 @@ final class DictationControllerTests: XCTestCase {
         try await transcribed(controller)
     }
 
+    func testInAppDuckFailureLeavesNoKeyboardMessage() async throws {
+        let audio = FakeAudioManager()
+        audio.isOtherAudioPlaying = true
+        audio.duckShouldThrow = true
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        bridge.mediaOnDictation = .lowerVolume
+        let controller = DictationController(
+            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+            transcriberFactory: { transcriber }, autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.startRecording()
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+        XCTAssertFalse(audio.isDucking)
+        controller.finishRecording()
+        try await transcribed(controller)
+        XCTAssertNil(bridge.snapshot().message)
+    }
+
     func testRecordedWAVFixtureIsValidSilentTestInput() throws {
         let bundle = Bundle(for: Self.self)
         let wavURL = try XCTUnwrap(

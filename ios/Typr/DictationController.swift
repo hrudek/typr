@@ -1143,7 +1143,7 @@ final class DictationController {
                             try self.audio.duckOthers(allowBluetooth: self.allowBluetoothMic)
                         } catch {
                             Self.audioLogger.error("Lowering media volume failed: \(error.localizedDescription, privacy: .public)")
-                            self.keyboardMessage = Self.duckFailureMessage
+                            if keyboardJobID != nil { self.keyboardMessage = Self.duckFailureMessage }
                         }
                     }
                     return capture
