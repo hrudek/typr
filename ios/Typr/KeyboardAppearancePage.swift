@@ -50,16 +50,23 @@ struct KeyboardAppearancePage: View {
 
     var body: some View {
         GeometryReader { page in
-            VStack(spacing: 0) {
-                pinnedPreview(in: page.size)
-                Divider().overlay(TyprTheme.borderWeak)
-                ScrollView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Text(fullKeyboard ? "Layout preview below" : "Full keyboard preview below · currently off")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(TyprTheme.textMuted)
                     controls
-                        .frame(maxWidth: 500)
-                        .padding(20)
-                        .padding(.bottom, 20)
-                        .frame(maxWidth: .infinity)
+                    Text("Globe shown where iOS needs it.")
+                        .font(.caption)
+                        .foregroundStyle(TyprTheme.textFaint)
                 }
+                .frame(maxWidth: 500)
+                .padding(20)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                dockedPreview(in: page.size)
             }
         }
         .background(TyprTheme.bgDeep.ignoresSafeArea())
@@ -71,29 +78,22 @@ struct KeyboardAppearancePage: View {
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
-    private func pinnedPreview(in page: CGSize) -> some View {
+    static func dockBackdrop(isDark: Bool) -> Color {
+        Color(uiColor: FullKeyboardPalette(isDark: isDark).backdrop)
+    }
+
+    private func dockedPreview(in page: CGSize) -> some View {
         let settings = preview
         let height = KeyboardLayout.height(for: settings.orientation, showsStrip: settings.showsSuggestionBar)
-        let width = settings.orientation == .portrait ? min(page.width, 440) : page.width
         let scale = min(1, max(page.height - 260, page.height * 0.35) / height)
-        return VStack(spacing: 8) {
-            Text(fullKeyboard ? "Layout preview" : "Full keyboard preview · currently off")
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(TyprTheme.textMuted)
-            KeyboardAppearancePreview(settings: settings)
-                .frame(width: width, height: height)
-                .scaleEffect(scale)
-                .frame(width: width * scale, height: height * scale)
-                .allowsHitTesting(false)
-                .accessibilityElement()
-                .accessibilityLabel(settings.accessibilityLabel)
-            Text("Globe shown where iOS needs it.")
-                .font(.caption)
-                .foregroundStyle(TyprTheme.textFaint)
-        }
-        .padding(.top, 8)
-        .padding(.bottom, 10)
-        .frame(maxWidth: .infinity)
+        return KeyboardAppearancePreview(settings: settings)
+            .frame(width: page.width, height: height)
+            .scaleEffect(scale, anchor: .bottom)
+            .frame(width: page.width, height: height * scale, alignment: .bottom)
+            .allowsHitTesting(false)
+            .accessibilityElement()
+            .accessibilityLabel(settings.accessibilityLabel)
+            .background(Self.dockBackdrop(isDark: settings.isDark).ignoresSafeArea(edges: .bottom))
     }
 
     private var controls: some View {
