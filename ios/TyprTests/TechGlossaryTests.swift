@@ -51,6 +51,22 @@ final class TechGlossaryTests: XCTestCase {
         XCTAssertEqual(fix("Teile das Terminal, die rechte Pain bleibt"), "Teile das Terminal, die rechte pane bleibt")
     }
 
+    func testTyprMisheardFormsAreFixed() {
+        for form in ["Typa", "Taipa", "Teipa", "Typar", "Taiper", "Teiper", "Tiper"] {
+            XCTAssertEqual(fix("Öffne \(form) und diktiere"), "Öffne Typr und diktiere", form)
+        }
+        XCTAssertEqual(fix("die typa-Tastatur"), "die Typr-Tastatur")
+        XCTAssertEqual(fix("Typa's settings"), "Typr's settings")
+    }
+
+    func testTyprRealWordsNeedContext() {
+        XCTAssertEqual(fix("Er ist ein schneller Typer"), "Er ist ein schneller Typer")
+        XCTAssertEqual(fix("Teste die Typer App"), "Teste die Typr App")
+        XCTAssertEqual(fix("Öffne Typa. Der Typer zeigt das Keyboard"), "Öffne Typr. Der Typr zeigt das Keyboard")
+        XCTAssertEqual(fix("Der Tipper aus Taipei mag den Typ"), "Der Tipper aus Taipei mag den Typ")
+        XCTAssertEqual(fix("Type A in die Typ A App"), "Type A in die Typ A App")
+    }
+
     func testGemerktNeedsAGitContext() {
         XCTAssertEqual(fix("Ich habe mir das gemerkt"), "Ich habe mir das gemerkt")
         XCTAssertEqual(fix("Der PR ist gemerkt"), "Der PR ist gemergt")

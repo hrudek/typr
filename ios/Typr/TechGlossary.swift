@@ -16,7 +16,7 @@ import Foundation
 /// possessives, longest phrase first. A user's own term or sounds-like form always wins.
 nonisolated enum TechGlossary {
     /// Recorded in every dictation log entry, so log analysis can tell glossary versions apart.
-    static let revision = "2026-11-09a"
+    static let revision = "2026-11-18a"
     /// Glossary terms named to AI cleanup per dictation, beyond the user's own terms.
     static let maxCleanupTerms = 15
 
@@ -93,7 +93,10 @@ nonisolated enum TechGlossary {
                                                  "Beach to Text", "As Beach to Text", "Text As Beach to Text"]),
         Entry(term: "AI Correction", heardAs: ["AIKorrection", "AI Korrection", "AIKorrektion"], listed: false),
         Entry(term: "Apple Intelligence"),
-        Entry(term: "Typr"),
+        Entry(term: "Typr", heardAs: ["Typa", "Taipa", "Teipa", "Typar", "Taiper", "Teiper", "Tiper"],
+              heardInContext: ["Typer"],
+              context: ["Typr", "App", "Tastatur", "Keyboard", "Diktat", "diktieren", "Dictation",
+                        "TestFlight", "Speech to Text"]),
         // The owner's tools: the pi coding agent and the herdr terminal multiplexer.
         Entry(term: "pi"),
         Entry(term: "pi Agent", heardAs: phrases(piSounds, ["Agent"]), listed: false),
