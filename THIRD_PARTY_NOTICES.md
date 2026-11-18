@@ -633,3 +633,13 @@ Typr's AI cleanup prompt (`ios/Typr/CleanupPrompt.swift`) and its numbers-only s
 `neutralized()` in `src/dictation/caret_prompt.rs`, the default mode prompt in
 `src/app_settings/dictation_processing.rs` and the caret caps in `src/accessibility.rs`.
 MIT, © Christopher Langton, the same license as this repository ([LICENSE](LICENSE)).
+
+## Hex iOS transcript cleanup
+
+Typr's Apple Intelligence cleaner (`ios/Typr/TyprAppleCleaner.swift`) and its answer check
+(`ios/Typr/CleanupGuard.swift`) are taken word for word from
+[anomalyco/hex](https://github.com/anomalyco/hex) at
+`536cffef8d5e508b92e50a31a562edd43803ab22`: `AppleIntelligenceCleaner` (instructions,
+time budget, generation options) and `TranscriptCleanupGuard` in
+the iOS app's `TranscriptCleanup.swift`. MIT, © Christopher Langton, the same license as
+this repository ([LICENSE](LICENSE)).

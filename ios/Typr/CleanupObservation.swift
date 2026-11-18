@@ -3,7 +3,7 @@ import OSLog
 
 /// Only fixed typed reasons may enter observations. In particular, never stringify an Error.
 enum CleanupFailureReason: Equatable, Sendable {
-    case contextWindow, refused, rateLimited, generationFailed, unavailable, deadline, expired, emptyOutput, unjustifiedList, repeatedWord
+    case contextWindow, refused, rateLimited, generationFailed, unavailable, deadline, expired, emptyOutput, unacceptable
 
     var label: String {
         switch self {
@@ -15,8 +15,7 @@ enum CleanupFailureReason: Equatable, Sendable {
         case .deadline: "deadline"
         case .expired: "expired"
         case .emptyOutput: "empty-output"
-        case .unjustifiedList: "unjustified-list"
-        case .repeatedWord: "repeated-word"
+        case .unacceptable: "unacceptable"
         }
     }
 }
@@ -113,8 +112,7 @@ final class CleanupDiagnostics: CleanupObserving {
             case .refused: return "Apple Intelligence refused this text; plain transcript used"
             case .contextWindow: return "too long for Apple Intelligence; plain transcript used"
             case .emptyOutput: return "Apple Intelligence returned nothing; plain transcript used"
-            case .unjustifiedList: return "Apple Intelligence made a list nobody dictated; plain transcript used"
-            case .repeatedWord: return "Apple Intelligence repeated a word; plain transcript used"
+            case .unacceptable: return "Apple Intelligence changed too much; plain transcript used"
             case .expired: return "iOS ended the background time; plain transcript used"
             case .unavailable: return "Apple Intelligence was unavailable"
             case .generationFailed: return "Apple Intelligence failed; plain transcript used"

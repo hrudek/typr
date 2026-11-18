@@ -30,8 +30,9 @@ An explicit engine or language choice never silently falls back to another.
   formatting styles. Cleanup runs on-device with Apple Intelligence (iOS 26+,
   default) or, with your own Anthropic API key (stored in the Keychain), with
   Claude in the cloud; the plain transcript is used whenever cleanup is
-  unavailable. Cleanup sends Hex's dictation rewrite prompt word for word, with
-  the host app and the text around the cursor as context. The full keyboard adds German/English autocorrect and adaptive
+  unavailable. Apple Intelligence cleanup is Hex's iOS cleaner word for word (instructions,
+  options, 2 s budget, answer check); Claude gets Hex's dictation rewrite prompt word for
+  word, with the host app and the text around the cursor as context. The full keyboard adds German/English autocorrect and adaptive
   suggestions.
 
 ## Downloaded model preparation

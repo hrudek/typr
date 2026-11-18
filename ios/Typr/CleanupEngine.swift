@@ -12,6 +12,10 @@ enum CleanupEngine: String, CaseIterable {
         case .anthropic: "Claude"
         }
     }
+
+    var promptRevision: String { self == .anthropic ? CleanupPrompt.revision : CleanupGuard.revision }
+
+    var guardRevision: String { self == .anthropic ? "none" : CleanupGuard.revision }
 }
 
 /// App-only preference in the standard defaults; the next dictation uses it.

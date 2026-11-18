@@ -267,8 +267,8 @@ struct DictationLogEntry: Identifiable, Codable, Equatable, Sendable {
     var cleanupMilliseconds: Int64?
     var modelMilliseconds: Int64?
     var stopToFinalMilliseconds: Int64?
-    var promptRevision = CleanupPrompt.revision
-    var guardRevision = CleanupGuard.revision
+    var promptRevision = CleanupEnginePreferences().engine.promptRevision
+    var guardRevision = CleanupEnginePreferences().engine.guardRevision
 
     /// A selected cleanup path is not proof of a successful AI pass.
     /// Rejected, late, skipped and failed answers must never be presented as revisions.
