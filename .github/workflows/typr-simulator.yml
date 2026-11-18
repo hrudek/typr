@@ -62,7 +62,7 @@ jobs:
     concurrency:
       group: typr-ci-test-${{ github.event_name == 'push' && 'push' || github.ref }}
       cancel-in-progress: ${{ github.event_name == 'push' }}
-    runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
+    runs-on: ${{ vars.MACOS_RUNNER || 'xcode-27' }}
     timeout-minutes: 60
     env:
       APP_CONFIG: ${{ needs.decide.outputs.config }}

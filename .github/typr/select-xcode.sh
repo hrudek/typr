@@ -2,7 +2,7 @@
 # Use XCODE_PATH if set; otherwise keep the image's default Xcode when it is new
 # enough, else switch to the newest installed /Applications/Xcode*.app.
 set -euo pipefail
-minimum=26.2
+minimum=27.0
 version_of() { /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$1/Contents/Info.plist"; }
 at_least() { [[ "$(printf '%s\n%s\n' "$minimum" "$1" | sort -V | head -1)" == "$minimum" ]]; }
 if [[ -n "${XCODE_PATH:-}" ]]; then
