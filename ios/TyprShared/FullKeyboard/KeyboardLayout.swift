@@ -20,6 +20,14 @@ nonisolated enum KeyboardOrientation: Equatable, Sendable {
     case landscape
 }
 
+/// The bottom row's globe where iOS needs one: a key that switches keyboards, an inert spacer
+/// left of 123, or nothing. As a spacer or hidden, holding the 123/ABC key switches keyboards.
+nonisolated enum GlobeKey: String, CaseIterable, Sendable {
+    case switches
+    case spacer
+    case hidden
+}
+
 nonisolated enum KeyKind: Equatable, Hashable, Sendable {
     /// Inserts its text (letters are stored lowercase; shift decides the case).
     case character(String)
@@ -30,6 +38,8 @@ nonisolated enum KeyKind: Equatable, Hashable, Sendable {
     case returnKey
     case typr
     case globe
+    /// Settings' globe spacer: drawn dimmed, does nothing when tapped.
+    case globeSpacer
 }
 
 nonisolated struct KeyboardKey: Equatable, Sendable {
@@ -160,6 +170,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     let layer: KeyboardLayer
     let field: KeyboardFieldKind
     let showsGlobe: Bool
+    let globeKey: GlobeKey
     let horizontalInset: CGFloat
     /// Typr: whether the suggestion bar sits above the keys.
     let showsStrip: Bool
@@ -172,6 +183,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         layer: KeyboardLayer = .letters,
         field: KeyboardFieldKind = .text,
         showsGlobe: Bool = false,
+        globeKey: GlobeKey = .switches,
         horizontalInset: CGFloat = 0,
         showsStrip: Bool = true
     ) {
@@ -180,6 +192,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         self.layer = layer
         self.field = field
         self.showsGlobe = showsGlobe
+        self.globeKey = globeKey
         self.horizontalInset = max(0, horizontalInset)
         self.showsStrip = showsStrip
         let innerWidth = width - 2 * self.horizontalInset
@@ -190,7 +203,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             metrics: metrics,
             layer: layer,
             field: field,
-            showsGlobe: showsGlobe,
+            globe: showsGlobe ? globeKey : .hidden,
             inset: self.horizontalInset
         )
     }
@@ -215,6 +228,9 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     }
 
     var showsBalloons: Bool { orientation == .portrait }
+
+    /// iOS needs a way to the next keyboard and the globe key does not switch: holding 123/ABC does.
+    var layerKeyHoldSwitchesKeyboard: Bool { showsGlobe && globeKey != .switches }
 
     func key(_ kind: KeyKind) -> KeyboardKey? {
         keys.first { $0.kind == kind }
@@ -282,7 +298,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         metrics m: KeyboardMetrics,
         layer: KeyboardLayer,
         field: KeyboardFieldKind,
-        showsGlobe: Bool,
+        globe: GlobeKey,
         inset: CGFloat
     ) -> [KeyboardKey] {
         let innerWidth = width - 2 * inset
@@ -342,8 +358,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         }
         add(.delete, row: 2, x: right - modW, w: modW, label: "delete")
 
-        // Row 4: 123/ABC, globe?, space, field extras (@ . / . /), Typr, return.
-        let isCompactBottomRow = showsGlobe || field != .text
+        let isCompactBottomRow = globe != .hidden || field != .text
         let switchW = isCompactBottomRow ? modW : lw * bottomSwitchWidthRatio
         let returnW = isCompactBottomRow ? (lw * compactReturnWidthRatio) : (lw * returnWidthRatio + m.gap)
         var leading: [(KeyKind, CGFloat, String)] = [
@@ -351,8 +366,10 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
                 ? (.layerSwitch(.numbers), switchW, "123")
                 : (.layerSwitch(.letters), switchW, "ABC"),
         ]
-        if showsGlobe {
-            leading.append((.globe, modW, "globe"))
+        switch globe {
+        case .switches: leading.append((.globe, modW, "globe"))
+        case .spacer: leading.insert((.globeSpacer, modW, "globe"), at: 0)
+        case .hidden: break
         }
         var trailing: [(KeyKind, CGFloat, String)] = []
         switch field {

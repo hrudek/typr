@@ -14,9 +14,12 @@ final class KeyboardLayoutTests: XCTestCase {
             for layer in layers {
                 for field in fields {
                     for globe in [false, true] {
-                        layouts.append(KeyboardLayout(
-                            width: width, layer: layer, field: field, showsGlobe: globe, showsStrip: showsStrip
-                        ))
+                        for globeKey in GlobeKey.allCases {
+                            layouts.append(KeyboardLayout(
+                                width: width, layer: layer, field: field, showsGlobe: globe, globeKey: globeKey,
+                                showsStrip: showsStrip
+                            ))
+                        }
                     }
                 }
             }
@@ -355,12 +358,38 @@ final class KeyboardLayoutTests: XCTestCase {
         ]
     }
 
+    func testGlobeKeyChoicesShapeTheBottomRowOnlyWhereIOSNeedsAGlobe() {
+        for layer in [KeyboardLayer.letters, .numbers] {
+            let layerKey = KeyKind.layerSwitch(layer == .letters ? .numbers : .letters)
+            let switches = KeyboardLayout(width: 393, layer: layer, showsGlobe: true, globeKey: .switches)
+            let spacer = KeyboardLayout(width: 393, layer: layer, showsGlobe: true, globeKey: .spacer)
+            let hidden = KeyboardLayout(width: 393, layer: layer, showsGlobe: true, globeKey: .hidden)
+            let none = KeyboardLayout(width: 393, layer: layer)
+
+            XCTAssertEqual(bottomRow(switches), [layerKey, .globe, .space, .typr, .returnKey])
+            XCTAssertEqual(bottomRow(spacer), [.globeSpacer, layerKey, .space, .typr, .returnKey])
+            XCTAssertEqual(bottomRow(hidden), bottomRow(none))
+            XCTAssertEqual(hidden.keys, none.keys)
+            XCTAssertEqual(spacer.key(.globeSpacer)?.frame.width, switches.key(.globe)?.frame.width)
+            XCTAssertEqual(spacer.key(.space)?.frame.width, switches.key(.space)?.frame.width)
+
+            XCTAssertFalse(switches.layerKeyHoldSwitchesKeyboard)
+            XCTAssertTrue(spacer.layerKeyHoldSwitchesKeyboard)
+            XCTAssertTrue(hidden.layerKeyHoldSwitchesKeyboard)
+        }
+        for globeKey in GlobeKey.allCases {
+            let layout = KeyboardLayout(width: 393, globeKey: globeKey)
+            XCTAssertEqual(layout.keys, KeyboardLayout(width: 393).keys, "\(globeKey)")
+            XCTAssertFalse(layout.layerKeyHoldSwitchesKeyboard)
+        }
+    }
+
     private func bottomRow(_ layout: KeyboardLayout) -> [KeyKind] {
         layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }.map(\.kind)
     }
 
     private func describe(_ layout: KeyboardLayout) -> String {
-        "\(layout.width)pt \(layout.orientation) \(layout.layer) \(layout.field) globe=\(layout.showsGlobe) strip=\(layout.showsStrip)"
+        "\(layout.width)pt \(layout.orientation) \(layout.layer) \(layout.field) globe=\(layout.showsGlobe) \(layout.globeKey) strip=\(layout.showsStrip)"
     }
 }
 

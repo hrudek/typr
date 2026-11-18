@@ -105,6 +105,39 @@ final class FullKeyboardEngineTests: XCTestCase {
         XCTAssertEqual(engine.layout.layer, .letters)
     }
 
+    func testHoldingNumbersSwitchesKeyboardsOnlyWhenTheGlobeDoesNot() {
+        engine.showsGlobe = true
+        for globeKey in GlobeKey.allCases {
+            engine.globeKey = globeKey
+            let layerKey = point(.layerSwitch(.numbers))
+            engine.touchBegan(id: 1, at: layerKey)
+            XCTAssertEqual(engine.takeNextKeyboardHold(forTouch: 1), globeKey != .switches, "\(globeKey)")
+            engine.touchEnded(id: 1, at: layerKey)
+            if globeKey == .switches { tap(.layerSwitch(.letters)) }
+            XCTAssertEqual(engine.layout.layer, .letters, "\(globeKey)")
+            XCTAssertTrue(engine.touches.isEmpty)
+        }
+        XCTAssertEqual(target.text, "")
+    }
+
+    func testHoldingNumbersThenSlidingAwayStillTypesThePunctuation() {
+        engine.showsGlobe = true
+        engine.globeKey = .hidden
+        down(1, .layerSwitch(.numbers))
+        engine.touchMoved(id: 1, to: point(.character(".")))
+        XCTAssertFalse(engine.takeNextKeyboardHold(forTouch: 1))
+        engine.touchEnded(id: 1, at: point(.character(".")))
+        XCTAssertEqual(target.text, ".")
+    }
+
+    func testGlobeSpacerDoesNothingWhenTapped() {
+        engine.showsGlobe = true
+        engine.globeKey = .spacer
+        tap(.globeSpacer)
+        XCTAssertEqual(target.text, "")
+        XCTAssertEqual(engine.layout.layer, .letters)
+    }
+
     func testNumbersStayUntilSpace() {
         tap(.layerSwitch(.numbers))
         XCTAssertEqual(engine.layout.layer, .numbers)

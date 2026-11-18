@@ -103,7 +103,8 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         typrKey.onMenuDrag = { [weak self] point in self?.forwardMenuPoint(point, release: false) }
         typrKey.onMenuRelease = { [weak self] point in self?.forwardMenuPoint(point, release: true) }
 
-        plane.onKeyDown = { [weak self] _ in self?.keyFeedback() }
+        plane.onKeyDown = { [weak self] kind in if kind != .globeSpacer { self?.keyFeedback() } }
+        plane.onNextKeyboard = { [weak self] in self?.model.onNextKeyboard?() }
         plane.onAccentMenuOpened = { [weak self] in self?.selectionFeedback() }
         engine.onSelectionStep = { [weak self] in self?.selectionFeedback() }
         engine.onChange = { [weak self] in self?.engineChanged() }
@@ -427,8 +428,9 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     private func refreshFromModel() {
         typrKey.isWarm = model.hasFullAccess && model.isWarmAvailable
-        if engine.showsGlobe != model.needsGlobeKey {
+        if engine.showsGlobe != model.needsGlobeKey || engine.globeKey != model.globeKey {
             engine.showsGlobe = model.needsGlobeKey
+            engine.globeKey = model.globeKey
             setNeedsLayout()
         }
         let recording = model.stagePhase == .recording || model.stagePhase == .transcribing
