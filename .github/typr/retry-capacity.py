@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Retry a single unallocated hosted macOS job, never a test/code failure.
 
-Runs from trusted main only. GitHub run_attempt bounds retries, including
+Runs from trusted dev only. GitHub run_attempt bounds retries, including
 manual reruns. No branch code, signing secret, or agent is used here.
 """
 import json
