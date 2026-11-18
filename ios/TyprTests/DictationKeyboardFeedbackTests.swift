@@ -140,11 +140,11 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         XCTAssertEqual(entry.recognized?.text, "uh original")
     }
 
-    func testDefaultOnAndFreshInsertedExactMatchingOnly() {
+    func testDefaultOffAndFreshInsertedExactMatchingOnly() {
         let suite = "feedback.defaults.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertTrue(TyprSettings(defaults: defaults).dictationFeedbackStrip)
+        XCTAssertFalse(TyprSettings(defaults: defaults).dictationFeedbackStrip)
         let offer = DictationFeedbackOffer(resultID: UUID().uuidString, jobID: UUID().uuidString,
             entryID: UUID(), archiveID: UUID(), generation: UUID(), expiresAt: Date().addingTimeInterval(600))
         let permission = DictationFeedbackPermission(archiveID: offer.archiveID, generation: offer.generation, enabled: true)
