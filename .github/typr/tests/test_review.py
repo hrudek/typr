@@ -27,8 +27,8 @@ class ReviewWorkflowTest(unittest.TestCase):
 
     def test_verdict_follows_findings(self):
         self.assertIn("count=$(jq '.findings | length'", SOURCE)
-        self.assertIn('Typr review: PASS', SOURCE)
-        self.assertIn('Typr review: FIX', SOURCE)
+        self.assertIn('Review: PASS', SOURCE)
+        self.assertIn('Review: FIX', SOURCE)
         self.assertIn('exit 1', SOURCE)
 
     def test_no_agent_starts_from_issues_or_comments(self):

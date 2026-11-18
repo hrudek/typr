@@ -5,14 +5,14 @@
 #   ├─ sticky PR comment says "reviewing <sha>"
 #   ├─ Claude (Opus, read-only tools) reviews the full PR diff against main
 #   └─ one unambiguous verdict, for exactly that commit:
-#      ├─ ✅ PASS: nothing to fix          → check "Typr review" green
-#      └─ ❌ FIX:  numbered list of fixes  → check "Typr review" red
+#      ├─ ✅ PASS: nothing to fix          → check "Review" green
+#      └─ ❌ FIX:  numbered list of fixes  → check "Review" red
 #
 # pull_request_target: this file and the token come from main, so a PR cannot change
 # its own reviewer. The PR head is checked out only to be read; nothing from it runs.
 # Same-repository PRs only. A newer commit cancels the running review of the older one.
-name: Typr review
-run-name: "Typr review · PR #${{ github.event.pull_request.number }} · ${{ github.event.pull_request.head.sha }}"
+name: Review
+run-name: "Review · PR #${{ github.event.pull_request.number }} · ${{ github.event.pull_request.head.sha }}"
 
 on:
   pull_request_target:
@@ -28,7 +28,7 @@ concurrency:
 
 jobs:
   review:
-    name: Typr review
+    name: Review
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -47,7 +47,7 @@ jobs:
       - name: Mark the review comment as in progress
         run: |
           set -euo pipefail
-          body=$(printf '%s\n## ⏳ Typr review: reviewing `%s` …\n\nThe verdict for this commit appears here when the review finishes ([run](%s)).\n' \
+          body=$(printf '%s\n## ⏳ Review: reviewing `%s` …\n\nThe verdict for this commit appears here when the review finishes ([run](%s)).\n' \
             "$MARKER" "${HEAD_SHA:0:8}" "$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID")
           id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | tail -1)
@@ -140,10 +140,10 @@ jobs:
             count=$(jq '.findings | length' <<<"$RESULT")
             if (( count == 0 )); then
               verdict=pass
-              head="## ✅ Typr review: PASS — nothing to fix (\`$short\`)"
+              head="## ✅ Review: PASS — nothing to fix (\`$short\`)"
             else
               verdict=fix
-              head="## ❌ Typr review: FIX — $count thing(s) to fix (\`$short\`)"
+              head="## ❌ Review: FIX — $count thing(s) to fix (\`$short\`)"
             fi
             details=$(jq -r '
               (.summary // "") + "\n"
@@ -157,7 +157,7 @@ jobs:
                 else "" end)' <<<"$RESULT")
           else
             verdict=error
-            head="## ⚠️ Typr review: NO RESULT for \`$short\`"
+            head="## ⚠️ Review: NO RESULT for \`$short\`"
             details="The review did not finish (usage limit, timeout or error). Re-run the failed job: $run_url"
           fi
           body=$(printf '%s\n%s\n\n%s\n\n<sub>Reviewed commit %s · [run](%s) · a new commit starts a new review.</sub>\n' \
@@ -172,6 +172,6 @@ jobs:
           printf '%s\n\n%s\n' "$head" "$details" >> "$GITHUB_STEP_SUMMARY"
           case "$verdict" in
             pass) echo "PASS: nothing to fix." ;;
-            fix) echo "::error::Typr review: $count thing(s) to fix (see the PR comment)."; exit 1 ;;
-            *) echo "::error::Typr review produced no result."; exit 1 ;;
+            fix) echo "::error::Review: $count thing(s) to fix (see the PR comment)."; exit 1 ;;
+            *) echo "::error::Review produced no result."; exit 1 ;;
           esac
