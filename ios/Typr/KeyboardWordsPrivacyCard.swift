@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Settings > Keyboard > Words and privacy, enabled whatever Full keyboard and learning are set to.
 struct KeyboardWordsPrivacyCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var personalLearning = TyprSettings().personalLearning

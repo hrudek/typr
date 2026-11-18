@@ -309,7 +309,6 @@ struct SettingsFooter: View {
     }
 }
 
-/// A collapsed explanation inside a settings card.
 struct SettingsDisclosure: View {
     let title: String
     let text: String

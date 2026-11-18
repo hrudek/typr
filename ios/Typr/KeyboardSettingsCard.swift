@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Settings > Keyboard: the master switch, everyday typing switches and links to the detail pages.
 struct KeyboardSettingsCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
@@ -142,7 +141,6 @@ extension BottomKey {
     }
 }
 
-/// Uses the same checkmark rows as dictation language, but each choice is independent and both may be off.
 struct AutocorrectLanguageSettingsCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var german = TyprSettings().autocorrectGerman
