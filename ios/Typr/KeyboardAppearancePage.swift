@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Settings > Keyboard > Appearance: the full keyboard's look, with a live preview pinned above the controls.
-/// Every change is saved right away, like the other keyboard settings.
 struct KeyboardAppearancePage: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -234,7 +232,6 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
     }
 }
 
-/// An empty sentence field that ignores every edit.
 @MainActor
 final class KeyboardPreviewTextTarget: KeyboardTextTarget {
     var documentContextBeforeInput: String? { nil }
