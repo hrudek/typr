@@ -410,7 +410,7 @@ final class DictationLogStoreTests: XCTestCase {
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: disk.url.path))
         let result: Result<URL, any Error> = await withCheckedContinuation { continuation in
-            disk.export(ids: nil, build: "synthetic-test") { continuation.resume(returning: $0) }
+            disk.export(build: "synthetic-test") { continuation.resume(returning: $0) }
         }
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: result.get())) as? [String: Any])
         let exported = try XCTUnwrap(object["entries"] as? [[String: Any]]).compactMap { $0["id"] as? String }

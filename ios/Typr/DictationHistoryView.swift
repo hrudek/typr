@@ -101,7 +101,7 @@ struct DictationHistoryView: View {
                 Button("Retry keyboard feedback", systemImage: "arrow.clockwise") { store.retryKeyboardFeedback() }
             }
             SettingsToggle(title: "Keep dictation history",
-                           detail: "Saves the text of each dictation and your feedback on this iPhone. No audio.",
+                           detail: "Saves the text of each dictation and your feedback on this iPhone for 10 days. No audio.",
                            isOn: Binding(get: { store.isEnabled }, set: { store.setEnabled($0) }))
                 .listRowInsets(EdgeInsets())
             if let problem = store.storageProblem {
