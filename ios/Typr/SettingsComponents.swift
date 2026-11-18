@@ -47,7 +47,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
     static func snapshotDestination(arguments: [String]) -> Self? {
         guard let index = arguments.firstIndex(of: "--snap-state"), index + 1 < arguments.count else { return nil }
         let scene = arguments[index + 1]
-        if scene == "settings-keyboard-typing" || scene == "settings-keyboard-off" { return .keyboard }
+        if scene == "settings-keyboard-typing" { return .keyboard }
         if scene.hasPrefix("settings-keyboard-appearance-") { return .keyboardAppearance }
         if scene == historySampleScene || scene == historyDetailScene { return .history }
         if StatisticsFixture.launchFixture(arguments: arguments) != nil { return .statistics }

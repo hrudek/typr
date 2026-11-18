@@ -177,19 +177,16 @@ final class KeyboardViewController: UIInputViewController {
         mountSurface()
     }
 
-    /// The dictation bar, or the full keyboard when its experiment is on (iPhone only).
-    /// The compact bar is shown when it was picked; switching is always available.
-    /// Only switches while idle.
     private func mountSurface() {
-        let experimentOn = FullKeyboardSettings().isEnabled && UIDevice.current.userInterfaceIdiom == .phone
+        let isPhone = UIDevice.current.userInterfaceIdiom == .phone
         let wantsFull = KeyboardSurfaceChoice.wantsFullKeyboard(
-            experimentOn: experimentOn,
+            isPhone: isPhone,
             compactChosen: KeyboardSurfaceChoice().showsCompactBar
         )
-        if viewModel.showsFullKeyboardSwitch != experimentOn {
-            viewModel.showsFullKeyboardSwitch = experimentOn
+        if viewModel.showsFullKeyboardSwitch != isPhone {
+            viewModel.showsFullKeyboardSwitch = isPhone
         }
-        fullKeyboard?.allowsCompactBar = experimentOn
+        fullKeyboard?.allowsCompactBar = isPhone
         guard surface == nil || wantsFull != (fullKeyboard != nil) else { return }
         guard surface == nil || viewModel.stagePhase == .idle || viewModel.stagePhase == .failed else { return }
 
@@ -229,7 +226,7 @@ final class KeyboardViewController: UIInputViewController {
             )
             keyboard.hostController = self
             keyboard.allowsHaptics = { [weak self] in self?.hasFullAccess ?? false }
-            keyboard.allowsCompactBar = experimentOn
+            keyboard.allowsCompactBar = isPhone
             keyboard.onShowCompactBar = { [weak self] in self?.switchSurface(toCompactBar: true) }
             fullKeyboard = keyboard
             // Surface switches can create a keyboard without another viewWillAppear callback.

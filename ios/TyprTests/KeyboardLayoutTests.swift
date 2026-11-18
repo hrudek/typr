@@ -645,21 +645,14 @@ final class KeyboardLayoutTests: XCTestCase {
 
 @MainActor
 final class FullKeyboardSettingsTests: XCTestCase {
-    func testFullKeyboardAndAutocorrectAreOnByDefault() throws {
+    func testAutocorrectAndSwipeTypingAreOnByDefault() throws {
         let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = FullKeyboardSettings(defaults: defaults)
 
-        XCTAssertTrue(settings.isEnabled)
         XCTAssertTrue(settings.autocorrect)
         XCTAssertTrue(settings.swipeTyping)
-
-        settings.isEnabled = false
-        settings.applyLaunchArguments(["Typr"])
-        XCTAssertFalse(settings.isEnabled)
-        settings.applyLaunchArguments(["Typr", FullKeyboardSettings.launchArgument])
-        XCTAssertTrue(settings.isEnabled)
 
         settings.autocorrect = false
         XCTAssertFalse(FullKeyboardSettings(defaults: defaults).autocorrect)
@@ -692,9 +685,5 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertEqual(FullKeyboardSettings(defaults: defaults).bottomRow, arranged)
         defaults.set(["typr", "emoji"], forKey: "settings.keyboardBottomRowOrder")
         XCTAssertEqual(settings.bottomRow.order, [.space, .period, .typr])
-    }
-
-    func testNoAppGroupReadsAsOff() {
-        XCTAssertFalse(FullKeyboardSettings(defaults: nil).isEnabled)
     }
 }

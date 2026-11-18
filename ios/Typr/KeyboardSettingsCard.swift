@@ -5,29 +5,21 @@ struct KeyboardSettingsCard: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
     private let defaults: UserDefaults?
-    @State private var fullKeyboard: Bool
     @State private var autocorrect: Bool
     @State private var swipeTyping: Bool
     @State private var autocorrectGerman: Bool
     @State private var autocorrectEnglish: Bool
-    @State private var design: KeyboardDesign
-    @State private var periodKey: Bool
 
     static let swipeNotice = "Swipe typing powered by FUTO Swipe."
-    static let fullKeyboardOffFooter = "Off uses the dictation bar. Your typing and appearance settings are kept."
-    static let assistanceOffFooter = "Turn on Full keyboard to use typing assistance."
 
     init(defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup)) {
         self.defaults = defaults
         let keyboard = FullKeyboardSettings(defaults: defaults)
         let typr = TyprSettings(defaults: defaults)
-        _fullKeyboard = State(initialValue: keyboard.isEnabled)
         _autocorrect = State(initialValue: keyboard.autocorrect)
         _swipeTyping = State(initialValue: keyboard.swipeTyping)
         _autocorrectGerman = State(initialValue: typr.autocorrectGerman)
         _autocorrectEnglish = State(initialValue: typr.autocorrectEnglish)
-        _design = State(initialValue: keyboard.design)
-        _periodKey = State(initialValue: keyboard.bottomRow.periodKey)
     }
 
     private var keyboardSettings: FullKeyboardSettings { FullKeyboardSettings(defaults: defaults) }
@@ -35,25 +27,17 @@ struct KeyboardSettingsCard: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            VStack(alignment: .leading, spacing: 8) {
-                SettingsSection {
-                    SettingsToggle(title: "Full keyboard", detail: "Type with Typr. Hold the Typr key to dictate.", isOn: $fullKeyboard)
-                        .onChange(of: fullKeyboard) { _, enabled in keyboardSettings.isEnabled = enabled }
-                    SettingsDivider()
-                    NavigationLink(value: SettingsDestination.keyboardAppearance) {
-                        SettingsLink(title: "Appearance", detail: "Design, suggestion bar, globe key and bottom row",
-                                     value: KeyboardAppearancePage.summary(design: design, periodKey: periodKey))
-                    }
-                    .buttonStyle(.plain)
+            SettingsSection {
+                NavigationLink(value: SettingsDestination.keyboardAppearance) {
+                    SettingsLink(title: "Appearance", detail: "Design, suggestion bar, globe key and bottom row")
                 }
-                if !fullKeyboard { SettingsFooter(Self.fullKeyboardOffFooter) }
+                .buttonStyle(.plain)
             }
 
             VStack(alignment: .leading, spacing: 8) {
                 SettingsSection(title: "Typing assistance") {
                     SettingsToggle(title: "Autocorrect", detail: "Correct contractions, shortcuts and small typos on space.", isOn: $autocorrect)
                         .onChange(of: autocorrect) { _, enabled in keyboardSettings.autocorrect = enabled }
-                        .enabled(fullKeyboard)
                     SettingsDivider()
                     NavigationLink(value: SettingsDestination.autocorrectLanguages) {
                         SettingsLink(title: "Autocorrect languages", detail: "Choose the languages autocorrect uses",
@@ -61,13 +45,11 @@ struct KeyboardSettingsCard: View {
                                         german: autocorrectGerman, english: autocorrectEnglish))
                     }
                     .buttonStyle(.plain)
-                    .enabled(fullKeyboard && autocorrect)
+                    .enabled(autocorrect)
                     SettingsDivider()
                     SettingsToggle(title: "Swipe typing", detail: "Slide across the letters to type a word.", isOn: $swipeTyping)
                         .onChange(of: swipeTyping) { _, enabled in keyboardSettings.swipeTyping = enabled }
-                        .enabled(fullKeyboard)
                 }
-                if !fullKeyboard { SettingsFooter(Self.assistanceOffFooter) }
                 // Required end-user notice of the FUTO Model Weights License (SwipeModel/LICENSE-FUTO-SWIPE.txt).
                 SettingsFooter(Self.swipeNotice)
             }
@@ -96,13 +78,10 @@ struct KeyboardSettingsCard: View {
     }
 
     private func refresh() {
-        fullKeyboard = keyboardSettings.isEnabled
         autocorrect = keyboardSettings.autocorrect
         swipeTyping = keyboardSettings.swipeTyping
         autocorrectGerman = typrSettings.autocorrectGerman
         autocorrectEnglish = typrSettings.autocorrectEnglish
-        design = keyboardSettings.design
-        periodKey = keyboardSettings.bottomRow.periodKey
     }
 }
 

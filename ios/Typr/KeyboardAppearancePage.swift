@@ -5,7 +5,6 @@ struct KeyboardAppearancePage: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var fullKeyboard = FullKeyboardSettings().isEnabled
     @State private var design = FullKeyboardSettings().design
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
     @State private var globeKey = FullKeyboardSettings().globeKey
@@ -33,10 +32,6 @@ struct KeyboardAppearancePage: View {
         return screen?.traitCollection.userInterfaceStyle != .light
     }
 
-    static func summary(design: KeyboardDesign, periodKey: Bool) -> String {
-        "\(design.title) · Period \(periodKey ? "on" : "off")"
-    }
-
     private var preview: KeyboardAppearancePreview.Settings {
         KeyboardAppearancePreview.Settings(
             design: design,
@@ -52,7 +47,7 @@ struct KeyboardAppearancePage: View {
         GeometryReader { page in
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    Text(fullKeyboard ? "Layout preview below" : "Full keyboard preview below · currently off")
+                    Text("Layout preview below")
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(TyprTheme.textMuted)
                     controls
@@ -162,7 +157,6 @@ struct KeyboardAppearancePage: View {
     }
 
     private func refresh() {
-        fullKeyboard = FullKeyboardSettings().isEnabled
         design = FullKeyboardSettings().design
         hideSuggestionBar = TyprSettings().hideSuggestionBar
         globeKey = FullKeyboardSettings().globeKey

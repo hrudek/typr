@@ -1900,9 +1900,8 @@ final class DictationController {
             controller.warmDuration = .off
             controller.keyboardSessionEnabled = false
 
-        case "settings-keyboard-typing", "settings-keyboard-off":
+        case "settings-keyboard-typing":
             #if targetEnvironment(simulator)
-            FullKeyboardSettings().isEnabled = scene == "settings-keyboard-typing"
             FullKeyboardSettings().autocorrect = true
             TyprSettings().autocorrectGerman = true
             TyprSettings().autocorrectEnglish = true

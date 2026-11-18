@@ -6,15 +6,9 @@ nonisolated enum KeyboardDesign: String, CaseIterable, Sendable {
 }
 
 /// The full keyboard's switches in the shared App Group.
-///
-/// Without Full Access the keyboard cannot read the App Group, so `isEnabled` reads
-/// `false` there and the keyboard keeps today's setup card.
 @MainActor
 struct FullKeyboardSettings {
-    static let launchArgument = "--experiment-full-keyboard"
-
     private enum Key {
-        static let fullKeyboard = "experiments.fullKeyboard"
         static let autocorrect = "settings.keyboardAutocorrect"
         static let swipeTyping = "settings.keyboardSwipeTyping"
         static let globeKey = "settings.keyboardGlobeKey"
@@ -27,12 +21,6 @@ struct FullKeyboardSettings {
 
     init(defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup)) {
         self.defaults = defaults
-    }
-
-    /// Typr shows a full QWERTY keyboard instead of the dictation bar. On by default.
-    var isEnabled: Bool {
-        get { defaults.map { $0.object(forKey: Key.fullKeyboard) as? Bool ?? true } ?? false }
-        nonmutating set { defaults?.set(newValue, forKey: Key.fullKeyboard) }
     }
 
     /// Cautious autocorrect on space. On by default.
@@ -71,12 +59,5 @@ struct FullKeyboardSettings {
     var design: KeyboardDesign {
         get { defaults?.string(forKey: Key.design).flatMap(KeyboardDesign.init(rawValue:)) ?? .standard }
         nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.design) }
-    }
-
-    /// Simulator scenes pass `--experiment-full-keyboard` to turn the experiment on.
-    func applyLaunchArguments(_ arguments: [String] = ProcessInfo.processInfo.arguments) {
-        if arguments.contains(Self.launchArgument) {
-            isEnabled = true
-        }
     }
 }
