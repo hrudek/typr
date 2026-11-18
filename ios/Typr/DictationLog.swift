@@ -267,8 +267,8 @@ struct DictationLogEntry: Identifiable, Codable, Equatable, Sendable {
     var cleanupMilliseconds: Int64?
     var modelMilliseconds: Int64?
     var stopToFinalMilliseconds: Int64?
-    var promptRevision = CleanupEnginePreferences().engine.promptRevision
-    var guardRevision = CleanupEnginePreferences().engine.guardRevision
+    var promptRevision = CleanupGuard.revision
+    var guardRevision = CleanupGuard.revision
 
     /// A selected cleanup path is not proof of a successful AI pass.
     /// Rejected, late, skipped and failed answers must never be presented as revisions.
@@ -498,7 +498,10 @@ final class DictationLogStore {
                stoppedAt: ContinuousClock.Instant? = nil,
                clock: @escaping @MainActor () -> ContinuousClock.Instant = { .now }) -> DictationLogRecording? {
         guard token.enabled, isEnabled, token.epoch == epoch else { return nil }
-        let entry = DictationLogEntry(context: context)
+        var entry = DictationLogEntry(context: context)
+        let engine = CleanupEnginePreferences().engine
+        entry.promptRevision = engine.promptRevision
+        entry.guardRevision = engine.guardRevision
         active.insert(entry.id); put(entry)
         return DictationLogRecording(entryID: entry.id, epoch: epoch, store: self, stoppedAt: stoppedAt, clock: clock)
     }
