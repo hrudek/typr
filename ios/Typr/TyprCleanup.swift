@@ -215,6 +215,9 @@ final class CleanupCoordinator {
                         if cleaned.isEmpty {
                             diagnostics?.modelAnswer(answer, use: .rejected(.emptyOutput), modelMilliseconds: modelMilliseconds)
                             resolve(job.id, value: raw, outcome: .failed(.emptyOutput))
+                        } else if let reason = CleanupGuard.rejection(answer: cleaned, transcript: raw) {
+                            diagnostics?.modelAnswer(answer, use: .rejected(reason), modelMilliseconds: modelMilliseconds)
+                            resolve(job.id, value: raw, outcome: .failed(reason))
                         } else {
                             let changed = cleaned != raw.trimmingCharacters(in: .whitespacesAndNewlines)
                             dependencies.observer.recordChange(changed)
