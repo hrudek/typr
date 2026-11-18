@@ -229,23 +229,32 @@ final class KeyboardLayoutTests: XCTestCase {
         let face = MechanicalKeycap(isDark: true).faceRect(joined.frame)
         let y = face.midY
         let centre = joined.mechanicalSeamX(atY: y, face: face)
+        let scale: CGFloat = 3
         for isDark in [false, true] {
             let palette = FullKeyboardPalette(isDark: isDark, design: .mechanical)
             let format = UIGraphicsImageRendererFormat()
-            format.scale = 1
+            format.scale = scale
+            format.opaque = true
             let image = UIGraphicsImageRenderer(bounds: joined.frame, format: format).image { renderer in
+                palette.backdrop.setFill()
+                renderer.fill(joined.frame)
                 joined.draw(in: renderer.cgContext, palette: palette, spacePressed: false, typrPressed: false)
             }
             let cgImage = try XCTUnwrap(image.cgImage)
             let data = try XCTUnwrap(cgImage.dataProvider?.data as Data?)
-            func brightness(dx: CGFloat, dy: CGFloat = 0) -> Int {
-                let x = Int(centre + dx - joined.frame.minX), row = Int(y + dy - joined.frame.minY)
+            func brightness(dx: CGFloat) -> Int {
+                let x = Int((centre + dx - joined.frame.minX) * scale), row = Int((y - joined.frame.minY) * scale)
                 let offset = row * cgImage.bytesPerRow + x * cgImage.bitsPerPixel / 8
                 return Int(data[offset]) + Int(data[offset + 1]) + Int(data[offset + 2])
             }
-            // The gap is darkest in the middle and fades toward its edges instead of a flat bar.
-            let half = MechanicalKeycap.seamGap / 2
-            XCTAssertLessThan(brightness(dx: 0), brightness(dx: half - 0.5))
+            let reach = MechanicalKeycap.seamGap / 2 - 0.4
+            for sign: CGFloat in [-1, 1] {
+                let samples = stride(from: CGFloat(0), through: reach, by: 1 / scale).map { brightness(dx: sign * $0) }
+                XCTAssertLessThan(samples[0], samples[samples.count - 1])
+                XCTAssertEqual(samples, samples.sorted())
+                let step = zip(samples, samples.dropFirst()).map { $1 - $0 }.max() ?? 0
+                XCTAssertLessThan(step, (samples[samples.count - 1] - samples[0]) / 2)
+            }
         }
     }
 
