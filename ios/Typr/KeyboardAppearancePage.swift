@@ -89,7 +89,7 @@ struct KeyboardAppearancePage: View {
         return KeyboardAppearancePreview(settings: settings)
             .frame(width: page.width, height: height)
             .scaleEffect(scale, anchor: .bottom)
-            .frame(width: page.width, height: height * scale)
+            .frame(width: page.width, height: height * scale, alignment: .bottom)
             .allowsHitTesting(false)
             .accessibilityElement()
             .accessibilityLabel(settings.accessibilityLabel)

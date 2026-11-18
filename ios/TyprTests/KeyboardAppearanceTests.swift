@@ -52,8 +52,16 @@ final class KeyboardAppearanceTests: XCTestCase {
     }
 
     func testPreviewIsDockedFullWidthAtTheBottomAndScrollEndsAboveIt() async throws {
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 393, height: 852))
+    }
+
+    func testScaledCompactPreviewStaysOnScreenFlushWithTheBottom() async throws {
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 300))
+    }
+
+    private func assertDocked(in bounds: CGRect) async throws {
         let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        let window = UIWindow(frame: bounds)
         window.rootViewController = host
         window.isHidden = false
         defer {
@@ -67,6 +75,7 @@ final class KeyboardAppearanceTests: XCTestCase {
         let views = Self.subviews(of: host.view)
         let keyboard = try XCTUnwrap(views.compactMap { $0 as? FullKeyboardView }.first)
         let frame = keyboard.convert(keyboard.bounds, to: window)
+        XCTAssertGreaterThanOrEqual(frame.minY, -1)
         XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
         XCTAssertEqual(frame.width, window.bounds.width, accuracy: 0.5)
         XCTAssertEqual(frame.maxY, window.bounds.height - window.safeAreaInsets.bottom, accuracy: 1)
