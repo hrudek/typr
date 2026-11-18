@@ -53,8 +53,6 @@ struct FullKeyboardPalette: Equatable {
         guard design == .mechanical else { return textBase }
         return isDark ? Self.rgb(0xA8A8A8) : Self.rgb(0x5A5D64)
     }
-    /// Secondary fill for non-key chips and the recording panel's cancel pill.
-    var functionFill: UIColor { isDark ? UIColor(white: 1, alpha: 0.07) : UIColor(white: 0, alpha: 0.065) }
     var keyShadow: UIColor { .clear }
 
     /// The joined space/Typr outline and seam (`#767676` in the dark reference).

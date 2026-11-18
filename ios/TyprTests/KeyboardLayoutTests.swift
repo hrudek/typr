@@ -259,6 +259,19 @@ final class KeyboardLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testPanelKeysShareLetterKeyFill() {
+        for design in [KeyboardDesign.standard, .mechanical] {
+            for isDark in [false, true] {
+                let palette = FullKeyboardPalette(isDark: isDark, design: design)
+                for button in [PanelKeyButton(), PanelKeyButton()] {
+                    button.palette = palette
+                    XCTAssertEqual(button.fill, palette.keyFill)
+                }
+            }
+        }
+    }
+
+    @MainActor
     func testDarkPaletteMatchesReferenceColors() {
         let dark = FullKeyboardPalette(isDark: true)
         func hex(_ color: UIColor) -> String {

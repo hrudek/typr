@@ -220,7 +220,6 @@ final class TyprKeyRecordingPanel: UIView {
         cancelButton.accessibilityLabel = "Cancel dictation"
         cancelButton.addTarget(self, action: #selector(cancel), for: .touchUpInside)
         doneButton.title = "Done"
-        doneButton.isPrimary = true
         doneButton.accessibilityLabel = "Done"
         doneButton.addTarget(self, action: #selector(done), for: .touchUpInside)
 
@@ -245,7 +244,6 @@ final class TyprKeyRecordingPanel: UIView {
         clockLabel.text = isTranscribing ? "Transcribing" : clock
         clockLabel.textColor = isTranscribing ? palette.textMuted : palette.textBase
         doneButton.title = isTranscribing ? "Inserting…" : "Done"
-        doneButton.isPrimary = !isTranscribing
         doneButton.isEnabled = !isTranscribing
         let config = UIImage.SymbolConfiguration(pointSize: 9, weight: .semibold)
         styleButton.setImage(
@@ -315,7 +313,6 @@ final class PanelKeyButton: UIControl {
     var palette = FullKeyboardPalette(isDark: false) { didSet { setNeedsDisplay() } }
     var title: String? { didSet { setNeedsDisplay() } }
     var symbol: String? { didSet { setNeedsDisplay() } }
-    var isPrimary = false { didSet { setNeedsDisplay() } }
     var cornerRadius: CGFloat = FullKeyboardPalette.cornerRadius { didSet { setNeedsDisplay() } }
 
     override init(frame: CGRect) {
@@ -331,14 +328,13 @@ final class PanelKeyButton: UIControl {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    var fill: UIColor { isHighlighted ? palette.keyPressedFill : palette.keyFill }
+
     override var isEnabled: Bool { didSet { setNeedsDisplay() } }
     @objc private func redraw() { setNeedsDisplay() }
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
-        let fill: UIColor = isHighlighted
-            ? palette.keyPressedFill
-            : (isPrimary ? palette.keyFill : palette.functionFill)
         context.fillKeycap(bounds, palette: palette, fill: fill, radius: cornerRadius)
         let ink = isEnabled ? palette.keyGlyph : palette.textMuted
         if let symbol {
