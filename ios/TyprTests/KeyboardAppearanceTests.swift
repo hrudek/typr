@@ -51,6 +51,30 @@ final class KeyboardAppearanceTests: XCTestCase {
         XCTAssertEqual(views.filter { $0 is UISwitch }.count, 2)
     }
 
+    func testPreviewIsDockedFullWidthAtTheBottomAndScrollEndsAboveIt() async throws {
+        let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        window.rootViewController = host
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        try await waitForState("the page mounts its preview") {
+            host.view.layoutIfNeeded()
+            return Self.subviews(of: host.view).contains { $0 is FullKeyboardView }
+        }
+        let views = Self.subviews(of: host.view)
+        let keyboard = try XCTUnwrap(views.compactMap { $0 as? FullKeyboardView }.first)
+        let frame = keyboard.convert(keyboard.bounds, to: window)
+        XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
+        XCTAssertEqual(frame.width, window.bounds.width, accuracy: 0.5)
+        XCTAssertEqual(frame.maxY, window.bounds.height - window.safeAreaInsets.bottom, accuracy: 1)
+        let scroll = try XCTUnwrap(views.compactMap { $0 as? UIScrollView }.first { $0.bounds.height > 300 })
+        let visibleBottom = scroll.convert(scroll.bounds, to: window).maxY - scroll.adjustedContentInset.bottom
+        XCTAssertLessThanOrEqual(visibleBottom, frame.minY + 1)
+    }
+
     func testPreviewDrawsEveryAppearanceSetting() async throws {
         let view = KeyboardAppearancePreview.makeKeyboard(base)
         view.frame = CGRect(x: 0, y: 0, width: 393, height: view.preferredHeight)
