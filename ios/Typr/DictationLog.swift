@@ -573,7 +573,6 @@ final class DictationLogStore {
     }
     func loadRecent() { for row in metadata.prefix(Self.maximumEntries) { loadEntry(row.id) } }
     /// nil preserves a field; an empty string explicitly clears it.
-    /// The everyday note editor never creates or overwrites a human reference.
     func saveFeedback(for id: UUID, expectedText: String?, note: String?) {
         guard (expectedText?.utf8.count ?? 0) <= 4_000, (note?.utf8.count ?? 0) <= 4_000 else { return }
         let order = DictationFeedbackOrder.app()
