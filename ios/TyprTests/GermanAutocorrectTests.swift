@@ -197,6 +197,61 @@ final class GermanAutocorrectTests: XCTestCase {
         XCTAssertNil(fix(engine, "omw"))
     }
 
+    func testProductNameIsKeptInGermanAndEnglish() {
+        for (german, english) in [(true, false), (false, true), (true, true)] {
+            let engine = AutocorrectEngine(
+                checker: FakeTextChecker(valid: ["type", "typo"],
+                                         guesses: ["typr": ["type"], "Typr": ["Type"], "tpye": ["type"]]),
+                learning: KeyboardLearningSession(defaults: defaults), spatialDecoder: nil
+            )
+            if german {
+                engine.german = GermanAutocorrect(checker: FakeTextChecker(
+                    valid: ["Typ"], guesses: ["typr": ["Typ"], "Typr": ["Typ"], "tyo": ["Typ"]]))
+            }
+            engine.englishEnabled = english
+            let label = "de=\(german) en=\(english)"
+            for typed in ["typr", "Typr", "TYPR"] {
+                XCTAssertNil(fix(engine, typed), "\(typed) \(label)")
+                let slots = engine.suggestions(beforeInput: typed, field: .text, autocorrectionType: .default)
+                XCTAssertFalse(slots.contains { $0.willAutoReplace }, "\(typed) \(label)")
+            }
+            for valid in ["type", "typo", "Typ"] {
+                XCTAssertNil(fix(engine, valid), "\(valid) \(label)")
+            }
+            if english { XCTAssertEqual(fix(engine, "tpye"), "type", label) }
+            if german { XCTAssertEqual(fix(engine, "tyo"), "Typ", label) }
+        }
+    }
+
+    func testTypedProductNamePlusSpaceStays() {
+        let target = FixtureTextTarget()
+        target.autocapitalizationType = UITextAutocapitalizationType.none
+        let autocorrect = AutocorrectEngine(
+            checker: FakeTextChecker(valid: ["type"], guesses: ["typr": ["type"], "Typr": ["Type"]]),
+            learning: KeyboardLearningSession(defaults: defaults), spatialDecoder: nil
+        )
+        autocorrect.german = GermanAutocorrect(checker: FakeTextChecker(
+            valid: ["Typ"], guesses: ["typr": ["Typ"], "Typr": ["Typ"]]))
+        let engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
+        engine.width = 393
+        engine.clock = { [unowned self] in self.now }
+        engine.configureForField()
+
+        func tap(_ kind: KeyKind) {
+            let key = engine.layout.key(kind)!
+            let center = CGPoint(x: key.frame.midX, y: key.frame.midY)
+            engine.touchBegan(id: 1, at: center)
+            engine.touchEnded(id: 1, at: center)
+            now += 0.45
+        }
+        for ch in "typr" { tap(.character(String(ch))) }
+        tap(.space)
+        tap(.shift)
+        for ch in "typr" { tap(.character(String(ch))) }
+        tap(.space)
+        XCTAssertEqual(target.text, "typr Typr ")
+    }
+
     func testRealDictionary() throws {
         guard UITextChecker.availableLanguages.contains(where: { $0.hasPrefix("de") }) else {
             throw XCTSkip("No German dictionary on this simulator")
