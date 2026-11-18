@@ -1,7 +1,7 @@
 import Combine
 import UIKit
 
-/// The experimental full keyboard: a 3-slot suggestion strip (Typr: optional), QWERTY keys with
+/// The full keyboard: a 3-slot suggestion strip (Typr: optional), QWERTY keys with
 /// the Typr key right of space, long-press accents, the recording panel that replaces both while
 /// Typr records, and the feedback panel that replaces them after a dictation.
 /// Dictation state comes from the same `KeyboardViewModel` the dictation bar uses.

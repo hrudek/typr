@@ -10,10 +10,6 @@ struct TyprApp: App {
     @State private var showSetup = false
     @State private var setupRequestID: UUID?
 
-    init() {
-        FullKeyboardSettings().applyLaunchArguments()
-    }
-
     private static var initialOpenedFromKeyboard: Bool {
         let args = ProcessInfo.processInfo.arguments
         guard let idx = args.firstIndex(of: "--snap-state"), idx + 1 < args.count else {

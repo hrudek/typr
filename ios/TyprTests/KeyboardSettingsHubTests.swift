@@ -7,7 +7,7 @@ import XCTest
 final class KeyboardSettingsHubTests: XCTestCase {
     func testKeyboardScenesOpenTheirPages() {
         let routes: [(String, SettingsDestination)] = [
-            ("settings-keyboard", .keyboard), ("settings-keyboard-off", .keyboard),
+            ("settings-keyboard", .keyboard), ("settings-keyboard-typing", .keyboard),
             ("settings-keyboard-words-privacy", .keyboardWordsPrivacy),
             ("settings-autocorrect-languages", .autocorrectLanguages),
             ("settings-keyboard-learned-words", .keyboardLearnedWords),
@@ -19,19 +19,17 @@ final class KeyboardSettingsHubTests: XCTestCase {
         XCTAssertEqual(KeyboardSettingsCard.swipeNotice, "Swipe typing powered by FUTO Swipe.")
     }
 
-    func testHubKeepsTypingAssistanceVisibleAndDisablesItWithFullKeyboardOff() async throws {
-        for fullKeyboard in [true, false] {
-            let suite = "typr.tests.keyboard-hub.\(UUID().uuidString)"
-            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-            defer { defaults.removePersistentDomain(forName: suite) }
-            FullKeyboardSettings(defaults: defaults).isEnabled = fullKeyboard
-            let stored = defaults.persistentDomain(forName: suite) as NSDictionary?
+    func testHubShowsTypingAssistanceWithoutAFullKeyboardSwitch() async throws {
+        let suite = "typr.tests.keyboard-hub.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "experiments.fullKeyboard")
+        let stored = defaults.persistentDomain(forName: suite) as NSDictionary?
 
-            let switches = try await mountedSwitches(KeyboardSettingsCard(defaults: defaults), count: 3)
-            XCTAssertEqual(switches.map(\.isOn), [fullKeyboard, true, true], "Full keyboard, Autocorrect, Swipe typing")
-            XCTAssertEqual(switches.map(\.isEnabled), [true, fullKeyboard, fullKeyboard])
-            XCTAssertEqual(defaults.persistentDomain(forName: suite) as NSDictionary?, stored, "opening the page writes nothing")
-        }
+        let switches = try await mountedSwitches(KeyboardSettingsCard(defaults: defaults), count: 2)
+        XCTAssertEqual(switches.map(\.isOn), [true, true], "Autocorrect, Swipe typing")
+        XCTAssertTrue(switches.allSatisfy(\.isEnabled), "a retired Full keyboard value disables nothing")
+        XCTAssertEqual(defaults.persistentDomain(forName: suite) as NSDictionary?, stored, "opening the page writes nothing")
     }
 
     func testWordsAndPrivacyHoldsLearningAndBothImports() async throws {

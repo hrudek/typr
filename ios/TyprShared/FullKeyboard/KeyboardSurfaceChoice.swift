@@ -23,8 +23,8 @@ struct KeyboardSurfaceChoice {
         nonmutating set { defaults.set(newValue, forKey: Self.key) }
     }
 
-    /// Whether the full keyboard is enabled and the compact bar was not chosen.
-    static func wantsFullKeyboard(experimentOn: Bool, compactChosen: Bool) -> Bool {
-        experimentOn && !compactChosen
+    /// The full keyboard runs on iPhone only, unless the compact bar was chosen.
+    static func wantsFullKeyboard(isPhone: Bool, compactChosen: Bool) -> Bool {
+        isPhone && !compactChosen
     }
 }

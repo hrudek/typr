@@ -52,9 +52,9 @@ final class KeyboardSurfaceChoiceTests: XCTestCase {
         typealias Choice = KeyboardSurfaceChoice
         // A persisted, retired switch value must no longer disable switching.
         defaults.set(false, forKey: "typr.keyboardSwitchKey")
-        XCTAssertTrue(Choice.wantsFullKeyboard(experimentOn: true, compactChosen: false))
-        XCTAssertFalse(Choice.wantsFullKeyboard(experimentOn: true, compactChosen: true))
-        XCTAssertFalse(Choice.wantsFullKeyboard(experimentOn: false, compactChosen: false))
-        XCTAssertFalse(Choice.wantsFullKeyboard(experimentOn: false, compactChosen: true))
+        XCTAssertTrue(Choice.wantsFullKeyboard(isPhone: true, compactChosen: false))
+        XCTAssertFalse(Choice.wantsFullKeyboard(isPhone: true, compactChosen: true))
+        XCTAssertFalse(Choice.wantsFullKeyboard(isPhone: false, compactChosen: false), "iPad keeps the dictation bar")
+        XCTAssertFalse(Choice.wantsFullKeyboard(isPhone: false, compactChosen: true))
     }
 }

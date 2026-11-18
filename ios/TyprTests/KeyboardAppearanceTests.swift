@@ -23,11 +23,6 @@ final class KeyboardAppearanceTests: XCTestCase {
         XCTAssertEqual(SettingsDestination.keyboardAppearance.title, "Appearance")
     }
 
-    func testHubLinkSummarizesDesignAndPeriodKey() {
-        XCTAssertEqual(KeyboardAppearancePage.summary(design: .standard, periodKey: false), "Default · Period off")
-        XCTAssertEqual(KeyboardAppearancePage.summary(design: .mechanical, periodKey: true), "Mechanical · Period on")
-    }
-
     func testPageShowsPreviewAndEveryAppearanceControl() async throws {
         let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 1_600))

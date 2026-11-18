@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// Renders the experimental `FullKeyboardView` under a composer when
+/// Renders the `FullKeyboardView` under a composer when
 /// `--snap-state full-keyboard-<state>[-dark|-dark-field]` is passed on Simulator.
 /// `-dark` is a dark app; `-dark-field` is a light app whose field asks for a dark keyboard.
 struct FullKeyboardSnapshotStage: View {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Available even with Full keyboard or personal learning turned off.
+/// Available even with personal learning turned off.
 struct KeyboardLearningResetControls: View {
     @State private var model = KeyboardLearningSettingsModel()
     @State private var confirmLearningReset = false
