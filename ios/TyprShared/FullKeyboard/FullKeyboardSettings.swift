@@ -12,6 +12,7 @@ struct FullKeyboardSettings {
         static let fullKeyboard = "experiments.fullKeyboard"
         static let autocorrect = "settings.keyboardAutocorrect"
         static let swipeTyping = "settings.keyboardSwipeTyping"
+        static let globeKey = "settings.keyboardGlobeKey"
     }
 
     private let defaults: UserDefaults?
@@ -36,6 +37,12 @@ struct FullKeyboardSettings {
     var swipeTyping: Bool {
         get { defaults?.object(forKey: Key.swipeTyping) as? Bool ?? true }
         nonmutating set { defaults?.set(newValue, forKey: Key.swipeTyping) }
+    }
+
+    /// The bottom row's globe where iOS needs one. Switches keyboards by default.
+    var globeKey: GlobeKey {
+        get { defaults?.string(forKey: Key.globeKey).flatMap(GlobeKey.init(rawValue:)) ?? .switches }
+        nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.globeKey) }
     }
 
     /// Simulator scenes pass `--experiment-full-keyboard` to turn the experiment on.

@@ -84,6 +84,7 @@ final class FullKeyboardEngine {
 
     static let accentHoldDelay: TimeInterval = 0.40
     static let accentSlop: CGFloat = 10
+    static let nextKeyboardHoldDelay: TimeInterval = 0.5
     static let trackpadActivationDistance: CGFloat = 10
     static let trackpadPointsPerCharacter: CGFloat = 7.5
     /// A letter press becomes a swipe after travelling this many letter widths (iikb: 0.8):
@@ -185,6 +186,7 @@ final class FullKeyboardEngine {
     var width: CGFloat = 375 { didSet { if width != oldValue { rebuildLayout() } } }
     var orientation: KeyboardOrientation = .portrait { didSet { if orientation != oldValue { rebuildLayout() } } }
     var showsGlobe = false { didSet { if showsGlobe != oldValue { rebuildLayout() } } }
+    var globeKey = GlobeKey.switches { didSet { if globeKey != oldValue { rebuildLayout() } } }
     var horizontalInset: CGFloat = 0 { didSet { if horizontalInset != oldValue { rebuildLayout() } } }
     /// Typr: without the suggestion bar the keys move up and no suggestions are computed.
     var showsStrip = true {
@@ -546,7 +548,7 @@ final class FullKeyboardEngine {
             if next == .letters { shift.reset() }
             rebuildLayout()
             if next == .letters { refreshAutoCapitalization() }
-        case .character, .space, .returnKey, .typr, .globe:
+        case .character, .space, .returnKey, .typr, .globe, .globeSpacer:
             break
         }
         touches[id] = touch
@@ -706,10 +708,27 @@ final class FullKeyboardEngine {
                 rebuildLayout()
                 refreshAutoCapitalization()
             }
-        case .delete, .typr, .globe:
+        case .delete, .typr, .globe, .globeSpacer:
             break
         }
         onChange?()
+    }
+
+    /// A still hold on the bottom row's 123/ABC when `layout.layerKeyHoldSwitchesKeyboard`: goes back
+    /// to the page the press left and drops the touch. True when the keyboard should switch.
+    func takeNextKeyboardHold(forTouch id: Int) -> Bool {
+        guard layout.layerKeyHoldSwitchesKeyboard,
+              let touch = touches[id], !touch.committed,
+              case .layerSwitch = touch.key.kind, touch.key.row == 3 else { return false }
+        let dx = touch.point.x - touch.startPoint.x
+        let dy = touch.point.y - touch.startPoint.y
+        guard (dx * dx + dy * dy).squareRoot() <= Self.accentSlop else { return false }
+        if let returnLayer = touch.returnLayer {
+            layerState.switchTo(returnLayer)
+            rebuildLayout()
+        }
+        touchCancelled(id: id)
+        return true
     }
 
     func touchCancelled(id: Int) {
@@ -1201,6 +1220,7 @@ final class FullKeyboardEngine {
             layer: layerState.layer,
             field: field,
             showsGlobe: showsGlobe,
+            globeKey: globeKey,
             horizontalInset: horizontalInset,
             showsStrip: showsStrip
         )

@@ -49,6 +49,7 @@ final class KeyboardViewModel: ObservableObject {
 
     @Published var hasFullAccess = true
     @Published var needsGlobeKey = true
+    @Published var globeKey = GlobeKey.switches
     @Published var returnKeyLabel = "Return"
     @Published var isModelInstalled = false
     @Published private(set) var isWarmAvailable = false
@@ -106,6 +107,7 @@ final class KeyboardViewModel: ObservableObject {
     var onOpenURL: ((URL) -> Void)?
     /// Typr: the full-keyboard key was tapped.
     var onShowFullKeyboard: (() -> Void)?
+    var onNextKeyboard: (() -> Void)?
     weak var inputViewController: UIInputViewController?
 
     var dotScopePhase: DotScopePhase {
@@ -486,6 +488,7 @@ struct KeyboardSurfaceView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var model: KeyboardViewModel
+    @State private var spaceHeldForNextKeyboard = false
 
     private static let wellHeight: CGFloat = 44
     private static let controlHeight: CGFloat = 34
@@ -849,18 +852,31 @@ struct KeyboardSurfaceView: View {
                 .accessibilityLabel("Show full keyboard")
             }
 
-            if model.needsGlobeKey {
-                GlobeKeyRepresentable(controller: model.inputViewController, isDark: p.isDark)
-                    .frame(width: 44, height: 42)
-                    .background(
-                        p.keyFill,
-                        in: RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous)
-                    )
-                    .shadow(color: p.keyShadow, radius: 0.5, x: 0, y: 1)
+            if model.needsGlobeKey, model.globeKey != .hidden {
+                Group {
+                    if model.globeKey == .switches {
+                        GlobeKeyRepresentable(controller: model.inputViewController, isDark: p.isDark)
+                    } else {
+                        Image(systemName: "globe")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(p.textBase.opacity(0.35))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(width: 44, height: 42)
+                .background(
+                    p.keyFill,
+                    in: RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous)
+                )
+                .shadow(color: p.keyShadow, radius: 0.5, x: 0, y: 1)
             }
 
             Button {
-                model.onSpace?()
+                if spaceHeldForNextKeyboard {
+                    spaceHeldForNextKeyboard = false
+                } else {
+                    model.onSpace?()
+                }
             } label: {
                 Text("space")
                     .font(.system(size: 15, weight: .regular))
@@ -870,6 +886,15 @@ struct KeyboardSurfaceView: View {
                     .contentShape(RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous))
             }
             .buttonStyle(KeyboardKeyButtonStyle(palette: p))
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: FullKeyboardEngine.nextKeyboardHoldDelay)
+                    .onChanged { _ in spaceHeldForNextKeyboard = false }
+                    .onEnded { _ in
+                        spaceHeldForNextKeyboard = true
+                        model.onNextKeyboard?()
+                    },
+                isEnabled: model.needsGlobeKey && model.globeKey != .switches
+            )
 
             RepeatDeleteKey(palette: p) {
                 model.onDelete?()

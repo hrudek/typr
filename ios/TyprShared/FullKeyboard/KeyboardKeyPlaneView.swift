@@ -20,12 +20,13 @@ final class KeyboardKeyPlaneView: UIView {
     var onKeyDown: ((KeyKind) -> Void)?
     /// Called when long-press accents open.
     var onAccentMenuOpened: (() -> Void)?
+    var onNextKeyboard: (() -> Void)?
 
     private var touchIDs: [ObjectIdentifier: Int] = [:]
     private var nextTouchID = 0
     private var deleteTimer: Timer?
     private var deleteStartedAt: TimeInterval = 0
-    private var accentHoldWork: [Int: DispatchWorkItem] = [:]
+    private var holdWork: [Int: DispatchWorkItem] = [:]
     /// The swipe trail: its own layer so a swipe redraws a path, not every key.
     private let trailLayer = CAShapeLayer()
 
@@ -152,6 +153,10 @@ final class KeyboardKeyPlaneView: UIView {
                 context.fillKeycap(key.frame, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
                 drawSymbol("globe", in: key.frame, color: palette.textBase, pointSize: isLandscape ? 16 : 18)
+            case .globeSpacer:
+                context.fillKeycap(key.frame, fill: palette.keyFill, radius: radius)
+                guard !hideGlyphs else { continue }
+                drawSymbol("globe", in: key.frame, color: palette.textBase.withAlphaComponent(0.35), pointSize: isLandscape ? 16 : 18)
             }
         }
     }
@@ -205,6 +210,7 @@ final class KeyboardKeyPlaneView: UIView {
                 onKeyDown?(kind)
                 if kind == .delete { startDeleteRepeat() }
                 if case .character = kind { armAccentTimer(for: id) }
+                if case .layerSwitch = kind, engine.layout.layerKeyHoldSwitchesKeyboard { armNextKeyboardTimer(for: id) }
             }
         }
     }
@@ -220,12 +226,12 @@ final class KeyboardKeyPlaneView: UIView {
             }
             engine.touchMoved(id: id, to: touch.location(in: self), samples: samples)
             if engine.touches[id]?.isSwipe == true {
-                cancelAccentTimer(for: id)
+                cancelHoldTimer(for: id)
                 continue
             }
             let currentKey = engine.touches[id]?.key.kind
             if currentKey != previousKey {
-                cancelAccentTimer(for: id)
+                cancelHoldTimer(for: id)
                 if case .character = currentKey {
                     armAccentTimer(for: id)
                 }
@@ -236,7 +242,7 @@ final class KeyboardKeyPlaneView: UIView {
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
             guard let id = touchIDs.removeValue(forKey: ObjectIdentifier(touch)) else { continue }
-            cancelAccentTimer(for: id)
+            cancelHoldTimer(for: id)
             if engine.touches[id]?.key.kind == .delete { stopDeleteRepeat() }
             engine.touchEnded(id: id, at: touch.location(in: self))
         }
@@ -245,7 +251,7 @@ final class KeyboardKeyPlaneView: UIView {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {
             guard let id = touchIDs.removeValue(forKey: ObjectIdentifier(touch)) else { continue }
-            cancelAccentTimer(for: id)
+            cancelHoldTimer(for: id)
             if engine.touches[id]?.key.kind == .delete { stopDeleteRepeat() }
             engine.touchCancelled(id: id)
         }
@@ -268,29 +274,44 @@ final class KeyboardKeyPlaneView: UIView {
 
     func cancelAllTouches() {
         touchIDs.removeAll()
-        for work in accentHoldWork.values { work.cancel() }
-        accentHoldWork.removeAll()
+        for work in holdWork.values { work.cancel() }
+        holdWork.removeAll()
         stopDeleteRepeat()
         engine.cancelAllTouches()
     }
 
     private func armAccentTimer(for id: Int) {
-        cancelAccentTimer(for: id)
+        cancelHoldTimer(for: id)
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.accentHoldWork.removeValue(forKey: id)
+                self.holdWork.removeValue(forKey: id)
                 if self.engine.openAccentMenuIfEligible(forTouch: id) {
                     self.onAccentMenuOpened?()
                 }
             }
         }
-        accentHoldWork[id] = work
+        holdWork[id] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + FullKeyboardEngine.accentHoldDelay, execute: work)
     }
 
-    private func cancelAccentTimer(for id: Int) {
-        accentHoldWork.removeValue(forKey: id)?.cancel()
+    private func armNextKeyboardTimer(for id: Int) {
+        cancelHoldTimer(for: id)
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.holdWork.removeValue(forKey: id)
+                if self.engine.takeNextKeyboardHold(forTouch: id) {
+                    self.onNextKeyboard?()
+                }
+            }
+        }
+        holdWork[id] = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + FullKeyboardEngine.nextKeyboardHoldDelay, execute: work)
+    }
+
+    private func cancelHoldTimer(for id: Int) {
+        holdWork.removeValue(forKey: id)?.cancel()
     }
 
     private func startDeleteRepeat() {

@@ -12,8 +12,10 @@ struct KeyboardSettingsCard: View {
     @State private var autocorrectGerman = TyprSettings().autocorrectGerman
     @State private var autocorrectEnglish = TyprSettings().autocorrectEnglish
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
+    @State private var globeKey = FullKeyboardSettings().globeKey
 
     static let swipeNotice = "Swipe typing powered by FUTO Swipe."
+    static let globeKeyFooter = "On iPhones with no globe under the keyboard. A spacer sits left of 123, keeps it away from the corner and does nothing when tapped. As a spacer or hidden, hold 123 for the next keyboard, or hold space in the dictation bar."
 
     var body: some View {
         VStack(spacing: 24) {
@@ -36,6 +38,20 @@ struct KeyboardSettingsCard: View {
                 }
                 // Required end-user notice of the FUTO Model Weights License (SwipeModel/LICENSE-FUTO-SWIPE.txt).
                 Text(Self.swipeNotice)
+                    .font(.footnote).foregroundStyle(TyprTheme.textMuted)
+                    .padding(.horizontal, 16)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                SettingsSection(title: "Globe key") {
+                    ForEach(Array(GlobeKey.allCases.enumerated()), id: \.element) { index, choice in
+                        if index > 0 { SettingsDivider() }
+                        SettingsChoiceRow(title: choice.title, isSelected: globeKey == choice) {
+                            globeKey = choice
+                            FullKeyboardSettings().globeKey = choice
+                        }
+                    }
+                }
+                Text(Self.globeKeyFooter)
                     .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                     .padding(.horizontal, 16)
             }
@@ -99,6 +115,17 @@ struct KeyboardSettingsCard: View {
         autocorrectGerman = TyprSettings().autocorrectGerman
         autocorrectEnglish = TyprSettings().autocorrectEnglish
         hideSuggestionBar = TyprSettings().hideSuggestionBar
+        globeKey = FullKeyboardSettings().globeKey
+    }
+}
+
+extension GlobeKey {
+    var title: String {
+        switch self {
+        case .switches: "Switches keyboards"
+        case .spacer: "Spacer"
+        case .hidden: "Hidden"
+        }
     }
 }
 

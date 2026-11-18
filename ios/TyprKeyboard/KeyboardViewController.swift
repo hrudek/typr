@@ -39,6 +39,7 @@ final class KeyboardViewController: UIInputViewController {
         didHandOffCurrentField = false
         KeyboardHost.appeared()
         viewModel.hostNotice = nil
+        viewModel.globeKey = FullKeyboardSettings().globeKey
         mountSurface()
         refreshProtectedLexicon()
         fullKeyboard?.prepareForField()
@@ -166,6 +167,7 @@ final class KeyboardViewController: UIInputViewController {
             ContainingAppOpener.open(url, from: self)
         }
         viewModel.onShowFullKeyboard = { [weak self] in self?.switchSurface(toCompactBar: false) }
+        viewModel.onNextKeyboard = { [weak self] in self?.advanceToNextInputMode() }
 
         let heightConstraint = view.heightAnchor.constraint(equalToConstant: 140)
         heightConstraint.priority = UILayoutPriority(999)
