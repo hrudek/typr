@@ -28,6 +28,34 @@ nonisolated enum GlobeKey: String, CaseIterable, Sendable {
     case hidden
 }
 
+// `arranged` adapted from AVGVSTVS96/iikb
+// Packages/KeyboardModules/Sources/KeyboardCore/Typing/CustomKeys.swift (MIT).
+/// A key beside the space bar, space among them, in the order Settings › Bottom row arranges.
+nonisolated enum BottomKey: String, CaseIterable, Sendable {
+    case space
+    case period
+    case typr
+
+    static let standard: [BottomKey] = [.space, .period, .typr]
+
+    /// `order` with each key once, any missing put where `standard` has them.
+    static func arranged(_ order: [BottomKey]) -> [BottomKey] {
+        var seen = Set<BottomKey>()
+        var keys = order.filter { seen.insert($0).inserted }
+        for key in standard where !seen.contains(key) {
+            let after = standard.prefix { $0 != key }.last { keys.contains($0) }
+            keys.insert(key, at: after.flatMap { keys.firstIndex(of: $0) }.map { $0 + 1 } ?? 0)
+        }
+        return keys
+    }
+}
+
+/// Settings › Bottom row: the keys' order around space, and whether the period key shows.
+nonisolated struct BottomRow: Equatable, Sendable {
+    var order = BottomKey.standard
+    var periodKey = false
+}
+
 nonisolated enum KeyKind: Equatable, Hashable, Sendable {
     /// Inserts its text (letters are stored lowercase; shift decides the case).
     case character(String)
@@ -171,6 +199,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     let field: KeyboardFieldKind
     let showsGlobe: Bool
     let globeKey: GlobeKey
+    let bottomRow: BottomRow
     let horizontalInset: CGFloat
     /// Typr: whether the suggestion bar sits above the keys.
     let showsStrip: Bool
@@ -184,6 +213,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         field: KeyboardFieldKind = .text,
         showsGlobe: Bool = false,
         globeKey: GlobeKey = .switches,
+        bottomRow: BottomRow = BottomRow(),
         horizontalInset: CGFloat = 0,
         showsStrip: Bool = true
     ) {
@@ -193,6 +223,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         self.field = field
         self.showsGlobe = showsGlobe
         self.globeKey = globeKey
+        self.bottomRow = bottomRow
         self.horizontalInset = max(0, horizontalInset)
         self.showsStrip = showsStrip
         let innerWidth = width - 2 * self.horizontalInset
@@ -204,8 +235,20 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             layer: layer,
             field: field,
             globe: showsGlobe ? globeKey : .hidden,
+            aroundSpace: BottomKey.arranged(bottomRow.order).filter {
+                $0 != .period || Self.showsPeriodKey(bottomRow, layer: layer, field: field)
+            },
             inset: self.horizontalInset
         )
+    }
+
+    private static func showsPeriodKey(_ bottomRow: BottomRow, layer: KeyboardLayer, field: KeyboardFieldKind) -> Bool {
+        bottomRow.periodKey && layer == .letters && field == .text
+    }
+
+    /// The bottom row's period key, whose hold offers more punctuation.
+    func isPeriodKey(_ key: KeyboardKey) -> Bool {
+        Self.showsPeriodKey(bottomRow, layer: layer, field: field) && key.row == 3 && key.kind == .character(".")
     }
 
     static func height(for orientation: KeyboardOrientation, showsStrip: Bool = true) -> CGFloat {
@@ -299,6 +342,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         layer: KeyboardLayer,
         field: KeyboardFieldKind,
         globe: GlobeKey,
+        aroundSpace: [BottomKey],
         inset: CGFloat
     ) -> [KeyboardKey] {
         let innerWidth = width - 2 * inset
@@ -358,7 +402,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         }
         add(.delete, row: 2, x: right - modW, w: modW, label: "delete")
 
-        let isCompactBottomRow = globe != .hidden || field != .text
+        let isCompactBottomRow = globe != .hidden || field != .text || aroundSpace.contains(.period)
         let switchW = isCompactBottomRow ? modW : lw * bottomSwitchWidthRatio
         let returnW = isCompactBottomRow ? (lw * compactReturnWidthRatio) : (lw * returnWidthRatio + m.gap)
         var leading: [(KeyKind, CGFloat, String)] = [
@@ -371,6 +415,15 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         case .spacer: leading.insert((.globeSpacer, modW, "globe"), at: 0)
         case .hidden: break
         }
+        func arrangedKey(_ key: BottomKey) -> (KeyKind, CGFloat, String)? {
+            switch key {
+            case .space: nil
+            case .period: (.character("."), lw, ".")
+            case .typr: (.typr, modW, "typr")
+            }
+        }
+        let spaceIndex = aroundSpace.firstIndex(of: .space) ?? aroundSpace.endIndex
+        leading += aroundSpace[..<spaceIndex].compactMap(arrangedKey)
         var trailing: [(KeyKind, CGFloat, String)] = []
         switch field {
         case .text:
@@ -382,7 +435,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             trailing.append((.character("@"), lw, "@"))
             trailing.append((.character("."), lw, "."))
         }
-        trailing.append((.typr, modW, "typr"))
+        trailing += aroundSpace[spaceIndex...].compactMap(arrangedKey)
         trailing.append((.returnKey, returnW, "return"))
 
         let fixed = (leading + trailing).reduce(0) { $0 + $1.1 }

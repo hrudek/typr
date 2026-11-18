@@ -187,6 +187,7 @@ final class FullKeyboardEngine {
     var orientation: KeyboardOrientation = .portrait { didSet { if orientation != oldValue { rebuildLayout() } } }
     var showsGlobe = false { didSet { if showsGlobe != oldValue { rebuildLayout() } } }
     var globeKey = GlobeKey.switches { didSet { if globeKey != oldValue { rebuildLayout() } } }
+    var bottomRow = BottomRow() { didSet { if bottomRow != oldValue { rebuildLayout() } } }
     var horizontalInset: CGFloat = 0 { didSet { if horizontalInset != oldValue { rebuildLayout() } } }
     /// Typr: without the suggestion bar the keys move up and no suggestions are computed.
     var showsStrip = true {
@@ -565,8 +566,10 @@ final class FullKeyboardEngine {
         let dx = touch.point.x - touch.startPoint.x
         let dy = touch.point.y - touch.startPoint.y
         guard (dx * dx + dy * dy).squareRoot() <= Self.accentSlop else { return false }
-        guard let options = AccentCatalog.options(for: base, uppercase: isUppercase),
-              options.count > 1 else { return false }
+        let options: [String]? = layout.isPeriodKey(touch.key)
+            ? AccentCatalog.periodKey
+            : AccentCatalog.options(for: base, uppercase: isUppercase)
+        guard let options, options.count > 1 else { return false }
         activeAccentMenu = AccentMenu.build(
             for: touch.key.frame,
             rawOptions: options,
@@ -1221,6 +1224,7 @@ final class FullKeyboardEngine {
             field: field,
             showsGlobe: showsGlobe,
             globeKey: globeKey,
+            bottomRow: bottomRow,
             horizontalInset: horizontalInset,
             showsStrip: showsStrip
         )

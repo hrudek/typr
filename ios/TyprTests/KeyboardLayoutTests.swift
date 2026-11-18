@@ -384,12 +384,107 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
+    func testBottomRowFollowsTheOrderAndThePeriodToggle() {
+        let dot = KeyKind.character(".")
+        let on = BottomRow(order: [.typr, .space, .period], periodKey: true)
+        let off = BottomRow(order: [.typr, .space, .period], periodKey: false)
+
+        XCTAssertEqual(
+            bottomRow(KeyboardLayout(width: 393, bottomRow: on)),
+            [.layerSwitch(.numbers), .typr, .space, dot, .returnKey]
+        )
+        XCTAssertEqual(
+            bottomRow(KeyboardLayout(width: 393, bottomRow: off)),
+            [.layerSwitch(.numbers), .typr, .space, .returnKey]
+        )
+        XCTAssertEqual(
+            bottomRow(KeyboardLayout(width: 393, layer: .numbers, bottomRow: on)),
+            [.layerSwitch(.letters), .typr, .space, .returnKey]
+        )
+        XCTAssertEqual(
+            bottomRow(KeyboardLayout(width: 393, field: .email, bottomRow: on)),
+            [.layerSwitch(.numbers), .typr, .space, .character("@"), dot, .returnKey]
+        )
+        XCTAssertEqual(
+            bottomRow(KeyboardLayout(width: 393, field: .url, bottomRow: on)),
+            [.layerSwitch(.numbers), .typr, .space, dot, .character("/"), .returnKey]
+        )
+        XCTAssertEqual(
+            bottomRow(KeyboardLayout(
+                width: 393, showsGlobe: true, globeKey: .spacer,
+                bottomRow: BottomRow(order: [.period, .space, .typr], periodKey: true)
+            )),
+            [.globeSpacer, .layerSwitch(.numbers), dot, .space, .typr, .returnKey]
+        )
+    }
+
+    func testOnlyTheBottomRowPeriodKeyHoldsMorePunctuation() throws {
+        let on = BottomRow(order: BottomKey.standard, periodKey: true)
+        let letters = KeyboardLayout(width: 393, bottomRow: on)
+        XCTAssertTrue(letters.isPeriodKey(try XCTUnwrap(letters.key(.character(".")))))
+        for layout in [
+            KeyboardLayout(width: 393, layer: .numbers, bottomRow: on),
+            KeyboardLayout(width: 393, field: .email, bottomRow: on),
+            KeyboardLayout(width: 393, field: .url, bottomRow: on),
+        ] {
+            XCTAssertFalse(layout.isPeriodKey(try XCTUnwrap(layout.key(.character(".")))), describe(layout))
+        }
+    }
+
+    func testWithoutThePeriodKeyEveryOrderOfSpaceAndTyprBeforeItKeepsTodaysRow() {
+        for order in [[BottomKey.space, .typr, .period], [.period, .space, .typr]] {
+            XCTAssertEqual(
+                KeyboardLayout(width: 393, bottomRow: BottomRow(order: order, periodKey: false)).keys,
+                KeyboardLayout(width: 393).keys
+            )
+        }
+    }
+
+    func testEveryBottomRowKeepsTheLayerKeyFirstAndReturnLastWithoutOverlaps() {
+        let orders: [[BottomKey]] = [
+            [.space, .period, .typr], [.space, .typr, .period], [.period, .space, .typr],
+            [.period, .typr, .space], [.typr, .space, .period], [.typr, .period, .space],
+        ]
+        for base in everyPortraitLayout() + landscapeLayouts() {
+            for order in orders {
+                for periodKey in [false, true] {
+                    let layout = KeyboardLayout(
+                        width: base.width, orientation: base.orientation, layer: base.layer, field: base.field,
+                        showsGlobe: base.showsGlobe, globeKey: base.globeKey,
+                        bottomRow: BottomRow(order: order, periodKey: periodKey),
+                        horizontalInset: base.horizontalInset, showsStrip: base.showsStrip
+                    )
+                    let name = "\(describe(layout)) \(order) period=\(periodKey)"
+                    let kinds = bottomRow(layout).filter { $0 != .globeSpacer }
+                    XCTAssertEqual(kinds.first, .layerSwitch(layout.layer == .letters ? .numbers : .letters), name)
+                    XCTAssertEqual(kinds.last, .returnKey, name)
+                    let dots = kinds.filter { $0 == .character(".") }.count
+                    XCTAssertEqual(dots, layout.field != .text || (periodKey && layout.layer == .letters) ? 1 : 0, name)
+                    let row = layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }
+                    for (a, b) in zip(row, row.dropFirst()) {
+                        XCTAssertLessThan(a.frame.maxX, b.frame.minX, name)
+                        XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, name)
+                    }
+                    XCTAssertLessThanOrEqual(row.last?.frame.maxX ?? 0, layout.width - layout.horizontalInset, name)
+                    XCTAssertGreaterThan(layout.key(.space)?.frame.width ?? 0, 2 * layout.letterWidth, name)
+                }
+            }
+        }
+    }
+
+    func testBottomKeysArrangeEachKeyOnceWithMissingOnesInTheirStandardPlace() {
+        XCTAssertEqual(BottomKey.arranged([]), BottomKey.standard)
+        XCTAssertEqual(BottomKey.arranged([.typr, .typr]), [.space, .period, .typr])
+        XCTAssertEqual(BottomKey.arranged([.typr, .space]), [.typr, .space, .period])
+        XCTAssertEqual(BottomKey.arranged([.period, .typr, .space]), [.period, .typr, .space])
+    }
+
     private func bottomRow(_ layout: KeyboardLayout) -> [KeyKind] {
         layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }.map(\.kind)
     }
 
     private func describe(_ layout: KeyboardLayout) -> String {
-        "\(layout.width)pt \(layout.orientation) \(layout.layer) \(layout.field) globe=\(layout.showsGlobe) \(layout.globeKey) strip=\(layout.showsStrip)"
+        "\(layout.width)pt \(layout.orientation) \(layout.layer) \(layout.field) globe=\(layout.showsGlobe) \(layout.globeKey) \(layout.bottomRow) strip=\(layout.showsStrip)"
     }
 }
 
@@ -415,6 +510,20 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertFalse(FullKeyboardSettings(defaults: defaults).autocorrect)
         settings.swipeTyping = false
         XCTAssertFalse(FullKeyboardSettings(defaults: defaults).swipeTyping)
+    }
+
+    func testBottomRowDefaultsToSpaceThenTyprAndRoundTrips() throws {
+        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = FullKeyboardSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.bottomRow, BottomRow(order: [.space, .period, .typr], periodKey: false))
+        let arranged = BottomRow(order: [.typr, .space, .period], periodKey: true)
+        settings.bottomRow = arranged
+        XCTAssertEqual(FullKeyboardSettings(defaults: defaults).bottomRow, arranged)
+        defaults.set(["typr", "emoji"], forKey: "settings.keyboardBottomRowOrder")
+        XCTAssertEqual(settings.bottomRow.order, [.space, .period, .typr])
     }
 
     func testNoAppGroupReadsAsOff() {
