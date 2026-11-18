@@ -52,7 +52,7 @@ final class DictationLogAnalysisTests: XCTestCase {
         XCTAssertNil(old.context.vocabularyEnabled)
         XCTAssertNil(old.firstSpellingPass)
         XCTAssertTrue(old.vocabularyLabel.contains("Not recorded"))
-        XCTAssertTrue(old.plainText.contains("older entry or pass not reached"))
+        XCTAssertTrue(old.spellingLines(old.firstSpellingPass).first?.contains("older entry or pass not reached") == true)
     }
 
     func testSettingsAndTwoPassEvidenceSurviveStorageAndExport() async throws {
@@ -75,20 +75,21 @@ final class DictationLogAnalysisTests: XCTestCase {
         let entry = try XCTUnwrap(loaded.entries.first)
         XCTAssertEqual(entry.firstSpellingPass, first)
         XCTAssertEqual(entry.secondSpellingPass, second)
-        XCTAssertTrue(entry.processingResultLabel.contains("2 replacements"))
-        for expected in ["AI: Typr", "Upstream AI setting: On", "Vocabulary: On", "\"iphone\" → \"iPhone\"", "\"IPhone\" → \"iPhone\""] {
-            XCTAssertTrue(entry.plainText.contains(expected), expected)
-        }
+        XCTAssertEqual(entry.context.upstreamCleanupEnabled, true)
+        XCTAssertTrue(entry.vocabularyLabel.hasPrefix("Vocabulary: On"))
+        XCTAssertTrue(entry.improvementLines.contains(entry.vocabularyLabel))
+        XCTAssertEqual(entry.spellingLines(entry.firstSpellingPass).first?.hasPrefix("\"iphone\" → \"iPhone\""), true)
+        XCTAssertEqual(entry.spellingLines(entry.secondSpellingPass).first?.hasPrefix("\"IPhone\" → \"iPhone\""), true)
         await env.dispose()
     }
 
     func testEverySelectedPathAndVocabularyStateHasAnExplicitLabel() {
-        for (path, label) in [(DictationLogCleanupPath.typr, "AI: Typr"), (.upstream, "AI: Upstream"), (.none, "AI: None")] {
+        for path in [DictationLogCleanupPath.typr, .upstream, .none] {
             var context = DictationLogContext()
             context.cleanupPath = path
             context.vocabularyEnabled = false
             var entry = DictationLogEntry(context: context)
-            XCTAssertEqual(entry.aiPathLabel, label)
+            XCTAssertTrue(entry.improvementLines.contains { $0.hasSuffix("selected cleanup: \(path.rawValue)") })
             XCTAssertEqual(entry.vocabularyLabel, "Vocabulary: Off")
             entry.context.vocabularyEnabled = true
             XCTAssertEqual(entry.vocabularyLabel, "Vocabulary: On (0 terms)")

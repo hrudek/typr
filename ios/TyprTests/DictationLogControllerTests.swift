@@ -155,7 +155,6 @@ final class DictationLogControllerTests: XCTestCase {
         XCTAssertEqual(entry.context.recordingDuration, 1.5)
         XCTAssertTrue(entry.context.keyboardJob)
         XCTAssertFalse(entry.context.copyToPasteboard)
-        XCTAssertTrue(entry.outputLabel.contains("provided to keyboard"))
         XCTAssertNotNil(entry.asrMilliseconds)
         XCTAssertNotNil(entry.modelMilliseconds)
         XCTAssertNotNil(entry.cleanupMilliseconds)
@@ -206,8 +205,9 @@ final class DictationLogControllerTests: XCTestCase {
         XCTAssertEqual(entry.context.vocabularyEnabled, false)
         XCTAssertEqual(entry.context.vocabularyCount, 0)
         XCTAssertNil(entry.context.vocabularyTerms)
-        XCTAssertFalse(entry.plainText.contains(#""pi Agent""#))
-        XCTAssertFalse(entry.plainText.contains("GitHub"))
+        let json = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
+        XCTAssertFalse(json.contains("pi Agent"))
+        XCTAssertFalse(json.contains("GitHub"))
         try await f.dispose()
     }
 
@@ -532,19 +532,18 @@ final class DictationLogControllerTests: XCTestCase {
         recording.modelAnswer("unused answer", use: .rejected(.emptyOutput), modelMilliseconds: 20)
         recording.finish(text: "Spoken Secret.", beforeSpelling: "Spoken Secret.")
         let entry = try XCTUnwrap(env.store.entries.first)
-        let export = entry.plainText
+        let export = String(decoding: try JSONEncoder().encode(entry), as: UTF8.self)
         for evidence in ["spoken secret", "spoken Secret", "unused answer", "Spoken Secret.",
-                         "rejected(empty-output); not used", "12 ms", "20 ms", "does not prove insertion"] {
+                         "rejected(empty-output); not used", "\"asrMilliseconds\":12", "\"modelMilliseconds\":20"] {
             XCTAssertTrue(export.contains(evidence), evidence)
         }
-        XCTAssertFalse(export.contains("vocabularyTerms"))
         XCTAssertFalse(export.contains("errorDescription"))
         let failedRecording = env.begin()
         failedRecording.failASR(LogSecretFailure(), milliseconds: 4)
         let failed = try XCTUnwrap(env.store.entries.first)
         XCTAssertEqual(failed.asrFailure, .other)
         XCTAssertTrue(failed.asrErrorType?.hasSuffix("LogSecretFailure") == true)
-        XCTAssertFalse(failed.plainText.contains("SECRET-ERROR-PAYLOAD"))
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(failed), as: UTF8.self).contains("SECRET-ERROR-PAYLOAD"))
         await env.dispose()
     }
 

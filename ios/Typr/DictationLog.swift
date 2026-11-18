@@ -270,28 +270,7 @@ struct DictationLogEntry: Identifiable, Codable, Equatable, Sendable {
     var promptRevision = CleanupGuard.revision
     var guardRevision = CleanupGuard.revision
 
-    /// A selected cleanup path is not proof of a successful AI pass.
-    /// Rejected, late, skipped and failed answers must never be presented as revisions.
-    var feedbackAIText: DictationLogText? {
-        switch context.cleanupPath {
-        case .typr:
-            guard answerUse == "accepted" else { return nil }
-            return cleanupOutput ?? aiAnswer
-        case .upstream:
-            guard upstreamOutcome == "changed" || upstreamOutcome == "unchanged" else { return nil }
-            return cleanupOutput
-        case .none:
-            return nil
-        }
-    }
-
     var sourceLabel: String { context.keyboardJob ? "Keyboard" : "App" }
-    var outputLabel: String {
-        var outputs = ["shown in app"]
-        if context.keyboardJob { outputs.append("provided to keyboard") }
-        if context.copyToPasteboard, finalText?.originalUTF8Bytes ?? 0 > 0 { outputs.append("copied to clipboard") }
-        return outputs.joined(separator: "; ")
-    }
     var lateAnswerLabel: String {
         switch cleanupOutcome {
         case "failed(deadline)": "arrived after the cleanup deadline; not used"

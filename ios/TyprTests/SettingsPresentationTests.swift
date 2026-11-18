@@ -12,6 +12,8 @@ final class SettingsPresentationTests: XCTestCase {
                 destination
             )
         }
+        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
+            ["Typr", "--snap-state", SettingsDestination.historySampleScene]), .history)
         // The prompt editor is gone (Hex has none); its old route opens nothing.
         XCTAssertNil(SettingsDestination.snapshotDestination(arguments:
             ["Typr", "--snap-state", "settings-cleanup-prompt"]))
@@ -180,7 +182,7 @@ final class SettingsPresentationTests: XCTestCase {
 
     @MainActor
     func testMenuEntryPointsStaySingleLineAndCompactAtStandardTextSize() {
-        for title in ["Keyboard", "AI & vocabulary", "History & feedback", "Speech engine", "iOS keyboard settings", "Open dictation log"] {
+        for title in ["Keyboard", "AI & vocabulary", "History & feedback", "Speech engine", "iOS keyboard settings"] {
             let host = UIHostingController(rootView:
                 SettingsLink(title: title, detail: "Explanations stay on the destination", icon: "keyboard")
                     .dynamicTypeSize(.large)
@@ -275,7 +277,7 @@ final class SettingsPresentationTests: XCTestCase {
 
     @MainActor
     func testNavigationRowsWrapRatherThanFixingTheirHeight() {
-        let row = SettingsLink(title: "History & feedback", detail: "Dictation log, exports and keyboard ratings",
+        let row = SettingsLink(title: "History & feedback", detail: "Review, rate and export dictations",
                                icon: "clock.arrow.circlepath", value: "100 entries")
             .dynamicTypeSize(.accessibility3)
         let host = UIHostingController(rootView: row)

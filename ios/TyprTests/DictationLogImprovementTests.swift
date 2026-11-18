@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class DictationLogImprovementTests: XCTestCase {
-    func testImprovementExportSeparatesModelFormattingAndVocabularyErrors() async throws {
+    func testStagesAndHumanFeedbackSurviveStorage() async throws {
         let env = LogTestEnvironment()
         var context = DictationLogContext()
         context.cleanupPath = .typr
@@ -24,19 +24,7 @@ final class DictationLogImprovementTests: XCTestCase {
         XCTAssertEqual(entry.cleanupOutput?.text, answer)
         XCTAssertEqual(entry.formattedText?.text, formatted)
         XCTAssertEqual(entry.expectedText?.text, "Treffen wir uns um 16:00 Uhr.")
-        let compact = DictationLogExport.improvement.text(for: [entry])
-        XCTAssertTrue(compact.contains(raw))
-        XCTAssertTrue(compact.contains(answer))
-        XCTAssertTrue(compact.contains("After style formatting:\n" + formatted))
-        XCTAssertTrue(compact.contains("Cleanup output actually used: unchanged from [Model answer — accepted]"))
-        XCTAssertTrue(compact.contains("Final text provided: unchanged from [After style formatting]"))
-        XCTAssertTrue(compact.contains("Desired final text (human reference):\nTreffen wir uns um 16:00 Uhr."))
-        XCTAssertTrue(compact.contains("Self-correction and lost preposition"))
-        XCTAssertFalse(compact.contains("No replacements."))
-        for technical in ["Loudest average", "Copy requested", "Bluetooth input", "Schema:", "First spelling pass changed"] {
-            XCTAssertFalse(compact.contains(technical), technical)
-            XCTAssertTrue(DictationLogExport.complete.text(for: [entry]).contains(technical), technical)
-        }
+        XCTAssertEqual(entry.feedbackNote?.text, "Self-correction and lost preposition")
         await env.dispose()
     }
 
@@ -48,33 +36,17 @@ final class DictationLogImprovementTests: XCTestCase {
         recording.processingStages(cleanupOutput: "raw", formattedText: "Raw.")
         recording.finish(text: "Raw.", beforeSpelling: "Raw.")
         var entry = try XCTUnwrap(env.store.entries.first)
-        XCTAssertTrue(entry.improvementText.contains("wrong"))
-        XCTAssertTrue(entry.improvementText.contains("rejected(empty-output); not used"))
-        XCTAssertTrue(entry.improvementText.contains("Cleanup output actually used: unchanged from [Recognized]"))
+        XCTAssertEqual(entry.aiAnswer?.text, "wrong")
+        XCTAssertEqual(entry.answerLabel, "rejected(empty-output); not used")
+        XCTAssertEqual(entry.cleanupOutput?.text, "raw")
         recording.processingStages(cleanupOutput: "must not overwrite", formattedText: "wrong")
         recording.modelAnswer("late answer", use: .late, modelMilliseconds: 50)
         entry = try XCTUnwrap(env.store.entries.first)
         XCTAssertEqual(entry.cleanupOutput?.text, "raw")
         XCTAssertEqual(entry.formattedText?.text, "Raw.")
         XCTAssertEqual(entry.finalText?.text, "Raw.")
-        XCTAssertTrue(entry.improvementText.contains("not used"))
+        XCTAssertTrue(entry.answerLabel.hasSuffix("not used"))
         await env.dispose()
-    }
-
-    func testMissingOldEvidenceIsNotInferredAndTruncatedPrefixesAreNeverDeduplicated() throws {
-        var entry = DictationLogEntry(context: .init())
-        let long = String(repeating: "a", count: 4_100)
-        entry.recognized = DictationLogText(long + " first")
-        entry.finalText = DictationLogText(long + " second")
-        let encoded = try JSONEncoder().encode(entry)
-        let old = try JSONDecoder().decode(DictationLogEntry.self, from: encoded)
-        XCTAssertNil(old.cleanupOutput)
-        XCTAssertNil(old.expectedText)
-        XCTAssertTrue(old.improvementText.contains("Cleanup output actually used: not recorded"))
-        XCTAssertTrue(old.improvementText.contains("After style formatting: not recorded"))
-        XCTAssertTrue(old.improvementText.contains("Final text provided [TRUNCATED;"))
-        XCTAssertFalse(old.improvementText.contains("Final text provided: unchanged"))
-        XCTAssertTrue(old.improvementText.contains("not a labelled training example"))
     }
 
     func testFeedbackCanBeClearedAndNeverResurrectsDeletedEntries() async throws {
@@ -94,7 +66,7 @@ final class DictationLogImprovementTests: XCTestCase {
         await env.dispose()
     }
 
-    func testNewFieldsAreRecappedAndIncludedInCompleteExport() {
+    func testNewFieldsAreRecapped() {
         var entry = DictationLogEntry(context: .init())
         entry.context.vocabularyTerms = ["Herder", "pi"] + (0..<120).map { "term\($0)" + String(repeating: "x", count: 80) }
         entry.cleanupOutput = DictationLogText("cleanup result")
@@ -108,17 +80,5 @@ final class DictationLogImprovementTests: XCTestCase {
         XCTAssertEqual(entry.context.vocabularyTerms?.count, 100)
         XCTAssertEqual(entry.context.vocabularyTerms.map { Array($0.prefix(2)) }, ["Herder", "pi"])
         XCTAssertTrue(entry.context.vocabularyTerms?.allSatisfy { $0.count <= 64 } == true)
-        for text in ["Herder", "pi", "cleanup result", "Formatted result.", "feedback", "cleaner unavailable"] {
-            XCTAssertTrue(entry.plainText.contains(text), text)
-        }
-    }
-
-    func testBatchExportsAllEntriesWithOneSharedCaveat() {
-        let entries = [DictationLogEntry(context: .init()), DictationLogEntry(context: .init())]
-        for format in DictationLogExport.allCases {
-            let text = format.text(for: entries)
-            for entry in entries { XCTAssertTrue(text.contains(entry.id.uuidString)) }
-            XCTAssertEqual(text.components(separatedBy: "No audio is retained").count - 1, 1)
-        }
     }
 }
