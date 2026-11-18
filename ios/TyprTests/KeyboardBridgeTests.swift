@@ -28,7 +28,7 @@ final class KeyboardBridgeTests: XCTestCase {
 
         defaults.set("always", forKey: "settings.warmDuration")
         XCTAssertEqual(bridge.warmDuration, .fifteenMinutes)
-
+    }
 
     func testDeliverableResultSurvivesWarmSessionShutdownUntilTTL() {
         let now = 5_000.0
