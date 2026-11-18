@@ -242,9 +242,23 @@ extension JoinedSpaceKeycap {
             CGPoint(x: frame.maxX, y: frame.maxY), seam(frame.maxY, half),
         ], radius: radius)
         let top = frame.minY + 1.25 * radius, bottom = frame.maxY - 1.25 * radius
-        context.addLines(between: [seam(top, -half), seam(top, half), seam(bottom, half), seam(bottom, -half)])
-        context.setFillColor(mechanical.seamFill.cgColor)
-        context.fillPath()
+        let reach = half + 1.5
+        let seamFill = mechanical.seamFill
+        let feather = [seamFill.withAlphaComponent(0).cgColor, seamFill.cgColor, seamFill.withAlphaComponent(0).cgColor]
+        let columns = CGGradient(colorsSpace: nil, colors: feather as CFArray, locations: [0, 0.5, 1])
+        let rows = CGGradient(colorsSpace: nil, colors: [UIColor(white: 0, alpha: 0).cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor(white: 0, alpha: 0).cgColor] as CFArray, locations: [0, 0.25, 0.75, 1])
+        if let columns, let rows {
+            let local = CGRect(x: -reach, y: top - face.midY - 1.5, width: 2 * reach, height: bottom - top + 3)
+            context.saveGState()
+            context.concatenate(CGAffineTransform(a: 1, b: 0, c: -MechanicalKeycap.seamSlant, d: 1, tx: mechanicalSeamX(atY: face.midY, face: face), ty: face.midY))
+            context.clip(to: local)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.drawLinearGradient(columns, start: CGPoint(x: -reach, y: 0), end: CGPoint(x: reach, y: 0), options: [])
+            context.setBlendMode(.destinationIn)
+            context.drawLinearGradient(rows, start: CGPoint(x: 0, y: local.minY), end: CGPoint(x: 0, y: local.maxY), options: [])
+            context.endTransparencyLayer()
+            context.restoreGState()
+        }
         mechanical.drawBase(in: context, path: spaceBase, rect: frame)
         mechanical.drawBase(in: context, path: typrBase, rect: frame)
         let faceRadius = mechanical.faceRadius(radius)
