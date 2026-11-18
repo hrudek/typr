@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-: "${RUNNER_TEMP:?}" "${APP_CONFIG:?}" "${APPLE_TEAM_ID:?}" "${DISTRIBUTION:?}"
+: "${RUNNER_TEMP:?}" "${APP_CONFIG:?}" "${APPLE_TEAM_ID:?}"
 : "${IOS_CERTIFICATE_P12_BASE64:?Missing signing certificate}" "${IOS_CERTIFICATE_PASSWORD:?Missing certificate password}"
 : "${IOS_PROFILES_ZIP_BASE64:?Missing provisioning profiles}"
 here=$(cd "$(dirname "$0")" && pwd)

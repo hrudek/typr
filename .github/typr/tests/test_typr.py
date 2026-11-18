@@ -253,13 +253,6 @@ class InfraLabelTests(unittest.TestCase):
         self.assertIn('pull-requests: read', ci)
         self.assertIn('types: [opened, synchronize, reopened, ready_for_review]', ci)
 
-    def test_infra_label_reruns_failed_ci_without_running_pr_code(self):
-        recheck = (self.WORKFLOWS / 'typr-recheck.yml').read_text()
-        self.assertIn('types: [labeled]', recheck)
-        self.assertIn("if: github.event.label.name == 'infra'", recheck)
-        self.assertIn('gh run rerun "$id" --failed', recheck)
-        self.assertNotIn('actions/checkout', recheck)
-
 
 if __name__ == '__main__':
     unittest.main()

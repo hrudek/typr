@@ -1,5 +1,4 @@
 """Scheduling contracts: Linux-only PRs, parallel latest-main work, protected signing."""
-import importlib.util
 from pathlib import Path
 import re
 import unittest
@@ -37,7 +36,7 @@ def condition(name, event, distribution='', changed='true', only_testing='', dra
 
 
 class FastLaneContracts(unittest.TestCase):
-    def test_three_distinct_workflow_results_and_trusted_status(self):
+    def test_three_distinct_workflow_results(self):
         for source, name in ((CHECKS, 'Checks'), (SIMULATOR, 'Simulator tests'),
                              (SOURCE, 'TestFlight')):
             self.assertIn(f'\nname: {name}\n', source)
@@ -46,11 +45,6 @@ class FastLaneContracts(unittest.TestCase):
         self.assertNotIn('secrets.', SIMULATOR)
         self.assertNotIn('ARTIFACT_AGE_RECIPIENT', SIMULATOR)
         self.assertNotIn('only_testing:', SOURCE)
-        status = (ROOT / '.github/workflows/typr-status.yml').read_text()
-        self.assertIn('types: [completed]', status)
-        self.assertIn('ref: main', status)
-        self.assertIn("head_branch == 'main'", status)
-        self.assertIn('head_repository.full_name == github.repository', status)
 
     def test_prs_never_allocate_macos_or_decide(self):
         for draft in (False, True):
@@ -65,32 +59,20 @@ class FastLaneContracts(unittest.TestCase):
         self.assertFalse(condition('build', 'push', changed='false'))
         self.assertIn('needs: [decide, build]', job('sign'))
 
-    def test_only_status_is_scheduled_and_manual_preview_has_no_device_archive(self):
-        workflows = ROOT / '.github/workflows'
-        scheduled = sorted(p.name for p in workflows.glob('*.yml')
-                           if re.search(r'^  schedule:', p.read_text(), re.M))
-        self.assertEqual(scheduled, ['typr-status.yml'])
-        status = (workflows / 'typr-status.yml').read_text()
-        self.assertIn("cron: '17 6 * * 1'", status)
-        self.assertIn("workflows: [Checks, Simulator tests, TestFlight]", status)
+    def test_nothing_is_scheduled_and_manual_preview_has_no_device_archive(self):
+        for path in (ROOT / '.github/workflows').glob('*.yml'):
+            self.assertNotRegex(path.read_text(), re.compile(r'^  schedule:', re.M), path.name)
         self.assertTrue(condition('test', 'workflow_dispatch', 'simulator'))
         self.assertFalse(condition('build', 'workflow_dispatch', 'simulator'))
         self.assertFalse(condition('test', 'workflow_dispatch', 'simulator', only_testing='none'))
-        self.assertIn('unsigned|simulator) ;;', DECIDE)
+        self.assertIn('simulator) ;;', DECIDE)
 
     def test_only_main_pushes_and_required_job_names_stay_stable(self):
         push = re.search(r'^  push:\n(.*?)(?=^  \S)', SOURCE, re.M | re.S).group(1)
         self.assertEqual(push.strip(), 'branches: [main]')
-        spec = importlib.util.spec_from_file_location(
-            'reuse', ROOT / '.github/typr/reuse-pr-archive.py')
-        reuse = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(reuse)
-        names = set()
         for key, expected in (('linux', 'Linux checks'), ('decide', 'Decide'),
                               ('build', 'Unsigned archive')):
             self.assertEqual(re.search(r'^    name: (.+)$', job(key), re.M).group(1), expected)
-            names.add(expected)
-        self.assertEqual(names, set(reuse.REQUIRED_JOBS))
         checks_linux = CHECKS.split('\n  linux:\n')[1].split('\n  labels:')[0]
         self.assertNotRegex(checks_linux, re.compile(r'^    if:', re.M))
         self.assertIn("if: github.event_name != 'pull_request'", job('decide'))
@@ -125,10 +107,8 @@ class FastLaneContracts(unittest.TestCase):
             self.assertFalse(condition('test', event, distribution, changed='false',
                                        test_changed='true', only_testing='none'))
 
-    def test_manual_device_distributions_still_build(self):
-        for distribution in ('unsigned', 'ad-hoc', 'testflight'):
-            with self.subTest(distribution=distribution):
-                self.assertTrue(condition('build', 'workflow_dispatch', distribution))
+    def test_manual_testflight_still_builds(self):
+        self.assertTrue(condition('build', 'workflow_dispatch', 'testflight'))
 
     def test_screenshots_are_manual_artifacts_not_pr_comments(self):
         simulator = job('test')

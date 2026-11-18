@@ -38,7 +38,7 @@ class FingerprintTests(unittest.TestCase):
     def test_pipeline_documentation_and_offline_tools_do_not_build(self):
         pipeline_before = self.fingerprint('pipeline')
         for path in ('.github/workflows/typr-ci.yml', '.github/typr/build.sh',
-                     '.github/typr/auto-merge.py', '.github/typr/tests/test_ci.py',
+                     '.github/typr/retry-capacity.py', '.github/typr/tests/test_ci.py',
                      'README.md', 'AGENTS.md', 'ios/TyprShared/WordData/README.md',
                      'ios/tools/dictation_log/cli.py'):
             self.change(path, 'changed')

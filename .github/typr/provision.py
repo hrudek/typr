@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Local only: create or reuse Typr's provisioning profiles and store them as a secret.
+"""Local only: create or reuse Typr's App Store profiles and store them as a secret.
 
-Usage: python3 .github/typr/provision.py ad-hoc|testflight
+Usage: python3 .github/typr/provision.py
 
 Uses the private Apple API helper in ~/.local/share/ios-build-signing (never in
 Git). Reuses an ACTIVE profile with the expected name, else creates one (a new
 "revision N" name when an older one went INVALID). Never deletes or revokes
-anything. Ad Hoc profiles use exactly the devices of the existing Ad Hoc
-profiles. Checks team, bundle ID and App Group before uploading the profile ZIP
-to the environment typr-<distribution> of hrudek/typr.
+anything. Checks team, bundle ID and App Group before uploading the profile ZIP
+to the environment typr-testflight of hrudek/typr.
 """
 import base64
 import importlib.util
@@ -25,7 +24,7 @@ from config import load  # noqa: E402
 
 ROOT = Path.home() / '.local/share/ios-build-signing'
 REPO = 'hrudek/typr'
-TYPES = {'ad-hoc': ('IOS_APP_ADHOC', 'Typr Ad Hoc'), 'testflight': ('IOS_APP_STORE', 'Typr App Store')}
+PREFIX = 'Typr App Store'
 
 
 def decode(path):
@@ -34,8 +33,7 @@ def decode(path):
     return plistlib.loads(raw)
 
 
-def main(distribution):
-    profile_type, prefix = TYPES[distribution]
+def main():
     os.umask(0o077)
     spec = importlib.util.spec_from_file_location('local_apple', ROOT / 'apple-api.py')
     apple = importlib.util.module_from_spec(spec)
@@ -43,15 +41,7 @@ def main(distribution):
     config = load()
     team = os.environ.get('APPLE_TEAM_ID', '2ZNGF24932')
     certificate = (ROOT / 'distribution-certificate-id.txt').read_text().strip()
-    devices = []
-    if distribution == 'ad-hoc':
-        old = decode(sorted((ROOT / 'typr-ad-hoc').glob('*.mobileprovision'))[0])
-        listed = apple.request('GET', '/v1/devices?filter[platform]=IOS&limit=200')['data']
-        devices = [d['id'] for d in listed if d['attributes']['udid'] in old['ProvisionedDevices']
-                   and d['attributes']['status'] == 'ENABLED']
-        if len(devices) != len(old['ProvisionedDevices']):
-            raise SystemExit('A registered test device is missing or disabled')
-    destination = ROOT / f'typr-{distribution}'
+    destination = ROOT / 'typr-testflight'
     destination.mkdir(mode=0o700, exist_ok=True)
     paths = []
     for bundle in config['bundle_ids']:
@@ -59,7 +49,7 @@ def main(distribution):
                if i['attributes']['identifier'] == bundle]
         if len(ids) != 1:
             raise SystemExit('Expected one registered bundle ID: ' + bundle)
-        name = f'{prefix} {bundle}'
+        name = f'{PREFIX} {bundle}'
         listed = apple.request('GET', '/v1/profiles?limit=200&filter[name]=' + urllib.parse.quote(name))['data']
         matching = [p for p in listed if p['attributes']['name'] == name
                     or p['attributes']['name'].startswith(name + ' revision ')]
@@ -80,10 +70,8 @@ def main(distribution):
                 'bundleId': {'data': {'type': 'bundleIds', 'id': ids[0]['id']}},
                 'certificates': {'data': [{'type': 'certificates', 'id': certificate}]},
             }
-            if devices:
-                relationships['devices'] = {'data': [{'type': 'devices', 'id': d} for d in devices]}
             profile = apple.request('POST', '/v1/profiles', {'data': {
-                'type': 'profiles', 'attributes': {'name': name, 'profileType': profile_type},
+                'type': 'profiles', 'attributes': {'name': name, 'profileType': 'IOS_APP_STORE'},
                 'relationships': relationships}})['data']
             print('Created profile:', name)
         path = destination / f'{bundle}.mobileprovision'
@@ -93,7 +81,7 @@ def main(distribution):
             raise SystemExit('Wrong team in ' + name)
         if data['Entitlements']['application-identifier'].split('.', 1)[1] != bundle:
             raise SystemExit('Wrong bundle ID in ' + name)
-        if bool(data.get('ProvisionedDevices')) != (distribution == 'ad-hoc'):
+        if data.get('ProvisionedDevices'):
             raise SystemExit('Unexpected device list in ' + name)
         group = data['Entitlements'].get('com.apple.security.application-groups')
         if not bundle.endswith('.widgets') and group != ['group.' + config['bundle_id']]:
@@ -103,17 +91,17 @@ def main(distribution):
             raise SystemExit(f'Background Inference missing in {name}; enable it for the app in the '
                              'portal and regenerate the profile before rerunning')
         paths.append(path)
-    archive = ROOT / f'typr-{distribution}-profiles.zip'
+    archive = ROOT / 'typr-testflight-profiles.zip'
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as output:
         for path in paths:
             output.write(path, path.name)
     subprocess.run(['gh', 'secret', 'set', 'IOS_PROFILES_ZIP_BASE64', '--repo', REPO,
-                    '--env', f'typr-{distribution}'],
+                    '--env', 'typr-testflight'],
                    input=base64.b64encode(archive.read_bytes()), check=True)
-    print(f'Uploaded {len(paths)} validated profiles to environment typr-{distribution}.')
+    print(f'Uploaded {len(paths)} validated profiles to environment typr-testflight.')
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2 or sys.argv[1] not in TYPES:
-        raise SystemExit('usage: provision.py ad-hoc|testflight')
-    main(sys.argv[1])
+    if len(sys.argv) != 1:
+        raise SystemExit('usage: provision.py')
+    main()
