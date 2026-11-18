@@ -22,9 +22,9 @@ struct TyprSettings {
         self.defaults = defaults
     }
 
-    /// On-device Apple Intelligence cleanup. Off retains the plain transcription path.
+    /// Dictation cleanup. Off by default and retains the plain transcription path.
     var aiCleanup: Bool {
-        get { defaults?.object(forKey: Key.aiCleanup) as? Bool ?? true }
+        get { defaults?.object(forKey: Key.aiCleanup) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.aiCleanup) }
     }
 

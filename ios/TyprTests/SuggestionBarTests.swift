@@ -24,6 +24,7 @@ final class SuggestionBarTests: XCTestCase {
         XCTAssertTrue(keyboard.autocorrect)
         XCTAssertTrue(keyboard.swipeTyping)
         XCTAssertFalse(settings.hideSuggestionBar)
+        XCTAssertFalse(settings.aiCleanup)
         XCTAssertTrue(settings.personalLearning)
         XCTAssertTrue(settings.autocorrectGerman)
         XCTAssertTrue(settings.autocorrectEnglish)

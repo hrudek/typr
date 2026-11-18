@@ -80,15 +80,15 @@ final class TyprCleanupTests: XCTestCase {
 
     private func drain() async { for _ in 0..<30 { await Task.yield() } }
 
-    func testSettingsUseIsolatedDefaultsAndDefaultOn() {
+    func testSettingsUseIsolatedDefaultsAndDefaultOff() {
         let name = "cleanup.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let settings = TyprSettings(defaults: defaults)
-        XCTAssertTrue(settings.aiCleanup)
-        settings.aiCleanup = false
-        XCTAssertFalse(TyprSettings(defaults: defaults).aiCleanup)
-        XCTAssertEqual(defaults.object(forKey: "typr.aiCleanup") as? Bool, false)
+        XCTAssertFalse(settings.aiCleanup)
+        settings.aiCleanup = true
+        XCTAssertTrue(TyprSettings(defaults: defaults).aiCleanup)
+        XCTAssertEqual(defaults.object(forKey: "typr.aiCleanup") as? Bool, true)
     }
 
     /// Success (trimmed, as Hex trims), a thrown error, and an empty answer: the last two keep the transcript.
