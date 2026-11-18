@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  # Main runs must not wait for an older run's signing jobs.
+  # Dev runs must not wait for an older run's signing jobs.
   # Cancellable work is grouped per job below; signing is never auto-cancelled.
   group: typr-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.run_id || '' }}
   cancel-in-progress: false

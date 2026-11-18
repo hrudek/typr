@@ -67,7 +67,7 @@ class FastLaneContracts(unittest.TestCase):
         self.assertNotRegex(checks_linux, re.compile(r'^    if:', re.M))
         self.assertIn('python3 -m unittest discover -s ios/tools/dictation_log/tests -v', checks_linux)
 
-    def test_main_runs_do_not_serialize_but_jobs_supersede_old_work(self):
+    def test_dev_runs_do_not_serialize_but_jobs_supersede_old_work(self):
         workflow_concurrency = SOURCE.split('\nconcurrency:\n')[1].split('\njobs:')[0]
         self.assertIn('github.run_id', workflow_concurrency)
         for name in ('build', 'test'):
