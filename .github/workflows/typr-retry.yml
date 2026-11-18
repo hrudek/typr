@@ -1,7 +1,7 @@
 # Recover only GitHub-hosted macOS allocation failures, not code/test failures.
 # Never subscribe to this workflow itself.
-name: Typr runner retry
-run-name: "Typr runner retry · ${{ github.event.workflow_run.head_branch }} · attempt ${{ github.event.workflow_run.run_attempt }}"
+name: Runner retry
+run-name: "Runner retry · ${{ github.event.workflow_run.head_branch }} · attempt ${{ github.event.workflow_run.run_attempt }}"
 
 on:
   workflow_run:
@@ -28,7 +28,6 @@ jobs:
     permissions:
       contents: read
       actions: write
-      pull-requests: read
       checks: read
     env:
       GH_TOKEN: ${{ github.token }}

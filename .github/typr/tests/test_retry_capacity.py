@@ -33,6 +33,7 @@ class CapacityTests(unittest.TestCase):
         for change in (
             {'repository': {'full_name': 'other/repo'}}, {'head_repository': None},
             {'path': '.github/workflows/typr-retry.yml'}, {'event': 'workflow_run'},
+            {'event': 'pull_request'},
             {'status': 'in_progress'}, {'conclusion': 'success'}, {'conclusion': 'cancelled'},
             {'run_attempt': 0}, {'run_attempt': 4},
         ):
@@ -105,16 +106,11 @@ class CapacityTests(unittest.TestCase):
             pages.assert_not_called()
             sleep.assert_not_called()
 
-    def test_moved_branch_or_closed_draft_foreign_pr_is_not_current(self):
+    def test_only_unmoved_branch_is_current(self):
         with patch.object(capacity, 'api', return_value={'commit': {'sha': 'b' * 40}}):
             self.assertFalse(capacity.current_source(REPO, self.run))
-        run = {**self.run, 'event': 'pull_request', 'head_branch': 'feature/test'}
-        pr = {'draft': False, 'head': {'sha': run['head_sha'], 'repo': {'full_name': REPO}}}
-        for prs, expected in (([pr], True), ([], False), ([{**pr, 'draft': True}], False),
-                              ([{'draft': False, 'head': {**pr['head'], 'repo': None}}], False)):
-            with self.subTest(prs=prs), patch.object(capacity, 'api', side_effect=[
-                    {'commit': {'sha': run['head_sha']}}, prs]):
-                self.assertEqual(capacity.current_source(REPO, run), expected)
+        with patch.object(capacity, 'api', return_value={'commit': {'sha': self.run['head_sha']}}):
+            self.assertTrue(capacity.current_source(REPO, self.run))
 
     def test_pagination(self):
         with patch.object(capacity, 'api', side_effect=[{'jobs': list(range(100))}, {'jobs': [100]}]):

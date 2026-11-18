@@ -42,7 +42,7 @@ def eligible_run(run, repo):
         run['repository']['full_name'] == repo
         and (run.get('head_repository') or {}).get('full_name') == repo
         and run['path'] in WORKFLOWS
-        and run['event'] in ('push', 'pull_request', 'schedule', 'workflow_dispatch')
+        and run['event'] in ('push', 'workflow_dispatch')
         and run['status'] == 'completed'
         # GitHub capacity loss produces a failed run with a cancelled job.
         # A user-cancelled run must stay cancelled.
@@ -68,14 +68,7 @@ def current_source(repo, run):
         current = api(repo, f'branches/{branch}')
     except subprocess.CalledProcessError:
         return False  # Deleted/inaccessible branch: never revive an obsolete run.
-    if current['commit']['sha'] != run['head_sha']:
-        return False
-    if run['event'] == 'pull_request':
-        owner = repo.split('/')[0]
-        pulls = api(repo, f'pulls?state=open&base=main&head={quote(owner + ":" + run["head_branch"], safe="")}')
-        return any(not pr['draft'] and pr['head']['sha'] == run['head_sha']
-                   and (pr['head'].get('repo') or {}).get('full_name') == repo for pr in pulls)
-    return True
+    return current['commit']['sha'] == run['head_sha']
 
 
 def report(message):
@@ -91,7 +84,7 @@ def retry(repo, run_id):
         report('No capacity retry: unrelated run, not failed, or retry budget exhausted.')
         return
     if not current_source(repo, run):
-        report('No capacity retry: branch moved, was deleted, or PR is no longer open/ready.')
+        report('No capacity retry: branch moved or was deleted.')
         return
     jobs = pages(repo, f'actions/runs/{run_id}/jobs?filter=latest', 'jobs')
     candidate = None

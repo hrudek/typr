@@ -1,28 +1,18 @@
 # Independent result in Actions: tests never gate a TestFlight upload.
 name: Simulator tests
-run-name: "Simulator tests · ${{ github.ref_name }} · ${{ inputs.distribution || github.event_name }}"
+run-name: "Simulator tests · ${{ github.ref_name }} · ${{ github.event_name }}"
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
     inputs:
-      distribution:
-        description: "Simulator preview with screenshots, or automatic changed-input routing"
-        type: choice
-        options: [simulator, automatic]
-        default: simulator
-        required: true
-      base_sha:
-        description: "Automatic lane only: merge parent (empty: main's first parent)"
-        type: string
-        default: ""
       only_testing:
         description: "Comma-separated -only-testing targets (empty: all, none: skip)"
         type: string
         default: ""
       scenes:
-        description: "Extra screenshot scenes, comma-separated (simulator mode only)"
+        description: "Extra screenshot scenes, comma-separated"
         type: string
         default: ""
 
@@ -36,13 +26,10 @@ concurrency:
 jobs:
   decide:
     name: Decide
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       test: ${{ steps.decide.outputs.test }}
-      build: ${{ steps.decide.outputs.build }}
-      sign: ${{ steps.decide.outputs.sign }}
       config: ${{ steps.config.outputs.config }}
     steps:
       - name: Require configuration
@@ -54,7 +41,7 @@ jobs:
         with:
           sparse-checkout: .github/typr
           persist-credentials: false
-      - name: Load Typr identity
+      - name: Load identity
         id: config
         run: python3 .github/typr/config.py
       - name: Which iOS lanes changed, and what gets signed?
@@ -64,19 +51,17 @@ jobs:
           REF: ${{ github.ref }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
-          DISTRIBUTION: ${{ inputs.distribution }}
-          BASE_SHA: ${{ inputs.base_sha }}
+          DISTRIBUTION: simulator
           REPO: ${{ github.server_url }}/${{ github.repository }}
         run: bash .github/typr/decide-lanes.sh
 
   test:
     name: Simulator tests
     needs: decide
-    # No simulator allocation for PRs; manual branch runs remain available.
-    if: github.event_name != 'pull_request' && (github.event_name != 'push' || github.ref == 'refs/heads/main') && needs.decide.outputs.test == 'true' && inputs.only_testing != 'none'
+    if: needs.decide.outputs.test == 'true' && inputs.only_testing != 'none'
     concurrency:
-      group: typr-ci-test-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && 'main-auto' || format('{0}-{1}', github.ref, inputs.distribution) }}
-      cancel-in-progress: ${{ github.event_name == 'push' || inputs.distribution == 'automatic' }}
+      group: typr-ci-test-${{ github.event_name == 'push' && 'push' || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     runs-on: ${{ vars.MACOS_RUNNER || 'macos-26' }}
     timeout-minutes: 60
     env:
@@ -115,13 +100,13 @@ jobs:
           ONLY_TESTING: ${{ inputs.only_testing }}
         run: bash .github/typr/test.sh
       - name: Screenshots of the app's scenes (same build, no second compile)
-        if: github.event_name == 'workflow_dispatch' && inputs.distribution == 'simulator' && !cancelled() && steps.tests.outcome != 'skipped'
+        if: github.event_name == 'workflow_dispatch' && !cancelled() && steps.tests.outcome != 'skipped'
         continue-on-error: true
         env:
           SCENES: ${{ inputs.scenes }}
         run: bash .github/typr/screenshots.sh
       - name: Upload screenshots
-        if: github.event_name == 'workflow_dispatch' && inputs.distribution == 'simulator' && !cancelled()
+        if: github.event_name == 'workflow_dispatch' && !cancelled()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: typr-screenshots-${{ github.run_id }}
@@ -136,16 +121,14 @@ jobs:
           path: ${{ runner.temp }}/test-output
           if-no-files-found: ignore
           retention-days: 7
-      # Saved from pushes, schedules and manual runs only, never from a PR, so a PR
-      # cannot plant anything that a main (TestFlight) build later restores.
       - name: Save Swift package checkouts
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && github.event_name != 'pull_request' && steps.spm-cache.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && steps.spm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/SourcePackages
           key: ${{ steps.cache-keys.outputs.spm }}
       - name: Save compilation cache
-        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' && github.event_name != 'pull_request' }}
+        if: ${{ !cancelled() && steps.tests.outcome != 'skipped' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/CompilationCache

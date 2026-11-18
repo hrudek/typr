@@ -1,22 +1,11 @@
 # Device archives and signing only. Simulator tests run in typr-simulator.yml.
 name: TestFlight
-run-name: "TestFlight · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }} · ${{ inputs.distribution || github.event.action || github.event_name }}"
+run-name: "TestFlight · ${{ github.ref_name }} · ${{ github.event_name }}"
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      distribution:
-        description: TestFlight always builds; automatic routes main app changes
-        type: choice
-        options: [testflight, automatic]
-        default: testflight
-        required: true
-      base_sha:
-        description: "Automatic lane only: compare main against this merge parent (empty: main's first parent)"
-        type: string
-        default: ""
 
 permissions:
   contents: read
@@ -24,42 +13,15 @@ permissions:
 concurrency:
   # Main runs must not wait for an older run's signing jobs.
   # Cancellable work is grouped per job below; signing is never auto-cancelled.
-  group: typr-ci-${{ github.event_name }}-${{ github.ref }}-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && github.run_id || inputs.distribution || '' }}
+  group: typr-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.run_id || '' }}
   cancel-in-progress: false
 
 jobs:
-  linux:
-    name: Linux checks
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-          filter: blob:none
-          persist-credentials: false
-      - name: Typr script tests
-        run: python3 -m unittest discover -s .github/typr/tests -v
-      - name: Offline dictation log tests
-        run: python3 -m unittest discover -s ios/tools/dictation_log/tests -v
-      - name: Shell syntax
-        run: for script in .github/typr/*.sh; do bash -n "$script"; done
-      - name: ShellCheck
-        run: shellcheck -x -P .github/typr .github/typr/*.sh
-      - name: Lint Typr workflows
-        # SC2016/SC2129: Markdown backticks in single quotes and one-line-per-fact outputs are intended.
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color -ignore SC2016 -ignore SC2129 .github/workflows/typr-*.yml
-
   decide:
     name: Decide
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      test: ${{ steps.decide.outputs.test }}
       build: ${{ steps.decide.outputs.build }}
       sign: ${{ steps.decide.outputs.sign }}
       config: ${{ steps.config.outputs.config }}
@@ -75,7 +37,7 @@ jobs:
         with:
           sparse-checkout: .github/typr
           persist-credentials: false
-      - name: Load Typr identity
+      - name: Load identity
         id: config
         run: python3 .github/typr/config.py
       - name: Which iOS lanes changed, and what gets signed?
@@ -85,18 +47,17 @@ jobs:
           REF: ${{ github.ref }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
-          DISTRIBUTION: ${{ inputs.distribution }}
-          BASE_SHA: ${{ inputs.base_sha }}
+          DISTRIBUTION: testflight
           REPO: ${{ github.server_url }}/${{ github.repository }}
         run: bash .github/typr/decide-lanes.sh
 
   build:
     name: Unsigned archive
     needs: decide
-    if: github.event_name != 'pull_request' && needs.decide.outputs.build == 'true' && inputs.distribution != 'simulator'
+    if: needs.decide.outputs.build == 'true'
     concurrency:
-      group: typr-ci-build-${{ (github.event_name == 'push' || inputs.distribution == 'automatic') && 'main-auto' || format('{0}-{1}', github.ref, inputs.distribution) }}
-      cancel-in-progress: ${{ github.event_name == 'push' || inputs.distribution == 'automatic' }}
+      group: typr-ci-build-${{ github.event_name == 'push' && 'push' || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     runs-on: ${{ vars.MACOS_BUILD_RUNNER || 'macos-15-intel' }}
     timeout-minutes: 90
     env:
@@ -104,7 +65,7 @@ jobs:
       APP_CONFIG: ${{ needs.decide.outputs.config }}
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       ARTIFACT_AGE_RECIPIENT: ${{ vars.ARTIFACT_AGE_RECIPIENT }}
-      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -137,16 +98,14 @@ jobs:
       - name: Build unsigned device archive (app, keyboard and widgets)
         id: archive
         run: bash .github/typr/build.sh
-      # Saved from pushes, schedules and manual runs only, never from a PR, so a PR
-      # cannot plant anything that a main (TestFlight) build later restores.
       - name: Save Swift package checkouts
-        if: ${{ !cancelled() && steps.archive.outcome != 'skipped' && github.event_name != 'pull_request' && steps.spm-cache.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.archive.outcome != 'skipped' && steps.spm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/SourcePackages
           key: ${{ steps.cache-keys.outputs.spm }}
       - name: Save compilation cache
-        if: ${{ !cancelled() && steps.archive.outcome != 'skipped' && github.event_name != 'pull_request' }}
+        if: ${{ !cancelled() && steps.archive.outcome != 'skipped' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/CompilationCache
@@ -163,8 +122,6 @@ jobs:
 
   sign:
     name: Sign (${{ needs.decide.outputs.sign }})
-    # Ships as soon as the archive compiled; the tests run in parallel. Red tests are fixed
-    # locally afterwards through a normal PR.
     needs: [decide, build]
     if: needs.decide.outputs.sign != '' && needs.build.result == 'success'
     concurrency:

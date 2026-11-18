@@ -12,10 +12,10 @@ commands: [.github/typr/README.md](.github/typr/README.md).
 - No new Markdown files for features, plans, task state or reports: rationale goes
   into the PR description or a short code comment. Agent working files (`TASKS.md`,
   `reports/`) stay outside the repository. A new `.md` needs the `docs` label.
-- After pushing, fix every numbered finding of the latest **Typr review** and wait
+- After pushing, fix every numbered finding of the latest **Review** and wait
   for the next verdict. `⚠️ NO RESULT`: re-run once, then tell the owner.
 - **Prefer fast integration:** open small PRs promptly; do not wait for simulator
-  tests before merging. Linux checks and Typr review remain required. Simulator
+  tests before merging. Linux checks and Review remain required. Simulator
   tests run on `main` alongside TestFlight delivery; follow the results and promptly
   fix regressions or revert.
 - Removing a feature: prefer **Revert** of its PR(s).
