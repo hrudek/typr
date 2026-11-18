@@ -128,18 +128,30 @@ final class DictationLogStorage: @unchecked Sendable {
         }
         ready = true
     }
+    private func readLegacy() throws -> DictationLogDocument {
+        try protect(url)
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let data = try handle.read(upToCount: Self.maximumBytes + 1) ?? Data()
+        guard data.count <= Self.maximumBytes else { throw CocoaError(.fileReadCorruptFile) }
+        let legacy = try JSONDecoder().decode(DictationLogDocument.self, from: data)
+        guard legacy.schemaVersion == 1, legacy.entries.allSatisfy({ $0.schemaVersion == 1 }) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        return legacy
+    }
+    private func scrubLegacy(_ ids: Set<UUID>) throws {
+        guard fm.fileExists(atPath: url.path), var legacy = try? readLegacy() else { return }
+        let count = legacy.entries.count
+        legacy.entries.removeAll { ids.contains($0.id) }
+        guard legacy.entries.count != count else { return }
+        try encoder().encode(legacy).write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try protect(url)
+    }
     private func migrate() throws {
         guard fm.fileExists(atPath: url.path) else { return }
         do {
-            try protect(url)
-            let handle = try FileHandle(forReadingFrom: url)
-            defer { try? handle.close() }
-            let data = try handle.read(upToCount: Self.maximumBytes + 1) ?? Data()
-            guard data.count <= Self.maximumBytes else { throw CocoaError(.fileReadCorruptFile) }
-            let legacy = try JSONDecoder().decode(DictationLogDocument.self, from: data)
-            guard legacy.schemaVersion == 1, legacy.entries.allSatisfy({ $0.schemaVersion == 1 }) else {
-                throw CocoaError(.fileReadCorruptFile)
-            }
+            let legacy = try readLegacy()
             var unresolved = false
             for var entry in legacy.entries {
                 if tombstones.contains(entry.id) { continue }
@@ -201,6 +213,7 @@ final class DictationLogStorage: @unchecked Sendable {
                     if self.fm.fileExists(atPath: file.path) { try self.fm.removeItem(at: file) }
                     self.metadata[id] = nil
                 }
+                try self.scrubLegacy(Set(ids))
                 if self.fm.fileExists(atPath: self.exportsURL.path) { try self.fm.removeItem(at: self.exportsURL) }
                 try self.writeIndex(); completion(true)
             } catch { completion(false) }

@@ -173,6 +173,26 @@ final class DictationLogStoreTests: XCTestCase {
         await env.dispose()
     }
 
+    func testExpiryDuringUnfinishedMigrationScrubsLegacyCopyAndKeepsUnresolvedEntry() async throws {
+        let env = LogTestEnvironment(); await env.storage.flush()
+        let now = Date()
+        var expired = entry(createdAt: now - 11 * Self.day); expired.revision = nil
+        var unresolved = entry(createdAt: now - 11 * Self.day); unresolved.revision = nil
+        try Data("unreadable newer copy".utf8)
+            .write(to: env.storage.root.appendingPathComponent("entries/\(unresolved.id.uuidString).json"))
+        try JSONEncoder().encode(DictationLogDocument(entries: [expired, unresolved])).write(to: env.storage.url)
+        let disk = DictationLogStorage(url: env.storage.url)
+        let migrated = DictationLogStore(storage: disk, settings: env.settings, now: { now })
+        try await waitForState("migrated copy expired") {
+            await disk.flush(); await mainActorBarrier()
+            return !migrated.isLoading && migrated.metadata.isEmpty
+        }
+        let legacy = try JSONDecoder().decode(DictationLogDocument.self, from: Data(contentsOf: env.storage.url))
+        XCTAssertEqual(legacy.entries, [unresolved])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: disk.root
+            .appendingPathComponent("entries/\(expired.id.uuidString).json").path))
+        await env.dispose()
+    }
     func testCorruptAndUnknownLegacyIsPreservedAndDoesNotBlockNewCaptures() async throws {
         for data in [Data("not JSON".utf8), Data(repeating: 32, count: 1_000_001),
                      Data(#"{"schemaVersion":999,"entries":[]}"#.utf8)] {
