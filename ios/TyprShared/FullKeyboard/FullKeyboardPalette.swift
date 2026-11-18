@@ -241,7 +241,7 @@ extension JoinedSpaceKeycap {
             seam(frame.minY, half), CGPoint(x: frame.maxX, y: frame.minY),
             CGPoint(x: frame.maxX, y: frame.maxY), seam(frame.maxY, half),
         ], radius: radius)
-        let top = frame.minY + 1.25 * radius, bottom = frame.maxY - 1.25 * radius
+        let top = frame.minY + 0.5 * radius, bottom = frame.maxY - 0.5 * radius
         let reach = half + 1.5
         let seamFill = mechanical.seamFill
         let feather = [seamFill.withAlphaComponent(0).cgColor, seamFill.cgColor, seamFill.withAlphaComponent(0).cgColor]
