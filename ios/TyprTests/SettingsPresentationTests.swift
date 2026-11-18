@@ -12,8 +12,9 @@ final class SettingsPresentationTests: XCTestCase {
                 destination
             )
         }
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
-            ["Typr", "--snap-state", SettingsDestination.historySampleScene]), .history)
+        for scene in [SettingsDestination.historySampleScene, SettingsDestination.historyDetailScene] {
+            XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", scene]), .history)
+        }
         // The prompt editor is gone (Hex has none); its old route opens nothing.
         XCTAssertNil(SettingsDestination.snapshotDestination(arguments:
             ["Typr", "--snap-state", "settings-cleanup-prompt"]))

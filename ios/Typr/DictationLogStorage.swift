@@ -232,14 +232,14 @@ final class DictationLogStorage: @unchecked Sendable {
     }
     /// Snapshot hard links freeze atomic-entry inodes on the I/O queue. Slow streaming then
     /// runs separately: recording, output and subsequent writes never wait for JSON assembly.
-    func export(ids: [UUID]?, build: String, completion: @escaping @Sendable (Result<URL, any Error>) -> Void) {
+    func export(build: String, completion: @escaping @Sendable (Result<URL, any Error>) -> Void) {
         queue.async {
             let workspace = self.exportsURL.appendingPathComponent(UUID().uuidString, isDirectory: true)
             do {
                 try self.initialize()
                 try self.protect(workspace, directory: true)
                 var files: [URL] = []
-                for id in (ids ?? self.metadata.values.sorted { $0.date < $1.date }.map(\.id)) {
+                for id in self.metadata.values.sorted(by: { $0.date < $1.date }).map(\.id) {
                     let target = workspace.appendingPathComponent(id.uuidString + ".entry")
                     try self.fm.linkItem(at: self.entryURL(id), to: target); files.append(target)
                 }

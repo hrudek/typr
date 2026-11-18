@@ -255,7 +255,7 @@ final class DictationLogStoreTests: XCTestCase {
         try await settle(loaded)
         XCTAssertEqual(loaded.metadata.count, count)
         let result: Result<URL, any Error> = await withCheckedContinuation { continuation in
-            disk.export(ids: nil, build: "synthetic-test") { continuation.resume(returning: $0) }
+            disk.export(build: "synthetic-test") { continuation.resume(returning: $0) }
         }
         let file = try result.get()
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
@@ -266,23 +266,6 @@ final class DictationLogStoreTests: XCTestCase {
         XCTAssertTrue(entries.allSatisfy { $0["schemaVersion"] as? Int == 2 })
         loaded.clear(); try await settle(loaded)
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
-        await env.dispose()
-    }
-
-    func testPreparedJSONIsOnlyExposedForItsExactScope() async throws {
-        let env = LogTestEnvironment()
-        let first = env.begin(); first.finish(text: "first", beforeSpelling: "first")
-        let second = env.begin(); second.finish(text: "second", beforeSpelling: "second")
-        try await settle(env.store)
-        env.store.prepareJSON(ids: [first.entryID])
-        try await waitForState("scoped export prepared") { !env.store.exporting }
-        XCTAssertNotNil(env.store.preparedJSON(for: [first.entryID]))
-        XCTAssertNil(env.store.preparedJSON(for: nil))
-        XCTAssertNil(env.store.preparedJSON(for: [second.entryID]))
-        env.store.prepareJSON()
-        try await waitForState("complete export prepared") { !env.store.exporting }
-        XCTAssertNotNil(env.store.preparedJSON(for: nil))
-        XCTAssertNil(env.store.preparedJSON(for: [first.entryID]))
         await env.dispose()
     }
 
@@ -298,7 +281,7 @@ final class DictationLogStoreTests: XCTestCase {
         let loaded = DictationLogStore(storage: disk, settings: env.settings)
         try await settle(loaded)
         let completed = expectation(description: "cancelled export completed")
-        disk.export(ids: nil, build: "synthetic") { result in
+        disk.export(build: "synthetic") { result in
             if case .success = result { XCTFail("Clear must cancel the export") }
             completed.fulfill()
         }

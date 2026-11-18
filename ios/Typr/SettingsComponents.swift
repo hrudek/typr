@@ -38,12 +38,13 @@ enum SettingsDestination: String, CaseIterable, Hashable {
     }
 
     static let historySampleScene = "settings-history-sample"
+    static let historyDetailScene = "settings-history-sample-detail"
 
     static func snapshotDestination(arguments: [String]) -> Self? {
         guard let index = arguments.firstIndex(of: "--snap-state"), index + 1 < arguments.count else { return nil }
         let scene = arguments[index + 1]
         if scene == "settings-keyboard-typing" { return .keyboard }
-        if scene == historySampleScene { return .history }
+        if scene == historySampleScene || scene == historyDetailScene { return .history }
         if StatisticsFixture.launchFixture(arguments: arguments) != nil { return .statistics }
         guard scene.hasPrefix("settings-") else { return nil }
         return Self(rawValue: String(scene.dropFirst("settings-".count)))

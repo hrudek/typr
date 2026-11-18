@@ -347,7 +347,6 @@ final class DictationLogStore {
     func retryKeyboardFeedback() { keyboardFeedbackNotice = nil; drainKeyboardFeedback(force: true) }
     private(set) var exporting = false
     private(set) var exportURL: URL?
-    private var exportIDs: [UUID]?
     private(set) var exportProblem: String?
     private var lastLoadProblem = false
     private var active = Set<UUID>()
@@ -645,16 +644,15 @@ final class DictationLogStore {
         for entry in dirty.values where !deleted.contains(entry.id) { put(entry) }
         reload()
     }
-    func preparedJSON(for ids: [UUID]?) -> URL? { exportIDs == ids ? exportURL : nil }
     func releaseJSON(_ url: URL) {
         storage.removeExport(url)
         if exportURL == url { exportURL = nil }
     }
-    func prepareJSON(ids: [UUID]? = nil) {
+    func prepareJSON() {
         guard !exporting else { return }
         if let exportURL { storage.removeExport(exportURL) }
         exporting = true; exportURL = nil; exportProblem = nil; let generation = storageGeneration
-        storage.export(ids: ids, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown") { [weak self] result in
+        storage.export(build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown") { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self, self.storageGeneration == generation else {
                     if case .success(let url) = result { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -662,7 +660,7 @@ final class DictationLogStore {
                 }
                 self.exporting = false
                 switch result {
-                case .success(let url): self.exportIDs = ids; self.exportURL = url
+                case .success(let url): self.exportURL = url
                 case .failure: self.exportProblem = "JSON could not be prepared. Prepare again to retry. No file was shared."
                 }
             }

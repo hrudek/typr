@@ -199,7 +199,7 @@ struct ContentView: View {
 
     private static let historyStore: DictationLogStore = {
         #if targetEnvironment(simulator)
-        if DictationHistoryFixture.isRequested(arguments: ProcessInfo.processInfo.arguments) { return DictationHistoryFixture.store() }
+        if DictationHistoryFixture.isRequested { return DictationHistoryFixture.store() }
         #endif
         return DictationLogStore.shared
     }()

@@ -66,7 +66,7 @@ struct DictationHistoryView: View {
         } message: {
             Text("Removes every saved dictation and its feedback from this iPhone. Exports you already shared are not affected.")
         }
-        .onChange(of: store.preparedJSON(for: nil)) { _, url in
+        .onChange(of: store.exportURL) { _, url in
             guard exportRequested, let url else { return }
             exportRequested = false
             sharedURL = url
@@ -81,6 +81,9 @@ struct DictationHistoryView: View {
         .onChange(of: router.requestedEntry) { _, _ in openRequestedEntry() }
         .onChange(of: openEntry) { _, id in if id == nil { focusesNote = false } }
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
+        #if targetEnvironment(simulator)
+        .task { if let id = await DictationHistoryFixture.detailEntry() { openEntry = id } }
+        #endif
     }
 
     private var settingsSection: some View {
