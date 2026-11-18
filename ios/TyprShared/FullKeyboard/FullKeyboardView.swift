@@ -29,7 +29,6 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     var onShowCompactBar: (() -> Void)?
     /// Fixtures force the suggestion bar on or off; the keyboard follows Typr's switch.
     var suggestionBarOverride: Bool? { didSet { applySuggestionBarSetting() } }
-    /// Fixtures force a keyboard design; the keyboard follows Typr's setting.
     var designOverride: KeyboardDesign?
     /// How long Fix in Typr stays after Problem before the panel closes itself.
     var problemPanelDuration: TimeInterval {

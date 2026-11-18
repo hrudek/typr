@@ -45,12 +45,10 @@ struct FullKeyboardPalette: Equatable {
         if design == .mechanical { return isDark ? Self.rgb(0x3A3A3A) : Self.rgb(0xD3D6DC) }
         return isDark ? Self.rgb(0x474747) : Self.rgb(0xD8DCE4)
     }
-    /// Key letters. Mechanical mutes them to the grey of the owner's 2026-11-18 reference.
     var keyLabel: UIColor {
         guard design == .mechanical else { return textBase }
         return isDark ? Self.rgb(0x929292) : Self.rgb(0x6A6D74)
     }
-    /// Key symbols and modifier labels.
     var keyGlyph: UIColor {
         guard design == .mechanical else { return textBase }
         return isDark ? Self.rgb(0xA8A8A8) : Self.rgb(0x5A5D64)
@@ -224,7 +222,6 @@ struct JoinedSpaceKeycap {
 }
 
 extension JoinedSpaceKeycap {
-    /// The Mechanical seam's centre line, crossing the touch boundary at mid-height.
     func mechanicalSeamX(atY y: CGFloat, face: CGRect) -> CGFloat {
         (space.maxX + typr.minX) / 2 + MechanicalKeycap.seamSlant * (face.midY - y)
     }
@@ -260,13 +257,10 @@ extension JoinedSpaceKeycap {
     }
 }
 
-/// A raised keycap after the owner's 2026-11-18 reference: a dark skirt, thick
-/// below, under a lighter face with a soft gradient and a thin top highlight.
 struct MechanicalKeycap {
     let isDark: Bool
 
     static let seamGap: CGFloat = 3.5
-    /// Horizontal run of the joined key's seam per point of height.
     static let seamSlant: CGFloat = 0.21
     static let highlightWidth: CGFloat = 0.5
 
@@ -345,7 +339,6 @@ struct MechanicalKeycap {
         context.restoreGState()
     }
 
-    /// `rect` spans the whole face so a split face keeps one continuous gradient.
     func drawFace(in context: CGContext, path: UIBezierPath, rect: CGRect, color: UIColor) {
         context.saveGState()
         path.addClip()

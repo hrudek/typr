@@ -4,7 +4,6 @@ import UIKit
 /// Renders the experimental `FullKeyboardView` under a composer when
 /// `--snap-state full-keyboard-<state>[-dark|-dark-field]` is passed on Simulator.
 /// `-dark` is a dark app; `-dark-field` is a light app whose field asks for a dark keyboard.
-/// A `mechanical-` state prefix draws the Mechanical design, e.g. `full-keyboard-mechanical-shift-dark`.
 struct FullKeyboardSnapshotStage: View {
     let scene: String
 
