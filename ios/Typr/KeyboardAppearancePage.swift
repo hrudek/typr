@@ -73,7 +73,6 @@ struct KeyboardAppearancePage: View {
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
-    /// Real key proportions: a short window scales the whole keyboard down rather than squashing its keys.
     private func pinnedPreview(in page: CGSize) -> some View {
         let settings = preview
         let height = KeyboardLayout.height(for: settings.orientation, showsStrip: settings.showsSuggestionBar)

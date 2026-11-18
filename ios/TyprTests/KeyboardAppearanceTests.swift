@@ -48,7 +48,6 @@ final class KeyboardAppearanceTests: XCTestCase {
         let design = views.compactMap { $0 as? UISegmentedControl }
         XCTAssertEqual(design.count, 1)
         XCTAssertEqual(design.first?.numberOfSegments, KeyboardDesign.allCases.count)
-        // Hide suggestion bar and Period key.
         XCTAssertEqual(views.filter { $0 is UISwitch }.count, 2)
     }
 
