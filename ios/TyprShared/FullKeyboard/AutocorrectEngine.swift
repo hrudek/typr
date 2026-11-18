@@ -476,8 +476,7 @@ final class AutocorrectEngine {
             pendingPairChoice = nil
         }
         touchInput.clear()
-        typedSpace = nil
-        spaceBeforeWord = nil
+        forgetSpaceTaps()
         decodeCache = nil
         completionCache = nil
         boundaryCache = nil
@@ -549,6 +548,11 @@ final class AutocorrectEngine {
         learnIdentity(evidence, literal: pending.literal, source: .literalValid)
         learning.confirmLiteral(pending.literal)
         learning.recordWord(pending.literal)
+    }
+
+    func forgetSpaceTaps() {
+        typedSpace = nil
+        spaceBeforeWord = nil
     }
 
     /// iikb TypingEngine+Words.swift `PendingWord.ending`

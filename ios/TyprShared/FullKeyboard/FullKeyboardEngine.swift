@@ -417,6 +417,7 @@ final class FullKeyboardEngine {
     func waitForSuggestions() async { await suggestionWorker.waitUntilIdle() }
 
     func acceptSuggestion(_ suggestion: KeyboardSuggestion) {
+        autocorrect.forgetSpaceTaps()
         if suggestion.isSwipe {
             replaceSwipeWord(with: suggestion)
             return
@@ -787,6 +788,7 @@ final class FullKeyboardEngine {
 
     func deleteBackward(allowAutocorrectUndo: Bool = true, recordsStatistics: Bool = true) {
         prepareStatisticsEdit()
+        autocorrect.forgetSpaceTaps()
         autocorrect.syncLearning()
         let beforeDeletion = target.documentContextBeforeInput
         if allowAutocorrectUndo, let swipe = ownedSwipeWord(before: beforeDeletion) {
@@ -828,6 +830,7 @@ final class FullKeyboardEngine {
 
     func deleteWordBackward() {
         prepareStatisticsEdit()
+        autocorrect.forgetSpaceTaps()
         autocorrect.discardFeedback()
         autocorrect.touchInput.clear()
         autocorrect.clearPendingUndo()
@@ -899,6 +902,7 @@ final class FullKeyboardEngine {
             insert(text, sample: sample)
             return
         }
+        autocorrect.forgetSpaceTaps()
         let before = target.documentContextBeforeInput
         // Remove one word separator, never indentation, a newline or multiple spaces.
         if let before, before.hasSuffix(" "),
@@ -954,6 +958,7 @@ final class FullKeyboardEngine {
 
     private func typeSpace(sample: KeyboardTouchWord.Sample? = nil) {
         prepareStatisticsEdit()
+        if sample == nil { autocorrect.forgetSpaceTaps() }
         // Only an actual, unambiguous Space release can retain boundary geometry.
         // Typr/programmatic spaces deliberately call with nil.
         _ = autocorrect.touchInput.evidence(beforeInput: target.documentContextBeforeInput)
@@ -967,6 +972,7 @@ final class FullKeyboardEngine {
         if DoubleSpacePeriod.shouldReplace(before: target.documentContextBeforeInput, lastSpaceAt: lastSpaceAt, now: now) {
             statistics?.direct(" ")
             autocorrect.touchInput.clear()
+            autocorrect.forgetSpaceTaps()
             autocorrect.clearPendingUndo()
             target.deleteBackward()
             target.insertText(". ")
@@ -1031,6 +1037,7 @@ final class FullKeyboardEngine {
                                       afterInput: target.documentContextBeforeInput)
         } else if !keepsFeedback {
             autocorrect.discardFeedback()
+            autocorrect.forgetSpaceTaps()
         }
         if let sample {
             autocorrect.touchInput.append(text: text, point: sample.point, key: sample.key,
@@ -1136,6 +1143,7 @@ final class FullKeyboardEngine {
             if !words.contains(word) { words.append(word) }
         }
         guard let word = words.first else { return }
+        autocorrect.forgetSpaceTaps()
         let before = target.documentContextBeforeInput
         let text = (Self.swipeNeedsSpace(before: before) ? " " : "") + word
         prepareStatisticsEdit()
@@ -1194,6 +1202,7 @@ final class FullKeyboardEngine {
 
     /// Swaps the swiped word for an alternative in place, without a space and without learning.
     private func replaceSwipeWord(with suggestion: KeyboardSuggestion) {
+        autocorrect.forgetSpaceTaps()
         let before = target.documentContextBeforeInput
         guard let ownership = suggestion.ownership, ownership.revision == textRevision,
               ownership == suggestionOwnership, var swipe = ownedSwipeWord(before: before) else {

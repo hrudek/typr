@@ -274,6 +274,17 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
             engine.typeSpaceFromTyprKey()
             type("word ", engine)
         }, "a deleted Space never teaches, even when the text later reads like it again")
+        XCTAssertNil(spaceLabels { engine in
+            type("hello ", engine)
+            tap(.delete, engine)
+            engine.typeSpaceFromTyprKey()
+            type("world ", engine)
+        }, "a Space deleted before the next word starts never teaches")
+        XCTAssertNil(spaceLabels { engine in
+            type("hello wor", engine)
+            engine.deleteWordBackward()
+            type("world ", engine)
+        }, "any deletion after the Space drops its evidence")
         let ends: [(String, Int?)] = [("about ", nil), ("a out ", 1)]
         for (end, expected) in ends {
             XCTAssertEqual(spaceLabels { engine in
