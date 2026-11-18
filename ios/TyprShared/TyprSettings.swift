@@ -1,7 +1,7 @@
 import Foundation
 
 /// Typr switches, stored in the App Group so the keyboard reads them too.
-/// Switches default on. Dictation log deliberately retains saved history while off;
+/// Each switch documents its default. Dictation log deliberately retains saved history while off;
 /// other switches keep upstream's behavior when off.
 @MainActor
 struct TyprSettings {
