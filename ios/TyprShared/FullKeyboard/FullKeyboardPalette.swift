@@ -242,9 +242,18 @@ extension JoinedSpaceKeycap {
             CGPoint(x: frame.maxX, y: frame.maxY), seam(frame.maxY, half),
         ], radius: radius)
         let top = frame.minY + 1.25 * radius, bottom = frame.maxY - 1.25 * radius
-        context.addLines(between: [seam(top, -half), seam(top, half), seam(bottom, half), seam(bottom, -half)])
+        // Soft shadow in the gap: only the blurred shadow is drawn (the bar itself is
+        // moved off-canvas), so no edge is hard. The bases cover everything but the gap.
+        let spread: CGFloat = 1.5, farAway: CGFloat = 10_000
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: farAway, height: 0), blur: 4, color: mechanical.seamFill.cgColor)
+        context.addLines(between: [
+            seam(top - spread, -half - spread - farAway), seam(top - spread, half + spread - farAway),
+            seam(bottom + spread, half + spread - farAway), seam(bottom + spread, -half - spread - farAway),
+        ])
         context.setFillColor(mechanical.seamFill.cgColor)
         context.fillPath()
+        context.restoreGState()
         mechanical.drawBase(in: context, path: spaceBase, rect: frame)
         mechanical.drawBase(in: context, path: typrBase, rect: frame)
         let faceRadius = mechanical.faceRadius(radius)

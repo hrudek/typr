@@ -223,6 +223,33 @@ final class KeyboardLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testMechanicalJoinedSeamIsASoftShadowWithoutHardEdges() throws {
+        let layout = try XCTUnwrap(everyPortraitLayout().first { $0.field == .text && JoinedSpaceKeycap(layout: $0) != nil })
+        let joined = try XCTUnwrap(JoinedSpaceKeycap(layout: layout))
+        let face = MechanicalKeycap(isDark: true).faceRect(joined.frame)
+        let y = face.midY
+        let centre = joined.mechanicalSeamX(atY: y, face: face)
+        for isDark in [false, true] {
+            let palette = FullKeyboardPalette(isDark: isDark, design: .mechanical)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let image = UIGraphicsImageRenderer(bounds: joined.frame, format: format).image { renderer in
+                joined.draw(in: renderer.cgContext, palette: palette, spacePressed: false, typrPressed: false)
+            }
+            let cgImage = try XCTUnwrap(image.cgImage)
+            let data = try XCTUnwrap(cgImage.dataProvider?.data as Data?)
+            func brightness(dx: CGFloat, dy: CGFloat = 0) -> Int {
+                let x = Int(centre + dx - joined.frame.minX), row = Int(y + dy - joined.frame.minY)
+                let offset = row * cgImage.bytesPerRow + x * cgImage.bitsPerPixel / 8
+                return Int(data[offset]) + Int(data[offset + 1]) + Int(data[offset + 2])
+            }
+            // The gap is darkest in the middle and fades toward its edges instead of a flat bar.
+            let half = MechanicalKeycap.seamGap / 2
+            XCTAssertLessThan(brightness(dx: 0), brightness(dx: half - 0.5))
+        }
+    }
+
+    @MainActor
     func testDarkPaletteMatchesReferenceColors() {
         let dark = FullKeyboardPalette(isDark: true)
         func hex(_ color: UIColor) -> String {
