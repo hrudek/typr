@@ -366,7 +366,6 @@ struct KeyboardBridge {
     var warmDuration: WarmSessionDuration {
         get {
             guard let raw = defaults?.string(forKey: Key.warmDuration) else { return .fifteenMinutes }
-            if raw == "always" { return .oneHour }
             return WarmSessionDuration(rawValue: raw) ?? .fifteenMinutes
         }
         nonmutating set {

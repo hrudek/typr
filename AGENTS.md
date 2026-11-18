@@ -32,6 +32,8 @@ commands: [.github/typr/README.md](.github/typr/README.md).
 ## Implementation and privacy
 
 - Add a feature switch only when the owner asks for one.
+- Typr has a single user. When removing or renaming a setting, do not migrate old
+  stored values; the existing fallback for unknown values is enough.
 - No speculative abstractions: generalize only for two real implementations or a
   current test need.
 - The keyboard never touches network, speech model or microphone. Captured audio

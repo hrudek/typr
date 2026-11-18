@@ -26,17 +26,8 @@ final class KeyboardBridgeTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "settings.warmDuration"), "oneHour")
         XCTAssertEqual(KeyboardBridge(defaults: defaults).warmDuration, .oneHour)
 
-        defaults.set("someFutureValue", forKey: "settings.warmDuration")
-        XCTAssertEqual(bridge.warmDuration, .fifteenMinutes)
-    }
-
-    func testLegacyAlwaysDurationReadsAsOneHour() {
-        let suite = "typr.tests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-
         defaults.set("always", forKey: "settings.warmDuration")
-        XCTAssertEqual(KeyboardBridge(defaults: defaults).warmDuration, .oneHour)
+        XCTAssertEqual(bridge.warmDuration, .fifteenMinutes)
     }
 
     func testDeliverableResultSurvivesWarmSessionShutdownUntilTTL() {
