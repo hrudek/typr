@@ -3,6 +3,7 @@ import SwiftUI
 /// Parsing snapshot routes is read-only. Dedicated simulator fixtures seed their own preferences.
 enum SettingsDestination: String, CaseIterable, Hashable {
     case keyboard
+    case keyboardAppearance = "keyboard-appearance"
     case statistics
     case autocorrectLanguages = "autocorrect-languages"
     case keyboardLearnedWords = "keyboard-learned-words"
@@ -16,6 +17,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
     var title: String {
         switch self {
         case .keyboard: "Keyboard"
+        case .keyboardAppearance: "Appearance"
         case .statistics: "Statistics"
         case .autocorrectLanguages: "Autocorrect languages"
         case .keyboardLearnedWords: "Manage learned words"
@@ -29,7 +31,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
 
     var subtitle: String {
         switch self {
-        case .keyboard, .statistics, .keyboardLearnedWords, .textProcessing, .history: ""
+        case .keyboard, .keyboardAppearance, .statistics, .keyboardLearnedWords, .textProcessing, .history: ""
         case .speechEngine: "Automatic chooses an engine until you select one. Audio stays on this iPhone."
         case .style: "Choose how Typr formats your dictations. You can also change style from the keyboard."
         case .autocorrectLanguages: "Choose one or more languages for autocorrect. These choices do not change your dictation language."
@@ -44,6 +46,7 @@ enum SettingsDestination: String, CaseIterable, Hashable {
         guard let index = arguments.firstIndex(of: "--snap-state"), index + 1 < arguments.count else { return nil }
         let scene = arguments[index + 1]
         if scene == "settings-keyboard-typing" { return .keyboard }
+        if scene.hasPrefix("settings-keyboard-appearance-") { return .keyboardAppearance }
         if scene == historySampleScene || scene == historyDetailScene { return .history }
         if StatisticsFixture.launchFixture(arguments: arguments) != nil { return .statistics }
         guard scene.hasPrefix("settings-") else { return nil }

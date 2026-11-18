@@ -3,9 +3,10 @@ import SwiftUI
 // Adapted from AVGVSTVS96/iikb App/Design/OrderRows.swift (MIT).
 /// Rows put in order by dragging the handle at their left, for a `SettingsSection`. VoiceOver moves a row
 /// with Move up and Move down. The order is saved once, when the row is let go, and a drag the system takes
-/// away (a scroll, a call) puts the rows back as they were.
+/// away (a scroll, a call) puts the rows back as they were. `onShownOrder` follows every step of a drag.
 struct SettingsOrderRows<Item: Hashable, Label: View>: View {
     @Binding var items: [Item]
+    var onShownOrder: (([Item]) -> Void)? = nil
     @ViewBuilder var label: (Item) -> Label
 
     @State private var dragging: [Item]?
@@ -45,6 +46,7 @@ struct SettingsOrderRows<Item: Hashable, Label: View>: View {
                 if !isHeld, lifted == item { settle(saving: false) }
             }
         }
+        .onChange(of: shown) { _, order in onShownOrder?(order) }
     }
 
     private func handle(_ item: Item) -> some View {
