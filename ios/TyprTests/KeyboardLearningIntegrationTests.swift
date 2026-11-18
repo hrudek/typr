@@ -297,7 +297,27 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         }
     }
 
-    func testAutomaticOutputNeverTeachesWithoutFeedback() {
+    func testSpellingRewritesNeverTeachEvenWithTapsAtTheFacingKeyEdges() throws {
+        for (typed, corrected) in [("watre", "water"), ("hellp", "hello")] {
+            let session = KeyboardLearningSession()
+            let (engine, target) = keyboard(session: session,
+                                            checker: Checker(valid: [corrected], answers: [typed: [corrected]]))
+            for (letter, intended) in zip(typed, corrected) {
+                let key = try XCTUnwrap(engine.layout.key(.character(String(letter))))
+                let goal = try XCTUnwrap(engine.layout.key(.character(String(intended))))
+                let x = goal.frame.midX < key.frame.midX ? key.frame.minX + 1
+                    : goal.frame.midX > key.frame.midX ? key.frame.maxX - 1 : key.frame.midX
+                let point = CGPoint(x: x, y: key.frame.midY)
+                engine.touchBegan(id: 1, at: point)
+                engine.touchEnded(id: 1, at: point)
+            }
+            type(" w", engine)
+            XCTAssertEqual(target.text, corrected + " w", typed)
+            XCTAssertNil(session.diagnostics.acceptedBySource["autocorrect"], typed)
+        }
+    }
+
+    func testRewritesThatAreNotNearbySubstitutionsTeachNothing() {
         for (typed, checker, counter) in [
             ("teh", Checker(), KeyboardDiagnostics.Counter.autoRule),
             ("helo", Checker(answers: ["helo": ["hello"]]), .autoSpellingFallback)

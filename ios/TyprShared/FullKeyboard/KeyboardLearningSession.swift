@@ -2,7 +2,7 @@ import Foundation
 
 /// The keyboard's single owner of personal learning and diagnostics. Persistent only when the
 /// keyboard passes a store (Full Access); the app, previews and tests stay RAM-only by default.
-/// Callers feed only trusted feedback; automatic corrections never teach by themselves.
+/// Callers feed only trusted feedback.
 @MainActor
 final class KeyboardLearningSession {
     /// Obsolete `LearnedWordsStore` key, deleted once without migration (owner-approved).
