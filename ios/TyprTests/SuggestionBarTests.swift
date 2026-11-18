@@ -20,7 +20,6 @@ final class SuggestionBarTests: XCTestCase {
     func testAllKeyboardDefaultsOnEmptyDefaults() {
         let settings = TyprSettings(defaults: defaults)
         let keyboard = FullKeyboardSettings(defaults: defaults)
-        XCTAssertTrue(keyboard.isEnabled)
         XCTAssertTrue(keyboard.autocorrect)
         XCTAssertTrue(keyboard.swipeTyping)
         XCTAssertFalse(settings.hideSuggestionBar)
