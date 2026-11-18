@@ -8,7 +8,7 @@ Nothing under this directory is added to Xcode targets or `project.yml`.
 
 ## Use
 
-Export JSON from Typr › Dictation log, then explicitly choose a private,
+Export JSON from Typr › History & feedback › Export full log (JSON), then explicitly choose a private,
 **non-synced directory outside every Git checkout**, including linked worktrees:
 
 ```sh

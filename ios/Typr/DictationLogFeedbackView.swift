@@ -1,59 +1,51 @@
 import SwiftUI
 import UIKit
 
-struct DictationRatingButtons: View {
-    enum Mode { case all, rating, categories }
+struct DictationRatingSection: View {
     let store: DictationLogStore
     let entry: DictationLogEntry
-    var mode: Mode = .all
+
     var body: some View {
-        VStack(alignment: .leading) {
-            if mode != .categories {
-                HStack {
-                    Button { store.rate(entry.id, rating: "good") } label: {
-                        Label(entry.rating == "good" ? "Good ✓" : "Good", systemImage: "hand.thumbsup")
-                    }
-                    Button { store.rate(entry.id, rating: "bad") } label: {
-                        Label(entry.rating == "bad" ? "Problem ✓" : "Problem", systemImage: "hand.thumbsdown")
-                    }
-                }.buttonStyle(.bordered).frame(minHeight: 44)
-                Text("Rating: \(entry.rating ?? "unrated")").font(.caption)
+        Section("Rating") {
+            HStack(spacing: 12) {
+                ratingButton("Good", value: "good", icon: "hand.thumbsup", tint: TyprTheme.success)
+                ratingButton("Problem", value: "bad", icon: "hand.thumbsdown", tint: .orange)
             }
-            if mode != .rating {
-                if entry.rating == "bad" {
-                    ForEach(DictationIssue.choices, id: \.0) { code, title in
-                        Button {
-                            var issues = entry.issues ?? []
-                            if issues.contains(code) { issues.removeAll { $0 == code } } else { issues.append(code) }
-                            store.rate(entry.id, rating: "bad", issues: issues)
-                        } label: {
-                            Label(title, systemImage: entry.issues?.contains(code) == true ? "checkmark.circle.fill" : "circle")
-                                .frame(minHeight: 44)
-                        }.accessibilityLabel("\(title), \(entry.issues?.contains(code) == true ? "selected" : "not selected")")
+            .buttonStyle(.borderless)
+            if entry.rating == "bad" {
+                ForEach(DictationIssue.choices, id: \.0) { code, title in
+                    let selected = entry.issues?.contains(code) == true
+                    Button {
+                        var issues = entry.issues ?? []
+                        if selected { issues.removeAll { $0 == code } } else { issues.append(code) }
+                        store.rate(entry.id, rating: "bad", issues: issues)
+                    } label: {
+                        Label(title, systemImage: selected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(TyprTheme.textBase)
                     }
-                } else if mode == .categories {
-                    Text("Categories are available after rating this dictation Problem.").font(.caption)
-                }
-                if !(entry.issues ?? []).isEmpty {
-                    Text("Issues: \((entry.issues ?? []).joined(separator: ", "))").font(.caption)
-                    Button("Clear issue categories") { store.rate(entry.id, rating: entry.rating ?? "unrated", issues: []) }
-                        .frame(minHeight: 44)
-                }
-                if entry.rating != nil && entry.rating != "unrated" {
-                    Button("Remove rating (keep reference and note)") { store.rate(entry.id, rating: "unrated") }
-                        .frame(minHeight: 44)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-        }.buttonStyle(.borderless)
+        }
+    }
+
+    private func ratingButton(_ title: String, value: String, icon: String, tint: Color) -> some View {
+        let selected = entry.rating == value
+        return Button {
+            store.rate(entry.id, rating: selected ? "unrated" : value)
+        } label: {
+            Label(title, systemImage: selected ? icon + ".fill" : icon)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .foregroundStyle(selected ? Color.white : TyprTheme.textBase)
+                .background(selected ? tint : TyprTheme.bgDeep, in: RoundedRectangle(cornerRadius: 10))
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
-/// Typr: one dictation text with an explicit Copy button, so it can be pasted into
-/// "What I said" and corrected instead of retyped. Copying happens only on tap.
 struct DictationCopyableTextSection: View {
     let title: String
     let field: DictationLogText?
-    let accessibilityName: String
     var footer: String? = nil
     @State private var copied = false
 
@@ -64,7 +56,7 @@ struct DictationCopyableTextSection: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if field.truncated {
-                    Text("TRUNCATED · original \(field.originalUTF8Bytes) UTF-8 bytes")
+                    Text("Shortened · original \(field.originalUTF8Bytes) UTF-8 bytes")
                         .font(.caption).foregroundStyle(TyprTheme.textMuted)
                 }
             } else {
@@ -86,7 +78,7 @@ struct DictationCopyableTextSection: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .textCase(nil)
-                    .accessibilityLabel(copied ? "Copied \(accessibilityName)" : "Copy \(accessibilityName)")
+                    .accessibilityLabel(copied ? "Copied \(title.lowercased())" : "Copy \(title.lowercased())")
                 }
             }
         } footer: {
@@ -95,114 +87,80 @@ struct DictationCopyableTextSection: View {
     }
 }
 
-/// Free-form expectations, never a corrected transcript or a training reference.
-struct DictationNoteEditor: View {
+struct DictationFeedbackEditor: View {
     let store: DictationLogStore
     let entry: DictationLogEntry
-    var focusesOnAppear = false
-    @State private var text: String
-    @State private var saved: String
+    var focusesNoteOnAppear = false
+    @State private var note: String
+    @State private var desired: String
+    @State private var savedNote: String
+    @State private var savedDesired: String
     @State private var didAutoFocus = false
-    @FocusState private var focused: Bool
+    @FocusState private var noteFocused: Bool
 
-    init(store: DictationLogStore, entry: DictationLogEntry, focusesOnAppear: Bool = false) {
+    init(store: DictationLogStore, entry: DictationLogEntry, focusesNoteOnAppear: Bool = false) {
         self.store = store
         self.entry = entry
-        self.focusesOnAppear = focusesOnAppear
-        let current = entry.feedbackNote?.text ?? ""
-        _text = State(initialValue: current)
-        _saved = State(initialValue: current)
+        self.focusesNoteOnAppear = focusesNoteOnAppear
+        let note = entry.feedbackNote?.text ?? "", desired = entry.expectedText?.text ?? ""
+        _note = State(initialValue: note); _savedNote = State(initialValue: note)
+        _desired = State(initialValue: desired); _savedDesired = State(initialValue: desired)
     }
 
-    private var dirty: Bool { text != saved }
-    private var withinLimit: Bool { text.utf8.count <= DictationLogText.maximumBytes }
+    private var dirty: Bool { note != savedNote || desired != savedDesired }
+    private var withinLimit: Bool {
+        note.utf8.count <= DictationLogText.maximumBytes && desired.utf8.count <= DictationLogText.maximumBytes
+    }
 
     var body: some View {
         Section {
-            ZStack(alignment: .topLeading) {
-                if text.isEmpty {
-                    Text("Describe what did not meet your expectations or what could be improved …")
-                        .foregroundStyle(TyprTheme.textMuted)
-                        .padding(.horizontal, 5).padding(.vertical, 8)
-                        .allowsHitTesting(false)
-                }
-                TextEditor(text: $text)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 130)
-                    .focused($focused)
-                    .accessibilityLabel("What did you expect differently?")
-            }
-            HStack {
-                Button(dirty ? "Save" : "Saved") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!dirty || !withinLimit)
-                if dirty { Text("Not saved yet").font(.caption).foregroundStyle(TyprTheme.textMuted) }
-                Spacer()
-                if focused {
-                    Button("Done") { focused = false; if dirty && withinLimit { save() } }
-                }
+            TextField("What went wrong or could be better?", text: $note, axis: .vertical)
+                .lineLimit(3...8)
+                .focused($noteFocused)
+                .accessibilityLabel("Note")
+            TextField("Desired text (optional)", text: $desired, axis: .vertical)
+                .lineLimit(2...8)
+                .accessibilityLabel("Desired text")
+            if dirty {
+                Button("Save feedback") { save() }.disabled(!withinLimit)
             }
             if !withinLimit {
-                Text("Too long: limit is 4,000 UTF-8 bytes. The text will not be truncated silently.")
-                    .font(.footnote).foregroundStyle(.red)
-            }
-            if entry.feedbackNote?.truncated == true {
-                Text("The saved note was truncated. You can restore the complete note here.")
+                Text("Too long: each field is limited to 4,000 UTF-8 bytes.")
                     .font(.footnote).foregroundStyle(.red)
             }
         } header: {
-            Text("What did you expect differently?")
+            Text("Feedback")
         } footer: {
-            Text("Share your observations, criticism or wishes. No corrected text is needed. Saved with this dictation on this iPhone and included in exports; nothing is uploaded automatically.")
+            Text("Saved with this dictation on this iPhone and included in the JSON export.")
         }
         .onAppear {
             // One-shot: a List re-fires onAppear when the section scrolls back into view.
-            guard focusesOnAppear, !didAutoFocus else { return }
+            guard focusesNoteOnAppear, !didAutoFocus else { return }
             didAutoFocus = true
-            Task { try? await Task.sleep(for: .milliseconds(450)); focused = true }
+            Task { try? await Task.sleep(for: .milliseconds(450)); noteFocused = true }
         }
-        .onChange(of: entry.feedbackNote?.text) { _, newValue in
-            // Another editor saved: follow it unless there are unsaved edits here.
-            let value = newValue ?? ""
-            if !dirty { text = value }
-            saved = value
+        .onChange(of: entry.feedbackNote?.text) { _, value in
+            if note == savedNote { note = value ?? "" }
+            savedNote = value ?? ""
+        }
+        .onChange(of: entry.expectedText?.text) { _, value in
+            if desired == savedDesired { desired = value ?? "" }
+            savedDesired = value ?? ""
         }
         .onDisappear { if dirty && withinLimit { save() } }
     }
 
     private func save() {
         guard withinLimit else { return }
-        store.saveFeedback(for: entry.id, expectedText: nil, note: text)
-        saved = text
+        store.saveFeedback(for: entry.id,
+                           expectedText: desired == savedDesired ? nil : desired,
+                           note: note == savedNote ? nil : note)
+        savedNote = note; savedDesired = desired
+        noteFocused = false
     }
 }
 
-struct DictationJSONExportMenu: View {
-    let store: DictationLogStore
-    var ids: [UUID]? = nil
-    @State private var sharing = false
-    @State private var sharedURL: URL?
-    var body: some View {
-        Menu {
-            Text("Private text and vocabulary. Only share with a trusted recipient.")
-            Button(ids == nil ? "Prepare JSON — entire archive" : "Prepare JSON — this entry") { store.prepareJSON(ids: ids) }
-                .disabled(store.exporting || store.isLoading)
-            if store.exporting { Text("Preparing JSON…") }
-            if let problem = store.exportProblem { Text(problem) }
-            if let url = store.preparedJSON(for: ids) {
-                Button { sharedURL = url; sharing = true } label: { Label("Share prepared JSON", systemImage: "square.and.arrow.up") }
-            }
-        } label: { Label(store.exporting ? "Preparing JSON…" : "JSON", systemImage: "doc") }
-        .sheet(isPresented: $sharing, onDismiss: {
-            if let sharedURL { store.releaseJSON(sharedURL) }
-            sharedURL = nil
-        }) {
-            if let sharedURL { DictationJSONShareSheet(url: sharedURL, completion: { sharing = false }) }
-        }
-    }
-}
-
-private struct DictationJSONShareSheet: UIViewControllerRepresentable {
+struct DictationJSONShareSheet: UIViewControllerRepresentable {
     let url: URL
     let completion: @MainActor @Sendable () -> Void
     func makeUIViewController(context: Context) -> UIActivityViewController {

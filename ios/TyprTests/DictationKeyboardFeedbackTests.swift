@@ -117,29 +117,6 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         XCTAssertEqual(KeyboardBridge(defaults: defaults).feedbackJobs, Set(jobs.suffix(32)))
     }
 
-    func testFeedbackShowsOnlyAcceptedAIOutputAndKeepsRecognitionUnchanged() {
-        var context = DictationLogContext(); context.cleanupPath = .typr
-        var entry = DictationLogEntry(context: context)
-        entry.recognized = DictationLogText("uh original")
-        entry.finalText = DictationLogText("Formatted.")
-        entry.cleanupOutput = DictationLogText("AI revision")
-        entry.aiAnswer = DictationLogText("Rejected or late answer")
-        for use in [nil, "late", "rejected(empty); not used"] as [String?] {
-            entry.answerUse = use
-            XCTAssertNil(entry.feedbackAIText)
-        }
-        entry.answerUse = "accepted"
-        XCTAssertEqual(entry.feedbackAIText?.text, "AI revision")
-        entry.context.cleanupPath = .upstream
-        entry.upstreamOutcome = "no result"
-        XCTAssertNil(entry.feedbackAIText)
-        entry.upstreamOutcome = "changed"
-        XCTAssertEqual(entry.feedbackAIText?.text, "AI revision")
-        entry.context.cleanupPath = .none
-        XCTAssertNil(entry.feedbackAIText)
-        XCTAssertEqual(entry.recognized?.text, "uh original")
-    }
-
     func testDefaultOffAndFreshInsertedExactMatchingOnly() {
         let suite = "feedback.defaults.\(UUID())"
         let defaults = UserDefaults(suiteName: suite)!

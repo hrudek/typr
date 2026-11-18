@@ -46,7 +46,6 @@ struct ContentView: View {
     @Binding var showSetup: Bool
     var setupRequestID: UUID? = nil
     @State private var setupMonitor = KeyboardSetupMonitor()
-    @State private var showingLog = false
     @State private var feedbackRouter = TyprFeedbackRouter.shared
     @State private var practiceText = ""
     @State private var settingsPath: [SettingsDestination] = {
@@ -159,6 +158,8 @@ struct ContentView: View {
                         #else
                         StatisticsView()
                         #endif
+                    } else if destination == .history {
+                        DictationHistoryView(store: Self.historyStore, router: feedbackRouter)
                     } else if destination == .keyboardLearnedWords {
                         KeyboardLearnedWordsView(
                             fixture: Self.learnedWordsUsesFixture(arguments: ProcessInfo.processInfo.arguments))
@@ -167,10 +168,9 @@ struct ContentView: View {
                             switch destination {
                             case .keyboard: KeyboardSettingsCard()
                             case .autocorrectLanguages: AutocorrectLanguageSettingsCard()
-                            case .keyboardLearnedWords, .statistics:
+                            case .keyboardLearnedWords, .statistics, .history:
                                 EmptyView() // Handled above.
                             case .textProcessing: TextProcessingSettingsCard()
-                            case .history: HistorySettingsCard { showingLog = true }
                             case .speechEngine: SpeechEngineCard(dictation: dictation)
                             case .style: DictationStyleSettingsCard(dictation: dictation)
                             case .language: DictationLanguageSettingsCard(dictation: dictation)
@@ -179,26 +179,33 @@ struct ContentView: View {
                     }
                 }
         }
-        .sheet(isPresented: $showingLog) {
-            DictationLogView(store: DictationLogStore.shared, router: feedbackRouter)
-        }
         .onChange(of: feedbackRouter.requestedEntry) { _, id in
-            if id != nil { showingLog = true }
+            if id != nil { openHistory() }
         }
         .onChange(of: setupRequestID) { _, _ in
             // Each explicit setup URL is a new request, even when showSetup was already true.
             settingsPath = []
-            showingLog = false
         }
         .onAppear {
             if showSetup { settingsPath = [] }
-            if feedbackRouter.requestedEntry != nil { showingLog = true }
+            if feedbackRouter.requestedEntry != nil { openHistory() }
             DictationLogStore.shared.drainKeyboardFeedback(force: true)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { DictationLogStore.shared.drainKeyboardFeedback(force: true) }
         }
         .tint(TyprTheme.agentBlue)
+    }
+
+    private static let historyStore: DictationLogStore = {
+        #if targetEnvironment(simulator)
+        if DictationHistoryFixture.isRequested { return DictationHistoryFixture.store() }
+        #endif
+        return DictationLogStore.shared
+    }()
+
+    private func openHistory() {
+        if settingsPath.last != .history { settingsPath = [.history] }
     }
 
     private var settingsOverview: some View {
@@ -476,7 +483,7 @@ struct ContentView: View {
                     }
                 }.buttonStyle(.bordered).frame(minHeight: 44)
                 if entry.rating == "bad" {
-                    Text("Add categories and a reference: History & feedback → Open dictation log")
+                    Text("Add categories and a note in History & feedback.")
                         .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                 }
             }

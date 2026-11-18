@@ -12,7 +12,7 @@ struct SettingsPreferences: View {
             }
             SettingsDivider(leading: 52)
             NavigationLink(value: SettingsDestination.history) {
-                SettingsLink(title: "History & feedback", detail: "Dictation log, exports and ratings", icon: "clock.arrow.circlepath")
+                SettingsLink(title: "History & feedback", detail: "Review, rate and export dictations", icon: "clock.arrow.circlepath")
             }
         }
         .buttonStyle(.plain)
@@ -109,81 +109,5 @@ struct TextProcessingSettingsCard: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
-    }
-}
-
-/// Observes the archive directly; the navigation root owns presentation and deep links.
-@MainActor
-struct HistorySettingsCard: View {
-    let openLog: () -> Void
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var feedbackStrip = TyprSettings().dictationFeedbackStrip
-    @State private var log = DictationLogStore.shared
-
-    var body: some View {
-        VStack(spacing: 24) {
-            VStack(alignment: .leading, spacing: 8) {
-                SettingsSection(title: "Dictation log") {
-                    SettingsToggle(title: "Keep dictation history", detail: "Saves text stages, used vocabulary and feedback. No audio.",
-                                   isOn: Binding(get: { log.isEnabled }, set: { log.setEnabled($0) }))
-                    if let problem = log.storageProblem { statusNote(problem) }
-                    SettingsDivider()
-                    Button(action: openLog) {
-                        SettingsLink(title: "Open dictation log", detail: "Review, rate, export or delete entries", value: "\(log.metadata.count) entries")
-                    }
-                    .buttonStyle(.plain)
-                }
-                Text("Entries are deleted after 10 days; switching off keeps saved entries until then. Export JSON to keep a copy. App removal or device loss is not covered.")
-                    .font(.footnote).foregroundStyle(TyprTheme.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-            }
-            SettingsSection(title: "Keyboard feedback") {
-                SettingsToggle(title: "Rate after dictating", detail: "Show Good / Problem after the keyboard inserts a dictation. No document text is read for feedback.", isOn: $feedbackStrip)
-                    .onChange(of: feedbackStrip) { _, enabled in
-                        TyprSettings().dictationFeedbackStrip = enabled
-                        log.feedbackSettingsChanged()
-                    }
-                if let notice = log.keyboardFeedbackNotice {
-                    SettingsDivider()
-                    statusNote(notice)
-                    SettingsDivider()
-                    Button { log.retryKeyboardFeedback() } label: {
-                        HStack {
-                            Text("Retry keyboard feedback")
-                            Spacer(minLength: 12)
-                            Image(systemName: "arrow.clockwise").accessibilityHidden(true)
-                        }
-                        .font(.body).foregroundStyle(TyprTheme.textBase)
-                        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 16)
-                }
-                SettingsDivider()
-                DisclosureGroup("How feedback is saved") {
-                    Text("Noted means queued on this iPhone, not yet saved in the archive. Up to 100 pending ratings are kept for 30 days.")
-                        .font(.subheadline).foregroundStyle(TyprTheme.textMuted).padding(.top, 8)
-                }
-                .disclosureGroupStyle(SettingsDisclosureStyle())
-                .padding(.horizontal, 16)
-            }
-        }
-        .onAppear(perform: refresh)
-        .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
-    }
-
-    private func statusNote(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.circle")
-            .font(.subheadline).foregroundStyle(TyprTheme.warmMic)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-    }
-
-    private func refresh() {
-        log.setEnabled(TyprSettings().dictationLog)
-        feedbackStrip = TyprSettings().dictationFeedbackStrip
     }
 }

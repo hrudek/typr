@@ -270,28 +270,7 @@ struct DictationLogEntry: Identifiable, Codable, Equatable, Sendable {
     var promptRevision = CleanupGuard.revision
     var guardRevision = CleanupGuard.revision
 
-    /// A selected cleanup path is not proof of a successful AI pass.
-    /// Rejected, late, skipped and failed answers must never be presented as revisions.
-    var feedbackAIText: DictationLogText? {
-        switch context.cleanupPath {
-        case .typr:
-            guard answerUse == "accepted" else { return nil }
-            return cleanupOutput ?? aiAnswer
-        case .upstream:
-            guard upstreamOutcome == "changed" || upstreamOutcome == "unchanged" else { return nil }
-            return cleanupOutput
-        case .none:
-            return nil
-        }
-    }
-
     var sourceLabel: String { context.keyboardJob ? "Keyboard" : "App" }
-    var outputLabel: String {
-        var outputs = ["shown in app"]
-        if context.keyboardJob { outputs.append("provided to keyboard") }
-        if context.copyToPasteboard, finalText?.originalUTF8Bytes ?? 0 > 0 { outputs.append("copied to clipboard") }
-        return outputs.joined(separator: "; ")
-    }
     var lateAnswerLabel: String {
         switch cleanupOutcome {
         case "failed(deadline)": "arrived after the cleanup deadline; not used"
@@ -368,7 +347,6 @@ final class DictationLogStore {
     func retryKeyboardFeedback() { keyboardFeedbackNotice = nil; drainKeyboardFeedback(force: true) }
     private(set) var exporting = false
     private(set) var exportURL: URL?
-    private var exportIDs: [UUID]?
     private(set) var exportProblem: String?
     private var lastLoadProblem = false
     private var active = Set<UUID>()
@@ -595,7 +573,6 @@ final class DictationLogStore {
     }
     func loadRecent() { for row in metadata.prefix(Self.maximumEntries) { loadEntry(row.id) } }
     /// nil preserves a field; an empty string explicitly clears it.
-    /// The everyday note editor never creates or overwrites a human reference.
     func saveFeedback(for id: UUID, expectedText: String?, note: String?) {
         guard (expectedText?.utf8.count ?? 0) <= 4_000, (note?.utf8.count ?? 0) <= 4_000 else { return }
         let order = DictationFeedbackOrder.app()
@@ -666,16 +643,15 @@ final class DictationLogStore {
         for entry in dirty.values where !deleted.contains(entry.id) { put(entry) }
         reload()
     }
-    func preparedJSON(for ids: [UUID]?) -> URL? { exportIDs == ids ? exportURL : nil }
     func releaseJSON(_ url: URL) {
         storage.removeExport(url)
         if exportURL == url { exportURL = nil }
     }
-    func prepareJSON(ids: [UUID]? = nil) {
+    func prepareJSON() {
         guard !exporting else { return }
         if let exportURL { storage.removeExport(exportURL) }
         exporting = true; exportURL = nil; exportProblem = nil; let generation = storageGeneration
-        storage.export(ids: ids, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown") { [weak self] result in
+        storage.export(build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown") { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self, self.storageGeneration == generation else {
                     if case .success(let url) = result { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -683,7 +659,7 @@ final class DictationLogStore {
                 }
                 self.exporting = false
                 switch result {
-                case .success(let url): self.exportIDs = ids; self.exportURL = url
+                case .success(let url): self.exportURL = url
                 case .failure: self.exportProblem = "JSON could not be prepared. Prepare again to retry. No file was shared."
                 }
             }
