@@ -1,6 +1,7 @@
 import AVFAudio
 import Foundation
 import Observation
+import OSLog
 import SwiftUI
 import UIKit
 
@@ -517,7 +518,7 @@ final class DictationController {
         mediaOnDictation = media
         keyboardBridge.mediaOnDictation = media
         audio.setMediaOnDictation(media)
-        if keyboardSessionEnabled, phase == .ready {
+        if keyboardSessionEnabled, phase == .ready || phase == .transcribing {
             do { try startWarmInput() }
             catch { endWarmSession() }
         }
@@ -1138,8 +1139,12 @@ final class DictationController {
                         allowBluetooth: self.allowBluetoothMic
                     )
                     if mediaPlaying, self.mediaOnDictation == .lowerVolume {
-                        // Media at full volume is better than losing the dictation.
-                        try? self.audio.duckOthers(allowBluetooth: self.allowBluetoothMic)
+                        do {
+                            try self.audio.duckOthers(allowBluetooth: self.allowBluetoothMic)
+                        } catch {
+                            Self.audioLogger.error("Lowering media volume failed: \(error.localizedDescription, privacy: .public)")
+                            self.keyboardMessage = Self.duckFailureMessage
+                        }
                     }
                     return capture
                 }
@@ -1826,6 +1831,9 @@ final class DictationController {
     nonisolated static func isAudioBusy(_ error: any Error) -> Bool {
         [0x2170_6C61, 0x2170_7269, 0x2169_6E74].contains((error as NSError).code)
     }
+
+    static let duckFailureMessage = "Could not lower media volume."
+    private static let audioLogger = Logger(subsystem: "dev.rudek.typr", category: "Audio")
 
     nonisolated static func audioFailureMessage(for error: any Error) -> String {
         isAudioBusy(error) ? audioBusyMessage : error.localizedDescription

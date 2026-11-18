@@ -43,8 +43,11 @@ private final class FakeAudioManager: AudioManaging {
     var deactivateCount = 0
     var createdCaptures: [FakeAudioCapture] = []
     var media = MediaOnDictation.pause
+    /// The choice the running input was started with, like the real session's category.
+    var appliedMedia: MediaOnDictation?
     var isDucking = false
     var duckCount = 0
+    var duckShouldThrow = false
 
     var onSystemEvent: ((AudioSystemEvent) -> Void)?
     var onUnexpectedCaptureEnd: ((URL, Bool) -> Void)?
@@ -65,6 +68,7 @@ private final class FakeAudioManager: AudioManaging {
             throw CocoaError(.coderInvalidValue)
         }
         isKeepaliveRunning = true
+        appliedMedia = media
         // Only Pause's input interrupts media, so subsequent queries no longer see it.
         if media == .pause { isOtherAudioPlaying = false }
     }
@@ -73,17 +77,25 @@ private final class FakeAudioManager: AudioManaging {
         self.media = media
     }
 
+    func ensureKeepalive(allowBluetooth: Bool) throws {
+        guard !isKeepaliveRunning || appliedMedia != media else { return }
+        try startKeepalive(allowBluetooth: allowBluetooth)
+    }
+
     func duckOthers(allowBluetooth: Bool) throws {
+        if duckShouldThrow { throw CocoaError(.coderInvalidValue) }
         duckCount += 1
         isDucking = true
     }
 
     func stopKeepalive() {
         isKeepaliveRunning = false
+        appliedMedia = nil
     }
 
     func deactivateSession() {
         isKeepaliveRunning = false
+        appliedMedia = nil
         isDucking = false
         deactivateCount += 1
     }
@@ -679,6 +691,98 @@ final class DictationControllerTests: XCTestCase {
             try await transcribed(controller)
             XCTAssertEqual(audio.duckCount, 1)
         }
+    }
+
+    func testMediaChoiceChangedWhileRecordingAppliesWhenCaptureEnds() async throws {
+        for foreground in [true, false] {
+            let now = 9_400.0
+            let audio = FakeAudioManager()
+            let transcriber = ControlledTranscriber()
+            let bridge = KeyboardBridge(defaults: defaults)
+            bridge.mediaOnDictation = .pause
+            let controller = DictationController(
+                audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+                transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+            )
+            drainAtTeardown(controller)
+            try await ready(controller)
+            controller.selectWarmDuration(.fifteenMinutes)
+            try await activationSettled(controller)
+
+            bridge.send(.start, jobID: "switch", style: .polished, sentAt: now)
+            controller.processPendingKeyboardCommandForTesting()
+            try await activationSettled(controller)
+            XCTAssertEqual(controller.phase, .recording)
+            controller.setMediaOnDictation(.keepPlaying)
+            XCTAssertEqual(audio.appliedMedia, .pause, "a running capture keeps its session")
+
+            audio.canStartInput = foreground
+            controller.finishRecording()
+            XCTAssertEqual(audio.appliedMedia, foreground ? .keepPlaying : nil)
+            XCTAssertEqual(controller.keyboardSessionEnabled, foreground, "background cannot restart input")
+            try await transcribed(controller)
+            if !foreground { continue }
+
+            audio.isOtherAudioPlaying = true
+            bridge.send(.start, jobID: "mixed", style: .polished, sentAt: now)
+            controller.processPendingKeyboardCommandForTesting()
+            try await activationSettled(controller)
+            XCTAssertEqual(controller.phase, .recording)
+            XCTAssertTrue(audio.isOtherAudioPlaying, "the next capture uses the new choice")
+            controller.finishRecording()
+            try await transcribed(controller)
+            XCTAssertTrue(controller.keyboardSessionEnabled)
+        }
+    }
+
+    func testMediaChoiceChangedWhileTranscribingAppliesImmediately() async throws {
+        let audio = FakeAudioManager()
+        let transcriber = ControlledTranscriber()
+        let controller = DictationController(
+            audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
+            transcriberFactory: { transcriber }, autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.selectWarmDuration(.fifteenMinutes)
+        try await activationSettled(controller)
+        await transcriber.armSuspension()
+        controller.startRecording()
+        try await activationSettled(controller)
+        controller.finishRecording()
+        try await asrSuspended(transcriber)
+        XCTAssertEqual(controller.phase, .transcribing)
+
+        controller.setMediaOnDictation(.lowerVolume)
+        XCTAssertEqual(audio.appliedMedia, .lowerVolume)
+        XCTAssertTrue(controller.keyboardSessionEnabled)
+        await transcriber.resumeSuspended(with: "ship the build")
+        try await transcribed(controller)
+    }
+
+    func testDuckFailureKeepsRecordingAndTellsTheKeyboard() async throws {
+        let now = 9_500.0
+        let audio = FakeAudioManager()
+        audio.isOtherAudioPlaying = true
+        audio.duckShouldThrow = true
+        let transcriber = ControlledTranscriber()
+        let bridge = KeyboardBridge(defaults: defaults)
+        bridge.mediaOnDictation = .lowerVolume
+        let controller = DictationController(
+            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
+            transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
+        )
+        drainAtTeardown(controller)
+        try await ready(controller)
+        controller.handleKeyboardLaunch(
+            .startRecording(jobID: "no-duck", requestedAt: now, style: .polished, host: nil)
+        )
+        try await activationSettled(controller)
+        XCTAssertEqual(controller.phase, .recording)
+        XCTAssertFalse(audio.isDucking)
+        XCTAssertEqual(bridge.snapshot().message, DictationController.duckFailureMessage)
+        controller.finishRecording()
+        try await transcribed(controller)
     }
 
     func testRecordedWAVFixtureIsValidSilentTestInput() throws {

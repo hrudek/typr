@@ -35,8 +35,11 @@ An explicit engine or language choice never silently falls back to another.
     the volume and Typr then restarts warm input. iOS allows that restart only
     while Typr is in the foreground; after a keyboard dictation the warm session
     ends.
+    If iOS refuses to lower the volume, the recording continues and the keyboard
+    shows "Could not lower media volume."
   - Changing the choice restarts warm input with the new session options, which
-    only happens in the app, where iOS allows it.
+    only happens in the app, where iOS allows it. During a recording the new
+    choice applies when the recording ends.
 - Text processing combines vocabulary corrections, optional AI cleanup and
   formatting styles. Cleanup runs on-device with Apple Intelligence (iOS 26+,
   default) or, with your own Anthropic API key (stored in the Keychain), with
