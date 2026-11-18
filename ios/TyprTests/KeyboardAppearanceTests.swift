@@ -52,15 +52,16 @@ final class KeyboardAppearanceTests: XCTestCase {
     }
 
     func testPreviewIsDockedFullWidthAtTheBottomAndScrollEndsAboveIt() async throws {
-        try await assertDocked(in: CGRect(x: 0, y: 0, width: 393, height: 852))
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 393, height: 852), compact: false)
     }
 
     func testScaledCompactPreviewStaysOnScreenFlushWithTheBottom() async throws {
-        try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 300))
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 300), compact: true)
     }
 
-    private func assertDocked(in bounds: CGRect) async throws {
+    private func assertDocked(in bounds: CGRect, compact: Bool) async throws {
         let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
+        if compact { host.traitOverrides.verticalSizeClass = .compact }
         let window = UIWindow(frame: bounds)
         window.rootViewController = host
         window.isHidden = false
@@ -76,10 +77,13 @@ final class KeyboardAppearanceTests: XCTestCase {
         let keyboard = try XCTUnwrap(views.compactMap { $0 as? FullKeyboardView }.first)
         let frame = keyboard.convert(keyboard.bounds, to: window)
         XCTAssertGreaterThanOrEqual(frame.minY, -1)
-        XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
-        XCTAssertEqual(frame.width, window.bounds.width, accuracy: 0.5)
+        XCTAssertLessThanOrEqual(frame.maxX, window.bounds.width + 1)
+        if !compact {
+            XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
+            XCTAssertEqual(frame.width, window.bounds.width, accuracy: 0.5)
+        }
         XCTAssertEqual(frame.maxY, window.bounds.height - window.safeAreaInsets.bottom, accuracy: 1)
-        let scroll = try XCTUnwrap(views.compactMap { $0 as? UIScrollView }.first { $0.bounds.height > 300 })
+        let scroll = try XCTUnwrap(views.compactMap { $0 as? UIScrollView }.filter { !$0.isDescendant(of: keyboard) }.max { $0.bounds.height < $1.bounds.height })
         let visibleBottom = scroll.convert(scroll.bounds, to: window).maxY - scroll.adjustedContentInset.bottom
         XCTAssertLessThanOrEqual(visibleBottom, frame.minY + 1)
     }
