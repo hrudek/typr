@@ -140,6 +140,21 @@ final class UsageStatisticsTests: XCTestCase {
         XCTAssertEqual(heat.cells.reduce(0, +), 1)
         XCTAssertEqual(heat.geometryVersion, 1)
     }
+    func testHeatWithTheNumberRowLandsOnTheSameLetterCells() throws {
+        let off = KeyboardLayout(width: 393)
+        let on = KeyboardLayout(width: 393, numberRow: true)
+        for layout in [off, on] {
+            let q = try XCTUnwrap(layout.key(.character("q")))
+            session.recordHeat(point: CGPoint(x: q.frame.midX, y: q.frame.midY), layout: layout)
+        }
+        let one = try XCTUnwrap(on.key(.character("1")))
+        session.recordHeat(point: CGPoint(x: one.frame.midX, y: one.frame.midY), layout: on)
+        session.flush()
+        let heat = try XCTUnwrap(store.snapshot().heat.first)
+        XCTAssertEqual(store.snapshot().heat.count, 1)
+        XCTAssertEqual(heat.cells.filter { $0 > 0 }, [2], "both q taps share one cell; the digit is off the board")
+    }
+
     func testLayoutRetentionAndSessionRecentLabelsAreBounded() throws {
         for width in [320, 350, 375, 393, 430] {
             session.recordHeat(point: CGPoint(x: 50, y: 90), layout: KeyboardLayout(width: CGFloat(width)))

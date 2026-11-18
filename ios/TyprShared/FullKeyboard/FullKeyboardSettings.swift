@@ -14,6 +14,7 @@ struct FullKeyboardSettings {
         static let globeKey = "settings.keyboardGlobeKey"
         static let bottomRowOrder = "settings.keyboardBottomRowOrder"
         static let periodKey = "settings.keyboardPeriodKey"
+        static let numberRow = "settings.keyboardNumberRow"
         static let design = "settings.keyboardDesign"
     }
 
@@ -54,6 +55,12 @@ struct FullKeyboardSettings {
             defaults?.set(newValue.order.map(\.rawValue), forKey: Key.bottomRowOrder)
             defaults?.set(newValue.periodKey, forKey: Key.periodKey)
         }
+    }
+
+    /// 1 to 0 above the letters. Off by default.
+    var numberRow: Bool {
+        get { defaults?.object(forKey: Key.numberRow) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.numberRow) }
     }
 
     var design: KeyboardDesign {

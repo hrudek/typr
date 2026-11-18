@@ -8,7 +8,7 @@ final class KeyboardAppearanceTests: XCTestCase {
     private var base: KeyboardAppearancePreview.Settings {
         KeyboardAppearancePreview.Settings(
             design: .standard, showsSuggestionBar: true, globeKey: .switches,
-            bottomRow: BottomRow(), isDark: false, orientation: .portrait
+            bottomRow: BottomRow(), numberRow: false, isDark: false, orientation: .portrait
         )
     }
 
@@ -43,7 +43,7 @@ final class KeyboardAppearanceTests: XCTestCase {
         let design = views.compactMap { $0 as? UISegmentedControl }
         XCTAssertEqual(design.count, 1)
         XCTAssertEqual(design.first?.numberOfSegments, KeyboardDesign.allCases.count)
-        XCTAssertEqual(views.filter { $0 is UISwitch }.count, 2)
+        XCTAssertEqual(views.filter { $0 is UISwitch }.count, 3)
     }
 
     func testPreviewIsDockedFullWidthAtTheBottomAndScrollEndsAboveIt() async throws {
@@ -116,6 +116,12 @@ final class KeyboardAppearanceTests: XCTestCase {
         try await waitForState("the preview hides the globe") { view.engine.globeKey == .hidden }
         XCTAssertNil(view.engine.layout.key(.globe))
         XCTAssertNil(view.engine.layout.key(.globeSpacer))
+
+        settings.numberRow = true
+        KeyboardAppearancePreview.apply(settings, to: view)
+        try await waitForState("the preview shows the number row") { view.engine.numberRow }
+        XCTAssertEqual(view.preferredHeight, KeyboardLayout.height(for: .portrait, showsStrip: false, numberRow: true))
+        XCTAssertNotNil(view.engine.layout.key(.character("1")))
     }
 
     func testPreviewNeitherSuggestsNorWritesSettings() {

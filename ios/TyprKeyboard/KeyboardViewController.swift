@@ -41,6 +41,7 @@ final class KeyboardViewController: UIInputViewController {
         viewModel.hostNotice = nil
         viewModel.globeKey = FullKeyboardSettings().globeKey
         viewModel.bottomRow = FullKeyboardSettings().bottomRow
+        viewModel.numberRow = FullKeyboardSettings().numberRow
         mountSurface()
         refreshProtectedLexicon()
         fullKeyboard?.prepareForField()

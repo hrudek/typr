@@ -9,6 +9,7 @@ struct KeyboardAppearancePage: View {
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
     @State private var globeKey = FullKeyboardSettings().globeKey
     @State private var bottomRow = FullKeyboardSettings().bottomRow
+    @State private var numberRow = FullKeyboardSettings().numberRow
     @State private var draggedOrder: [BottomKey]?
     @State private var systemIsDark = Self.systemIsDark
 
@@ -38,6 +39,7 @@ struct KeyboardAppearancePage: View {
             showsSuggestionBar: !hideSuggestionBar,
             globeKey: globeKey,
             bottomRow: BottomRow(order: draggedOrder ?? bottomRow.order, periodKey: bottomRow.periodKey),
+            numberRow: numberRow,
             isDark: Self.snapshotIsDark() ?? systemIsDark,
             orientation: verticalSizeClass == .compact ? .landscape : .portrait
         )
@@ -79,7 +81,9 @@ struct KeyboardAppearancePage: View {
 
     private func dockedPreview(in page: CGSize) -> some View {
         let settings = preview
-        let height = KeyboardLayout.height(for: settings.orientation, showsStrip: settings.showsSuggestionBar)
+        let height = KeyboardLayout.height(
+            for: settings.orientation, showsStrip: settings.showsSuggestionBar, numberRow: settings.numberRow
+        )
         let scale = min(1, max(page.height - 260, page.height * 0.35) / height)
         return KeyboardAppearancePreview(settings: settings)
             .frame(width: page.width, height: height)
@@ -112,6 +116,11 @@ struct KeyboardAppearancePage: View {
             SettingsSection(title: "Suggestions") {
                 SettingsToggle(title: "Hide suggestion bar", detail: "Autocorrect still works on space.", isOn: $hideSuggestionBar)
                     .onChange(of: hideSuggestionBar) { _, hidden in TyprSettings().hideSuggestionBar = hidden }
+            }
+
+            SettingsSection(title: "Top row") {
+                SettingsToggle(title: "Number row", detail: "1 to 0 above the letters. The keyboard grows taller.", isOn: $numberRow)
+                    .onChange(of: numberRow) { _, shown in FullKeyboardSettings().numberRow = shown }
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -161,6 +170,7 @@ struct KeyboardAppearancePage: View {
         hideSuggestionBar = TyprSettings().hideSuggestionBar
         globeKey = FullKeyboardSettings().globeKey
         bottomRow = FullKeyboardSettings().bottomRow
+        numberRow = FullKeyboardSettings().numberRow
         systemIsDark = Self.systemIsDark
     }
 }
@@ -172,6 +182,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         var showsSuggestionBar: Bool
         var globeKey: GlobeKey
         var bottomRow: BottomRow
+        var numberRow: Bool
         var isDark: Bool
         var orientation: KeyboardOrientation
 
@@ -183,6 +194,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
             }
             return ["Full keyboard preview", design.title, globe,
                     "period \(bottomRow.periodKey ? "on" : "off")",
+                    "number row \(numberRow ? "on" : "off")",
                     "suggestions \(showsSuggestionBar ? "shown" : "hidden")"].joined(separator: ", ")
         }
     }
@@ -203,6 +215,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         model.needsGlobeKey = true
         model.globeKey = settings.globeKey
         model.bottomRow = settings.bottomRow
+        model.numberRow = settings.numberRow
         let learning = KeyboardLearningSession(store: nil, defaults: nil, allowsPersistence: { false })
         let view = FullKeyboardView(
             model: model,
@@ -220,6 +233,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
     static func apply(_ settings: Settings, to view: FullKeyboardView) {
         view.model.globeKey = settings.globeKey
         view.model.bottomRow = settings.bottomRow
+        view.model.numberRow = settings.numberRow
         view.applyPreview(FullKeyboardView.Preview(design: settings.design, showsSuggestionBar: settings.showsSuggestionBar))
         view.appearanceOverride = settings.isDark
         view.orientationOverride = settings.orientation
