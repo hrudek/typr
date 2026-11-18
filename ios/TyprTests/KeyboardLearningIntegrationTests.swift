@@ -265,6 +265,15 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
             tap(.layerSwitch(.numbers), engine); tap(.character("."), engine); tap(.layerSwitch(.letters), engine)
             type(" n", engine)
         }, "the next word must end with a Space of its own")
+        XCTAssertNil(spaceLabels { engine in
+            type("a o", engine)
+            tap(.delete, engine); tap(.delete, engine)
+            type("bout", engine)
+            engine.typeSpaceFromTyprKey()
+            type("a", engine)
+            engine.typeSpaceFromTyprKey()
+            type("word ", engine)
+        }, "a deleted Space never teaches, even when the text later reads like it again")
         let ends: [(String, Int?)] = [("about ", nil), ("a out ", 1)]
         for (end, expected) in ends {
             XCTAssertEqual(spaceLabels { engine in

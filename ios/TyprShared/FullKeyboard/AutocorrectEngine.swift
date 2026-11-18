@@ -133,9 +133,9 @@ final class AutocorrectEngine {
     private struct SpaceTap {
         let point: CGPoint
         let layout: KeyboardLayout
-        let word: String
         let after: String
         let epoch: Int
+        var typedThrough: String
     }
     private var typedSpace: SpaceTap?
     private var spaceBeforeWord: SpaceTap?
@@ -509,7 +509,16 @@ final class AutocorrectEngine {
     func settleFeedback(beforeInput: String?, insertedLetter: String, afterInput: String?) {
         if let space = typedSpace {
             typedSpace = nil
-            if beforeInput == space.after { spaceBeforeWord = space }
+            spaceBeforeWord = space
+        }
+        if let space = spaceBeforeWord {
+            let letter = insertedLetter.count == 1 && insertedLetter.first?.isLetter == true
+            if letter, let beforeInput, beforeInput == space.typedThrough,
+               let afterInput, afterInput == beforeInput + insertedLetter {
+                spaceBeforeWord?.typedThrough = afterInput
+            } else {
+                spaceBeforeWord = nil
+            }
         }
         reversibleRejection = nil
         reversibleBoundary = nil
@@ -551,14 +560,12 @@ final class AutocorrectEngine {
         guard let afterInput, afterInput.hasSuffix(" ") else { return }
         let text = String(afterInput.dropLast())
         guard let word = Self.currentToken(in: text) else { return }
-        if let earlier, earlier.epoch == learning.feedbackEpoch, learning.isLearningEnabled {
-            let rest = String(text.dropLast(word.count))
-            if rest.hasSuffix(" "), Self.currentToken(in: String(rest.dropLast())) == earlier.word {
-                learning.learnSpace(earlier.point, layout: earlier.layout)
-            }
+        if let earlier, earlier.epoch == learning.feedbackEpoch, learning.isLearningEnabled,
+           String(text.dropLast(word.count)) == earlier.after {
+            learning.learnSpace(earlier.point, layout: earlier.layout)
         }
-        typedSpace = SpaceTap(point: point, layout: layout, word: word, after: afterInput,
-                              epoch: learning.feedbackEpoch)
+        typedSpace = SpaceTap(point: point, layout: layout, after: afterInput,
+                              epoch: learning.feedbackEpoch, typedThrough: afterInput)
     }
 
     /// Backspace restored the typed word right after an automatic replacement.
