@@ -17,13 +17,12 @@ class RoutingTests(unittest.TestCase):
     commit = test_fingerprint.FingerprintTests.commit
     fingerprint = test_fingerprint.FingerprintTests.fingerprint
 
-    def decide(self, base, event='push', distribution='', baseline=True):
+    def decide(self, base, event='push', distribution=''):
         script = DECIDE
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'output'
             env = dict(os.environ, EVENT=event, REF='refs/heads/main', BEFORE=base,
-                       AFTER=self.git('rev-parse', 'HEAD'), DISTRIBUTION=distribution,
-                       BASE_SHA=base if baseline else '', REPO=str(self.root),
+                       AFTER=self.git('rev-parse', 'HEAD'), DISTRIBUTION=distribution, REPO=str(self.root),
                        RUNNER_TEMP=tmp, GITHUB_OUTPUT=str(output),
                        GITHUB_STEP_SUMMARY=str(Path(tmp) / 'summary'))
             result = subprocess.run(['bash', '-c', script], env=env,
@@ -47,16 +46,14 @@ class RoutingTests(unittest.TestCase):
             base = self.git('rev-parse', 'HEAD')
             self.change(path, 'routing change')
             self.commit()
-            for event, distribution in (('push', ''), ('workflow_dispatch', 'automatic')):
-                with self.subTest(path=path, event=event):
-                    outputs = self.decide(base, event, distribution)
-                    self.assertEqual(outputs, {'test': str(tests).lower(),
-                                              'build': str(build).lower(),
-                                              'sign': 'testflight' if build else ''})
-                    self.assertEqual(condition('test', event, distribution,
-                                               changed=outputs['build'], test_changed=outputs['test']), tests)
-                    self.assertEqual(condition('build', event, distribution,
-                                               changed=outputs['build']), build)
+            with self.subTest(path=path):
+                outputs = self.decide(base)
+                self.assertEqual(outputs, {'test': str(tests).lower(),
+                                          'build': str(build).lower(),
+                                          'sign': 'testflight' if build else ''})
+                self.assertEqual(condition('test', 'push', changed=outputs['build'],
+                                           test_changed=outputs['test']), tests)
+                self.assertEqual(condition('build', 'push', changed=outputs['build']), build)
 
     def test_explicit_distributions_ignore_unchanged_baseline(self):
         base = self.git('rev-parse', 'HEAD')
@@ -64,14 +61,6 @@ class RoutingTests(unittest.TestCase):
             with self.subTest(distribution=distribution):
                 self.assertEqual(self.decide(base, 'workflow_dispatch', distribution),
                                  {'test': 'true', 'build': 'true', 'sign': sign})
-
-    def test_automatic_without_base_uses_first_parent(self):
-        base = self.git('rev-parse', 'HEAD')
-        self.change('ios/TyprTests/Example.swift', 'test')
-        self.commit()
-        self.assertEqual(self.decide(base, 'workflow_dispatch', 'automatic', baseline=False),
-                         {'test': 'true', 'build': 'false', 'sign': ''})
-
 
 
 if __name__ == '__main__':

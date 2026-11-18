@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
-      - name: Typr script tests
+      - name: Script tests
         run: python3 -m unittest discover -s .github/typr/tests -v
       - name: Offline dictation log tests
         run: python3 -m unittest discover -s ios/tools/dictation_log/tests -v
@@ -39,7 +39,7 @@ jobs:
         run: for script in .github/typr/*.sh; do bash -n "$script"; done
       - name: ShellCheck
         run: shellcheck -x -P .github/typr .github/typr/*.sh
-      - name: Lint Typr workflows
+      - name: Lint workflows
         # SC2016/SC2129: Markdown backticks in single quotes and one-line-per-fact outputs are intended.
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color -ignore SC2016 -ignore SC2129 .github/workflows/typr-*.yml
       - name: Whitespace
@@ -51,19 +51,15 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
           PR: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          base=${BASE:-$(git rev-parse origin/main)}
           # The PR's labels now, not the event's: a re-run after adding "infra"/"docs" must see it.
-          LABELS=''
-          if [[ -n "$PR" ]]; then
-            LABELS=$(gh api "repos/$GH_REPO/pulls/$PR" --jq '[.labels[].name] | join(",")')
-          fi
+          LABELS=$(gh api "repos/$GH_REPO/pulls/$PR" --jq '[.labels[].name] | join(",")')
           export LABELS
-          bash .github/typr/scope.sh "$base" "$HEAD"
+          bash .github/typr/scope.sh "$BASE" "$HEAD"
 
   labels:
     name: Label PR
