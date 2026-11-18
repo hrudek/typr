@@ -5,12 +5,12 @@ Checks (typr-checks.yml)
 └─ Linux checks: helper + dictation-log tests, actionlint, shell syntax; scope on PRs
 
 Simulator tests (typr-simulator.yml)
-├─ push to main: changed simulator inputs → tests (no device archive or signing)
+├─ push to dev: changed simulator inputs → tests (no device archive or signing)
 └─ manual: tests + screenshot artifact (7 days)
 
 TestFlight (typr-ci.yml, kept for build-number and archive continuity)
-├─ push to main: changed app inputs → archive → sign → upload
-└─ manual (main only): archive → sign → upload
+├─ push to dev: changed app inputs → archive → sign → upload
+└─ manual (dev only): archive → sign → upload
 
 PRs: Linux checks only; no macOS allocation.
 App changes run simulator and TestFlight independently, with separate Actions results.
@@ -21,13 +21,15 @@ Review: every same-repo PR commit → Claude (read-only) → sticky comment
   ✅ PASS (green) | ❌ FIX + numbered findings (red) | ⚠️ NO RESULT (re-run once)
 ```
 
-- **Merge gates:** required checks **Linux checks** and **Review**. `main`
+- **Branch:** `dev` is the development branch. Unfinished, untested changes land
+  there fast so the owner can test them via TestFlight.
+- **Merge gates:** required checks **Linux checks** and **Review**. `dev`
   only moves forward (no force push); `Decide`/archive are not gates.
-- **Review:** `typr-review.yml` runs as `pull_request_target` from `main`'s copy, so a
+- **Review:** `typr-review.yml` runs as `pull_request_target` from `dev`'s copy, so a
   PR cannot change its reviewer; it reads but never runs PR code. It uses
   `CLAUDE_CODE_OAUTH_TOKEN` in environment `typr-agent`, no signing secrets. It is
   the only agent in CI.
-- **Scheduling:** newer main pushes cancel older archive/test jobs, never a
+- **Scheduling:** newer dev pushes cancel older archive/test jobs, never a
   running signing/upload. Markdown, `ios/tools/` and pipeline-only edits start no
   macOS jobs (`fingerprint.sh`); build helper edits take effect on the next app change.
   Pushes compare two fingerprints: `app` excludes

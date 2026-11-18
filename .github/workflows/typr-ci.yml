@@ -4,7 +4,7 @@ run-name: "TestFlight · ${{ github.ref_name }} · ${{ github.event_name }}"
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
   workflow_dispatch:
 
 permissions:

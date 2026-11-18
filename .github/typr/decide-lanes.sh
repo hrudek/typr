@@ -11,7 +11,7 @@ case "$EVENT" in
   workflow_dispatch)
     case "$DISTRIBUTION" in
       simulator) ;;
-      testflight) [[ "$REF" == refs/heads/main ]] || { echo 'TestFlight only from main'; exit 1; }
+      testflight) [[ "$REF" == refs/heads/dev ]] || { echo 'TestFlight only from dev'; exit 1; }
                   sign=testflight ;;
     esac ;;
 esac

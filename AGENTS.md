@@ -5,8 +5,10 @@ commands: [.github/typr/README.md](.github/typr/README.md).
 
 ## Pull requests
 
-- Branch `feature/<name>` or `fix/<name>` from current `origin/main` (CI reads the
+- Branch `feature/<name>` or `fix/<name>` from current `origin/dev` (CI reads the
   prefix). Changes under `.github/` need the `infra` label.
+- `dev` is the development branch: unfinished, untested changes land there fast
+  so the owner can test them via TestFlight.
 - The PR description is the record the reviewer checks against: goal, agreed
   behavior, decisions, what was and wasn't tested. Keep it and README current.
 - No new Markdown files for features, plans, task state or reports: rationale goes
@@ -16,7 +18,7 @@ commands: [.github/typr/README.md](.github/typr/README.md).
   for the next verdict. `⚠️ NO RESULT`: re-run once, then tell the owner.
 - **Prefer fast integration:** open small PRs promptly; do not wait for simulator
   tests before merging. Linux checks and Review remain required. Simulator
-  tests run on `main` alongside TestFlight delivery; follow the results and promptly
+  tests run on `dev` alongside TestFlight delivery; follow the results and promptly
   fix regressions or revert.
 - Removing a feature: prefer **Revert** of its PR(s).
 

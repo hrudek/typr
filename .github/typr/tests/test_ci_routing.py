@@ -21,7 +21,7 @@ class RoutingTests(unittest.TestCase):
         script = DECIDE
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / 'output'
-            env = dict(os.environ, EVENT=event, REF='refs/heads/main', BEFORE=base,
+            env = dict(os.environ, EVENT=event, REF='refs/heads/dev', BEFORE=base,
                        AFTER=self.git('rev-parse', 'HEAD'), DISTRIBUTION=distribution, REPO=str(self.root),
                        RUNNER_TEMP=tmp, GITHUB_OUTPUT=str(output),
                        GITHUB_STEP_SUMMARY=str(Path(tmp) / 'summary'))

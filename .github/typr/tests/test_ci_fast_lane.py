@@ -1,4 +1,4 @@
-"""Scheduling contracts: parallel latest-main work, protected signing."""
+"""Scheduling contracts: parallel latest-dev work, protected signing."""
 from pathlib import Path
 import re
 import unittest
@@ -36,7 +36,7 @@ class FastLaneContracts(unittest.TestCase):
         for source, name in ((CHECKS, 'Checks'), (SIMULATOR, 'Simulator tests'),
                              (SOURCE, 'TestFlight')):
             self.assertIn(f'\nname: {name}\n', source)
-            self.assertIn('branches: [main]', source)
+            self.assertIn('branches: [dev]', source)
         self.assertNotIn('macos-', CHECKS)
         self.assertNotIn('secrets.', SIMULATOR)
         self.assertNotIn('ARTIFACT_AGE_RECIPIENT', SIMULATOR)
@@ -57,9 +57,9 @@ class FastLaneContracts(unittest.TestCase):
         self.assertIn('DISTRIBUTION: simulator', SIMULATOR)
         self.assertIn('simulator) ;;', DECIDE)
 
-    def test_only_main_pushes_and_required_job_names_stay_stable(self):
+    def test_only_dev_pushes_and_required_job_names_stay_stable(self):
         push = re.search(r'^  push:\n(.*?)(?=^  \S)', SOURCE, re.M | re.S).group(1)
-        self.assertEqual(push.strip(), 'branches: [main]')
+        self.assertEqual(push.strip(), 'branches: [dev]')
         for key, expected in (('decide', 'Decide'), ('build', 'Unsigned archive')):
             self.assertEqual(re.search(r'^    name: (.+)$', job(key), re.M).group(1), expected)
         checks_linux = CHECKS.split('\n  linux:\n')[1].split('\n  labels:')[0]

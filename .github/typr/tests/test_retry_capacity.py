@@ -18,7 +18,7 @@ class CapacityTests(unittest.TestCase):
             'head_repository': {'full_name': REPO},
             'path': '.github/workflows/typr-ci.yml', 'event': 'push',
             'status': 'completed', 'conclusion': 'failure', 'run_attempt': 1,
-            'head_sha': 'a' * 40, 'head_branch': 'main', 'html_url': 'https://example/run/42',
+            'head_sha': 'a' * 40, 'head_branch': 'dev', 'html_url': 'https://example/run/42',
         }
         self.job = {'id': 9, 'name': 'Simulator tests', 'runner_id': 0,
                     'steps': [], 'labels': ['macos-26'], 'conclusion': 'cancelled'}
@@ -119,7 +119,7 @@ class CapacityTests(unittest.TestCase):
     def test_workflow_uses_trusted_code_and_bounded_linux_wait(self):
         source = (ROOT / '.github/workflows/typr-retry.yml').read_text()
         self.assertIn('workflows: ["TestFlight", "Simulator tests"]', source)
-        self.assertIn('ref: main', source)
+        self.assertIn('ref: dev', source)
         self.assertIn('runs-on: ubuntu-latest', source)
         self.assertIn('timeout-minutes: 25', source)
         self.assertIn('cancel-in-progress: false', source)
