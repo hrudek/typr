@@ -13,7 +13,6 @@ nonisolated enum WarmSessionDuration: String, Codable, CaseIterable, Sendable {
     case fiveMinutes
     case fifteenMinutes
     case oneHour
-    case always
 
     var seconds: TimeInterval? {
         switch self {
@@ -21,7 +20,6 @@ nonisolated enum WarmSessionDuration: String, Codable, CaseIterable, Sendable {
         case .fiveMinutes: 5 * 60
         case .fifteenMinutes: 15 * 60
         case .oneHour: 60 * 60
-        case .always: .infinity
         }
     }
 
@@ -31,7 +29,6 @@ nonisolated enum WarmSessionDuration: String, Codable, CaseIterable, Sendable {
         case .fiveMinutes: "5m"
         case .fifteenMinutes: "15m"
         case .oneHour: "1h"
-        case .always: "∞"
         }
     }
 
@@ -41,7 +38,6 @@ nonisolated enum WarmSessionDuration: String, Codable, CaseIterable, Sendable {
         case .fiveMinutes: "5 minutes"
         case .fifteenMinutes: "15 minutes"
         case .oneHour: "1 hour"
-        case .always: "Always"
         }
     }
 }
@@ -369,11 +365,9 @@ struct KeyboardBridge {
 
     var warmDuration: WarmSessionDuration {
         get {
-            guard let raw = defaults?.string(forKey: Key.warmDuration),
-                  let parsed = WarmSessionDuration(rawValue: raw) else {
-                return .fifteenMinutes
-            }
-            return parsed
+            guard let raw = defaults?.string(forKey: Key.warmDuration) else { return .fifteenMinutes }
+            if raw == "always" { return .oneHour }
+            return WarmSessionDuration(rawValue: raw) ?? .fifteenMinutes
         }
         nonmutating set {
             defaults?.set(newValue.rawValue, forKey: Key.warmDuration)

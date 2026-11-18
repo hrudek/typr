@@ -211,7 +211,7 @@ struct SettingsWarmDurationControl: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(duration == .off ? "Microphone off" : (duration == .always ? "Keep microphone warm until ended" : "Keep microphone warm for \(duration.title)"))
+        .accessibilityLabel(duration == .off ? "Microphone off" : "Keep microphone warm for \(duration.title)")
         .accessibilityAddTraits(duration == selected ? .isSelected : [])
     }
 }
@@ -239,13 +239,6 @@ struct SettingsWarmDurationRow: View {
                 }
             }
             .frame(minHeight: 50)
-
-            if selected == .always {
-                Text("Keeps the microphone session active and uses more battery.")
-                    .font(.footnote)
-                    .foregroundStyle(TyprTheme.textMuted)
-                    .padding(.bottom, 10)
-            }
         }
         .padding(.horizontal, 16)
     }

@@ -15,8 +15,8 @@ An explicit engine or language choice never silently falls back to another.
   Host detection and return use private APIs with fallbacks. Transient surfaces
   such as share sheets require **Keep mic warm** instead.
 - **Keep mic warm** keeps microphone input running so repeated dictations can start
-  without leaving the keyboard. The duration is 5 minutes, 15 minutes, 1 hour or
-  Always (until ended). If iOS reports another app playing audio before
+  without leaving the keyboard. The duration is 5 minutes, 15 minutes or 1 hour.
+  If iOS reports another app playing audio before
   microphone activation, Typr leaves idle input cold. Dictate then opens Typr to
   start recording and interrupt that audio. Stopping or cancelling the recording
   fully releases the audio session with `notifyOthersOnDeactivation`, before

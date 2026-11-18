@@ -1595,7 +1595,7 @@ final class DictationController {
             KeyboardSnapshot(
                 state: state,
                 heartbeat: effectiveHeartbeat,
-                expiresAt: keyboardSessionEnabled ? min(keyboardSessionExpiresAt, .greatestFiniteMagnitude) : 0,
+                expiresAt: keyboardSessionEnabled ? keyboardSessionExpiresAt : 0,
                 recordingStartedAt: activeCapture?.startedAt,
                 audioLevel: state == .recording ? audioLevel : 0,
                 loudnessDB: state == .recording ? loudnessDB : nil,
