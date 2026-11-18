@@ -160,6 +160,60 @@ final class KeyboardLayoutTests: XCTestCase {
     }
 
     @MainActor
+    func testMechanicalMutesKeyLabelsAndDefaultKeepsTextBase() {
+        func white(_ color: UIColor) -> CGFloat {
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &b, alpha: &a)
+            return (r + g + b) / 3
+        }
+        for isDark in [false, true] {
+            let standard = FullKeyboardPalette(isDark: isDark)
+            XCTAssertEqual(standard.keyLabel, standard.textBase)
+            XCTAssertEqual(standard.keyGlyph, standard.textBase)
+            let mechanical = FullKeyboardPalette(isDark: isDark, design: .mechanical)
+            for ink in [mechanical.keyLabel, mechanical.keyGlyph] {
+                let contrast = abs(white(ink) - white(mechanical.keyFill))
+                XCTAssertLessThan(contrast, abs(white(standard.textBase) - white(mechanical.keyFill)))
+                XCTAssertGreaterThan(contrast, 0.3)
+            }
+        }
+        XCTAssertEqual(FullKeyboardPalette(isDark: true).warmCore, FullKeyboardPalette(isDark: false).warmCore)
+        XCTAssertNotEqual(FullKeyboardPalette(isDark: true, design: .mechanical).warmCore, FullKeyboardPalette(isDark: true).warmCore)
+    }
+
+    @MainActor
+    func testMechanicalJoinedSeamSlantsAcrossTheTouchBoundary() throws {
+        let layout = try XCTUnwrap(everyPortraitLayout().first { $0.field == .text && JoinedSpaceKeycap(layout: $0) != nil })
+        let joined = try XCTUnwrap(JoinedSpaceKeycap(layout: layout))
+        let face = MechanicalKeycap(isDark: true).faceRect(joined.frame)
+        let boundary = (joined.space.maxX + joined.typr.minX) / 2
+        XCTAssertGreaterThan(joined.mechanicalSeamX(atY: face.minY, face: face), boundary + 2)
+        XCTAssertLessThan(joined.mechanicalSeamX(atY: face.maxY, face: face), boundary - 2)
+        XCTAssertEqual(joined.mechanicalSeamX(atY: face.midY, face: face), boundary, accuracy: 0.001)
+
+        for isDark in [false, true] {
+            let palette = FullKeyboardPalette(isDark: isDark, design: .mechanical)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1
+            let image = UIGraphicsImageRenderer(bounds: joined.frame, format: format).image { renderer in
+                joined.draw(in: renderer.cgContext, palette: palette, spacePressed: false, typrPressed: false)
+            }
+            let cgImage = try XCTUnwrap(image.cgImage)
+            let data = try XCTUnwrap(cgImage.dataProvider?.data as Data?)
+            func brightness(_ point: CGPoint) -> Int {
+                let x = Int(point.x - joined.frame.minX), y = Int(point.y - joined.frame.minY)
+                let offset = y * cgImage.bytesPerRow + x * cgImage.bitsPerPixel / 8
+                return Int(data[offset]) + Int(data[offset + 1]) + Int(data[offset + 2])
+            }
+            for y in [face.minY + face.height * 0.25, face.midY, face.maxY - face.height * 0.25] {
+                let seam = CGPoint(x: joined.mechanicalSeamX(atY: y, face: face), y: y)
+                XCTAssertLessThan(brightness(seam), brightness(CGPoint(x: seam.x - 6, y: y)))
+                XCTAssertLessThan(brightness(seam), brightness(CGPoint(x: seam.x + 6, y: y)))
+            }
+        }
+    }
+
+    @MainActor
     func testDarkPaletteMatchesReferenceColors() {
         let dark = FullKeyboardPalette(isDark: true)
         func hex(_ color: UIColor) -> String {

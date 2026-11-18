@@ -4,6 +4,7 @@ import UIKit
 /// Renders the experimental `FullKeyboardView` under a composer when
 /// `--snap-state full-keyboard-<state>[-dark|-dark-field]` is passed on Simulator.
 /// `-dark` is a dark app; `-dark-field` is a light app whose field asks for a dark keyboard.
+/// A `mechanical-` state prefix draws the Mechanical design, e.g. `full-keyboard-mechanical-shift-dark`.
 struct FullKeyboardSnapshotStage: View {
     let scene: String
 
@@ -19,12 +20,18 @@ struct FullKeyboardSnapshotStage: View {
     private var darkField: Bool { scene.hasSuffix("-dark-field") }
     private var darkApp: Bool { scene.hasSuffix("-dark") }
 
-    private var state: String {
+    private var sceneState: String {
         var name = String(scene.dropFirst("full-keyboard-".count))
         for suffix in ["-dark-field", "-dark"] where name.hasSuffix(suffix) {
             name = String(name.dropLast(suffix.count))
         }
         return name
+    }
+
+    private var design: KeyboardDesign { sceneState.hasPrefix("mechanical-") ? .mechanical : .standard }
+
+    private var state: String {
+        design == .mechanical ? String(sceneState.dropFirst("mechanical-".count)) : sceneState
     }
 
     /// `typing` shows its suggestions; the other scenes follow Typr's *Hide suggestion bar* switch.
@@ -64,7 +71,7 @@ struct FullKeyboardSnapshotStage: View {
                 )
                 .padding(.horizontal, 14)
                 .padding(.bottom, 10)
-            FullKeyboardFixture(state: state, draft: draft, darkKeyboard: darkApp || darkField)
+            FullKeyboardFixture(state: state, draft: draft, darkKeyboard: darkApp || darkField, design: design)
                 .frame(height: KeyboardLayout.height(for: .portrait, showsStrip: Self.showsSuggestionBar(state)))
                 .padding(.top, 12)
                 .background(Color(uiColor: backdrop).ignoresSafeArea(edges: .bottom))
@@ -78,6 +85,7 @@ private struct FullKeyboardFixture: UIViewRepresentable {
     let state: String
     let draft: String
     let darkKeyboard: Bool
+    let design: KeyboardDesign
 
     @MainActor
     final class Coordinator {
@@ -127,6 +135,7 @@ private struct FullKeyboardFixture: UIViewRepresentable {
 
         let view = FullKeyboardView(model: model, target: context.coordinator.target)
         view.appearanceOverride = darkKeyboard
+        view.designOverride = design
         view.orientationOverride = .portrait
         view.suggestionBarOverride = FullKeyboardSnapshotStage.showsSuggestionBar(state)
         view.drawsBackdrop = true
