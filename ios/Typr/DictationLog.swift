@@ -522,7 +522,7 @@ final class DictationLogStore {
     func setEnabled(_ enabled: Bool) {
         settings.dictationLog = enabled
         guard isEnabled != enabled else { return }
-        // Deliberate retention exception: OFF stops collection, it does not delete history.
+        // OFF stops collection; saved entries are kept until they expire (see purgeExpired).
         // Finalize before fencing callbacks so a persisted capture never stays transcribing.
         for var entry in entries where entry.status == .transcribing {
             entry.status = .interrupted; entry.revision = (entry.revision ?? 1) + 1; put(entry)
