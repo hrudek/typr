@@ -134,8 +134,9 @@ final class UsageStatisticsSession {
         }
         scheduleFlush()
     }
-    func recordHeat(point: CGPoint, layout: KeyboardLayout) {
-        guard prepare(), let signature = Self.heatSignature(layout),
+    func recordHeat(point tap: CGPoint, layout: KeyboardLayout) {
+        guard let point = Self.boardPoint(tap, layout: layout),
+              prepare(), let signature = Self.heatSignature(layout),
               point.x.isFinite, point.y.isFinite,
               point.x >= 0, point.x < layout.width, point.y >= 0,
               point.y < KeyboardLayout.height(for: layout.orientation, showsStrip: layout.showsStrip) else { return }
@@ -157,6 +158,13 @@ final class UsageStatisticsSession {
         heat[index].updatedAt = now()
         scheduleFlush()
     }
+    /// Where a tap falls on the signature's board, which has no number row; nil on the number row.
+    static func boardPoint(_ point: CGPoint, layout: KeyboardLayout) -> CGPoint? {
+        guard layout.showsNumberRow else { return point }
+        guard layout.hitTest(point)?.row != 0 else { return nil }
+        return CGPoint(x: point.x, y: point.y - layout.metrics.numberRowArea)
+    }
+
     static func heatSignature(_ layout: KeyboardLayout) -> KeyboardLayoutSignature? {
         guard layout.layer == .letters, layout.field == .text, layout.horizontalInset == 0,
               layout.width.isFinite, (8...4096).contains(layout.width),
@@ -164,10 +172,11 @@ final class UsageStatisticsSession {
         return KeyboardLayoutSignature(layout)
     }
     func validatedLabel(_ label: TouchLabel, layout: KeyboardLayout) {
-        guard let signature = Self.heatSignature(layout) else { return }
+        guard let signature = Self.heatSignature(layout),
+              let point = Self.boardPoint(label.point, layout: layout) else { return }
         if recentLabels.last?.layout != signature { recentLabels.removeAll() }
         if recentLabels.count == 128 { recentLabels.removeFirst() }
-        recentLabels.append(.init(letter: label.letter, point: label.point, layout: signature))
+        recentLabels.append(.init(letter: label.letter, point: point, layout: signature))
     }
     private func scheduleFlush() {
         guard automaticallyFlush, timer == nil else { return }

@@ -8,7 +8,7 @@ final class KeyboardLayoutTests: XCTestCase {
     private let layers: [KeyboardLayer] = [.letters, .numbers, .symbols]
     private let fields: [KeyboardFieldKind] = [.text, .url, .email]
 
-    private func everyPortraitLayout(showsStrip: Bool = true) -> [KeyboardLayout] {
+    private func everyPortraitLayout(showsStrip: Bool = true, numberRow: Bool = false) -> [KeyboardLayout] {
         var layouts: [KeyboardLayout] = []
         for width in portraitWidths {
             for layer in layers {
@@ -17,7 +17,7 @@ final class KeyboardLayoutTests: XCTestCase {
                         for globeKey in GlobeKey.allCases {
                             layouts.append(KeyboardLayout(
                                 width: width, layer: layer, field: field, showsGlobe: globe, globeKey: globeKey,
-                                showsStrip: showsStrip
+                                numberRow: numberRow, showsStrip: showsStrip
                             ))
                         }
                     }
@@ -27,15 +27,18 @@ final class KeyboardLayoutTests: XCTestCase {
         return layouts
     }
 
-    /// Every layout, with and without the suggestion bar.
     private func everyLayout() -> [KeyboardLayout] {
-        everyPortraitLayout() + everyPortraitLayout(showsStrip: false) + landscapeLayouts()
-            + landscapeLayouts().map {
-                KeyboardLayout(
-                    width: $0.width, orientation: .landscape, layer: $0.layer, field: $0.field,
-                    horizontalInset: $0.horizontalInset, showsStrip: false
-                )
-            }
+        [false, true].flatMap { numberRow in
+            everyPortraitLayout(numberRow: numberRow) + everyPortraitLayout(showsStrip: false, numberRow: numberRow)
+                + [true, false].flatMap { showsStrip in
+                    landscapeLayouts().map {
+                        KeyboardLayout(
+                            width: $0.width, orientation: .landscape, layer: $0.layer, field: $0.field,
+                            numberRow: numberRow, horizontalInset: $0.horizontalInset, showsStrip: showsStrip
+                        )
+                    }
+                }
+        }
     }
 
     func testJoinedSpaceKeycapOnlyConnectsAdjacentKeysWithoutChangingTargets() {
@@ -51,7 +54,7 @@ final class KeyboardLayoutTests: XCTestCase {
                 continue
             }
             XCTAssertEqual(joined.frame, space.frame.union(typr.frame))
-            XCTAssertEqual(joined.frame.height, layout.metrics.keyHeight)
+            XCTAssertEqual(joined.frame.height, space.frame.height)
             XCTAssertEqual(joined.radius, layout.metrics.cornerRadius)
             // The visual seam must not replace the original straight touch boundary.
             let boundary = space.hitFrame.maxX
@@ -365,7 +368,7 @@ final class KeyboardLayoutTests: XCTestCase {
         for layout in everyLayout() {
             let area = layout.keysAreaFrame
             var rowTop = area.minY
-            for row in 0..<4 {
+            for row in 0...layout.bottomRowIndex {
                 let targets = layout.keys.filter { $0.row == row }.map(\.hitFrame).sorted { $0.minX < $1.minX }
                 XCTAssertEqual(targets.first?.minX, 0, describe(layout))
                 XCTAssertEqual(targets.last?.maxX, layout.width, describe(layout))
@@ -411,8 +414,8 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
-    func testBalloonsStayInsideThe253PointKeyboard() {
-        for layout in everyPortraitLayout() {
+    func testBalloonsStayInsideTheKeyboard() {
+        for layout in everyPortraitLayout() + everyPortraitLayout(numberRow: true) {
             let bounds = CGRect(x: 0, y: 0, width: layout.width, height: layout.totalHeight)
             for key in layout.keys where key.character != nil {
                 guard let balloon = layout.balloon(for: key) else {
@@ -501,6 +504,59 @@ final class KeyboardLayoutTests: XCTestCase {
         XCTAssertEqual(layout.totalHeight, 176)
         XCTAssertEqual(layout.key(.character("q"))!.frame.minX, 64, accuracy: 0.001)
         XCTAssertEqual(layout.key(.character("q"))!.hitFrame.minX, 0)
+    }
+
+    func testNumberRowPutsOneToZeroAboveTheLettersAndGrowsTheKeyboard() throws {
+        for (orientation, width) in [(KeyboardOrientation.portrait, CGFloat(393)), (.landscape, 852)] {
+            for showsStrip in [true, false] {
+                let off = KeyboardLayout(width: width, orientation: orientation, showsStrip: showsStrip)
+                let on = KeyboardLayout(width: width, orientation: orientation, numberRow: true, showsStrip: showsStrip)
+                let context = "\(orientation) strip=\(showsStrip)"
+                let grow = on.totalHeight - off.totalHeight
+                XCTAssertEqual(grow, on.metrics.numberRowHeight + on.metrics.rowGap, context)
+                XCTAssertGreaterThan(on.metrics.numberRowHeight, 0, context)
+                XCTAssertLessThan(on.metrics.numberRowHeight, on.metrics.keyHeight, context)
+                XCTAssertEqual(KeyboardLayout.height(for: orientation, showsStrip: showsStrip, numberRow: true), on.totalHeight, context)
+                XCTAssertEqual(off.bottomRowIndex, 3, context)
+                XCTAssertEqual(on.bottomRowIndex, 4, context)
+
+                let digits = on.keys.filter { $0.row == 0 }
+                XCTAssertEqual(digits.map(\.label), "1234567890".map(String.init), context)
+                for (digit, letter) in zip(digits, "qwertyuiop") {
+                    let below = try XCTUnwrap(on.key(.character(String(letter))))
+                    XCTAssertEqual(digit.frame.minX, below.frame.minX, accuracy: 0.0001, context)
+                    XCTAssertEqual(digit.frame.width, below.frame.width, accuracy: 0.0001, context)
+                    XCTAssertLessThan(digit.frame.maxY, below.frame.minY, context)
+                    XCTAssertEqual(on.hitTest(CGPoint(x: digit.frame.midX, y: digit.frame.midY)), digit, context)
+                }
+                XCTAssertEqual(on.keys.count, off.keys.count + 10, context)
+                for key in off.keys {
+                    let moved = try XCTUnwrap(on.keys.first { $0.kind == key.kind && $0.row == key.row + 1 }, "\(context) \(key.label)")
+                    XCTAssertEqual(moved.frame, key.frame.offsetBy(dx: 0, dy: grow), "\(context) \(key.label)")
+                }
+            }
+        }
+    }
+
+    func testWithTheNumberRowTheOtherPagesKeepTheHeightWithTallerKeys() throws {
+        for orientation in [KeyboardOrientation.portrait, .landscape] {
+            let width: CGFloat = orientation == .portrait ? 393 : 852
+            let letters = KeyboardLayout(width: width, orientation: orientation, numberRow: true)
+            for layer in [KeyboardLayer.numbers, .symbols] {
+                let off = KeyboardLayout(width: width, orientation: orientation, layer: layer)
+                let on = KeyboardLayout(width: width, orientation: orientation, layer: layer, numberRow: true)
+                XCTAssertEqual(on.totalHeight, letters.totalHeight, "\(orientation) \(layer)")
+                XCTAssertEqual(on.bottomRowIndex, 3)
+                XCTAssertEqual(on.keys.count, off.keys.count)
+                XCTAssertEqual(try XCTUnwrap(on.key(.space)).frame.maxY, try XCTUnwrap(letters.key(.space)).frame.maxY, accuracy: 0.0001)
+                XCTAssertGreaterThan(try XCTUnwrap(on.key(.space)).frame.height, try XCTUnwrap(off.key(.space)).frame.height)
+            }
+        }
+    }
+
+    func testThePeriodKeyHoldsMorePunctuationBelowTheNumberRow() throws {
+        let layout = KeyboardLayout(width: 393, bottomRow: BottomRow(periodKey: true), numberRow: true)
+        XCTAssertTrue(layout.isPeriodKey(try XCTUnwrap(layout.key(.character(".")))))
     }
 
     // MARK: - Helpers
@@ -615,7 +671,7 @@ final class KeyboardLayoutTests: XCTestCase {
                     XCTAssertEqual(kinds.last, .returnKey, name)
                     let dots = kinds.filter { $0 == .character(".") }.count
                     XCTAssertEqual(dots, layout.field != .text || (periodKey && layout.layer == .letters) ? 1 : 0, name)
-                    let row = layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }
+                    let row = layout.keys.filter { $0.row == layout.bottomRowIndex }.sorted { $0.frame.minX < $1.frame.minX }
                     for (a, b) in zip(row, row.dropFirst()) {
                         XCTAssertLessThan(a.frame.maxX, b.frame.minX, name)
                         XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, name)
@@ -635,11 +691,11 @@ final class KeyboardLayoutTests: XCTestCase {
     }
 
     private func bottomRow(_ layout: KeyboardLayout) -> [KeyKind] {
-        layout.keys.filter { $0.row == 3 }.sorted { $0.frame.minX < $1.frame.minX }.map(\.kind)
+        layout.keys.filter { $0.row == layout.bottomRowIndex }.sorted { $0.frame.minX < $1.frame.minX }.map(\.kind)
     }
 
     private func describe(_ layout: KeyboardLayout) -> String {
-        "\(layout.width)pt \(layout.orientation) \(layout.layer) \(layout.field) globe=\(layout.showsGlobe) \(layout.globeKey) \(layout.bottomRow) strip=\(layout.showsStrip)"
+        "\(layout.width)pt \(layout.orientation) \(layout.layer) \(layout.field) globe=\(layout.showsGlobe) \(layout.globeKey) \(layout.bottomRow) strip=\(layout.showsStrip) numbers=\(layout.numberRow)"
     }
 }
 
@@ -671,6 +727,19 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertEqual(FullKeyboardSettings(defaults: defaults).design, .mechanical)
         defaults.set("neon", forKey: "settings.keyboardDesign")
         XCTAssertEqual(settings.design, .standard)
+    }
+
+    func testNumberRowIsOffByDefaultAndRoundTrips() throws {
+        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = FullKeyboardSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.numberRow)
+        settings.numberRow = true
+        XCTAssertTrue(FullKeyboardSettings(defaults: defaults).numberRow)
+        settings.numberRow = false
+        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).numberRow)
     }
 
     func testBottomRowDefaultsToSpaceThenTyprAndRoundTrips() throws {

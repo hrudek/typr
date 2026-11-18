@@ -170,7 +170,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     var preferredHeight: CGFloat {
-        KeyboardLayout.height(for: orientation, showsStrip: engine.showsStrip)
+        KeyboardLayout.height(for: orientation, showsStrip: engine.showsStrip, numberRow: engine.numberRow)
     }
 
     // MARK: - Host events
@@ -454,11 +454,13 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     private func refreshFromModel() {
         typrKey.isWarm = model.hasFullAccess && model.isWarmAvailable
         if engine.showsGlobe != model.needsGlobeKey || engine.globeKey != model.globeKey
-            || engine.bottomRow != model.bottomRow {
+            || engine.bottomRow != model.bottomRow || engine.numberRow != model.numberRow {
             engine.showsGlobe = model.needsGlobeKey
             engine.globeKey = model.globeKey
             engine.bottomRow = model.bottomRow
+            engine.numberRow = model.numberRow
             setNeedsLayout()
+            hostController?.view.setNeedsLayout()
         }
         let recording = model.stagePhase == .recording || model.stagePhase == .transcribing
         if recording != showsRecording {

@@ -188,6 +188,7 @@ final class FullKeyboardEngine {
     var showsGlobe = false { didSet { if showsGlobe != oldValue { rebuildLayout() } } }
     var globeKey = GlobeKey.switches { didSet { if globeKey != oldValue { rebuildLayout() } } }
     var bottomRow = BottomRow() { didSet { if bottomRow != oldValue { rebuildLayout() } } }
+    var numberRow = false { didSet { if numberRow != oldValue { rebuildLayout() } } }
     var horizontalInset: CGFloat = 0 { didSet { if horizontalInset != oldValue { rebuildLayout() } } }
     /// Typr: without the suggestion bar the keys move up and no suggestions are computed.
     var showsStrip = true {
@@ -722,7 +723,7 @@ final class FullKeyboardEngine {
     func takeNextKeyboardHold(forTouch id: Int) -> Bool {
         guard layout.layerKeyHoldSwitchesKeyboard,
               let touch = touches[id], !touch.committed,
-              case .layerSwitch = touch.key.kind, touch.key.row == 3 else { return false }
+              case .layerSwitch = touch.key.kind, touch.key.row == layout.bottomRowIndex else { return false }
         let dx = touch.point.x - touch.startPoint.x
         let dy = touch.point.y - touch.startPoint.y
         guard (dx * dx + dy * dy).squareRoot() <= Self.accentSlop else { return false }
@@ -1225,6 +1226,7 @@ final class FullKeyboardEngine {
             showsGlobe: showsGlobe,
             globeKey: globeKey,
             bottomRow: bottomRow,
+            numberRow: numberRow,
             horizontalInset: horizontalInset,
             showsStrip: showsStrip
         )

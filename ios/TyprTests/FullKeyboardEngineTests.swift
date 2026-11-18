@@ -151,6 +151,25 @@ final class FullKeyboardEngineTests: XCTestCase {
         engine.cancelAllTouches()
     }
 
+    func testNumberRowTypesDigitsOnTheLettersPage() {
+        engine.numberRow = true
+        type("1a0")
+        XCTAssertEqual(target.text, "1a0")
+        XCTAssertEqual(engine.layout.layer, .letters)
+        XCTAssertNotNil(engine.layout.key(.character("1")))
+    }
+
+    func testHoldingNumbersBelowTheNumberRowSwitchesKeyboards() {
+        engine.showsGlobe = true
+        engine.globeKey = .hidden
+        engine.numberRow = true
+        let layerKey = point(.layerSwitch(.numbers))
+        engine.touchBegan(id: 1, at: layerKey)
+        XCTAssertTrue(engine.takeNextKeyboardHold(forTouch: 1))
+        XCTAssertEqual(engine.layout.layer, .letters)
+        XCTAssertTrue(engine.touches.isEmpty)
+    }
+
     func testGlobeSpacerDoesNothingWhenTapped() {
         engine.showsGlobe = true
         engine.globeKey = .spacer

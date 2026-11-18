@@ -116,6 +116,8 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
     let keysTop: CGFloat
     let keysBottom: CGFloat
     let cornerRadius: CGFloat
+    /// The number row's key height; zero without one.
+    var numberRowHeight: CGFloat = 0
 
     /// Matches iOS 26 portrait keyboard geometry inside the system's +17 pt Liquid Glass crown:
     /// 35 pt strip area + 218 pt of keys (4 × 45 pt + 3 × 11 pt + 5 pt) = 253 pt extension height.
@@ -137,13 +139,17 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
     static let headerHeight: CGFloat = 33
 
     /// Typr: `showsStrip: false` drops the suggestion bar; the keys move up to a small top margin.
+    /// `numberRow` adds a row of short keys, 0.8 of a key high like iikb's, above the letters.
     static func `for`(
         _ orientation: KeyboardOrientation,
         innerWidth: CGFloat? = nil,
-        showsStrip: Bool = true
+        showsStrip: Bool = true,
+        numberRow: Bool = false
     ) -> KeyboardMetrics {
-        let metrics = withStrip(orientation, innerWidth: innerWidth)
-        return showsStrip ? metrics : metrics.withoutStrip(orientation)
+        var metrics = withStrip(orientation, innerWidth: innerWidth)
+        if !showsStrip { metrics = metrics.withoutStrip(orientation) }
+        if numberRow { metrics.numberRowHeight = (metrics.keyHeight * 0.8).rounded() }
+        return metrics
     }
 
     private func withoutStrip(_ orientation: KeyboardOrientation) -> KeyboardMetrics {
@@ -180,7 +186,9 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
     }
 
     var stripArea: CGFloat { stripTop + stripHeight + stripBottom }
-    var keysArea: CGFloat { keysTop + 4 * keyHeight + 3 * rowGap + keysBottom }
+    /// The number row and the gap below it; zero without one.
+    var numberRowArea: CGFloat { numberRowHeight > 0 ? numberRowHeight + rowGap : 0 }
+    var keysArea: CGFloat { keysTop + numberRowArea + 4 * keyHeight + 3 * rowGap + keysBottom }
     var totalHeight: CGFloat { stripArea + keysArea }
 }
 
@@ -200,6 +208,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     let showsGlobe: Bool
     let globeKey: GlobeKey
     let bottomRow: BottomRow
+    /// Settings › Number row: 1 to 0 above the letters. The other pages keep four taller rows.
+    let numberRow: Bool
     let horizontalInset: CGFloat
     /// Typr: whether the suggestion bar sits above the keys.
     let showsStrip: Bool
@@ -214,6 +224,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         showsGlobe: Bool = false,
         globeKey: GlobeKey = .switches,
         bottomRow: BottomRow = BottomRow(),
+        numberRow: Bool = false,
         horizontalInset: CGFloat = 0,
         showsStrip: Bool = true
     ) {
@@ -224,10 +235,11 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         self.showsGlobe = showsGlobe
         self.globeKey = globeKey
         self.bottomRow = bottomRow
+        self.numberRow = numberRow
         self.horizontalInset = max(0, horizontalInset)
         self.showsStrip = showsStrip
         let innerWidth = width - 2 * self.horizontalInset
-        let metrics = KeyboardMetrics.for(orientation, innerWidth: innerWidth, showsStrip: showsStrip)
+        let metrics = KeyboardMetrics.for(orientation, innerWidth: innerWidth, showsStrip: showsStrip, numberRow: numberRow)
         self.metrics = metrics
         self.keys = Self.buildKeys(
             width: width,
@@ -248,11 +260,16 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
 
     /// The bottom row's period key, whose hold offers more punctuation.
     func isPeriodKey(_ key: KeyboardKey) -> Bool {
-        Self.showsPeriodKey(bottomRow, layer: layer, field: field) && key.row == 3 && key.kind == .character(".")
+        Self.showsPeriodKey(bottomRow, layer: layer, field: field) && key.row == bottomRowIndex && key.kind == .character(".")
     }
 
-    static func height(for orientation: KeyboardOrientation, showsStrip: Bool = true) -> CGFloat {
-        KeyboardMetrics.for(orientation, showsStrip: showsStrip).totalHeight
+    /// The row of space and return: 4 below the number row, else 3.
+    var bottomRowIndex: Int { showsNumberRow ? 4 : 3 }
+
+    var showsNumberRow: Bool { numberRow && layer == .letters }
+
+    static func height(for orientation: KeyboardOrientation, showsStrip: Bool = true, numberRow: Bool = false) -> CGFloat {
+        KeyboardMetrics.for(orientation, showsStrip: showsStrip, numberRow: numberRow).totalHeight
     }
 
     var totalHeight: CGFloat { metrics.totalHeight }
@@ -316,6 +333,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         (innerWidth - 2 * metrics.side - 9 * metrics.gap) / 10
     }
 
+    static let numberRowCharacters = "1234567890".map(String.init)
+
     static func characterRows(for layer: KeyboardLayer) -> [[String]] {
         let punctuation = [".", ",", "?", "!", "'"]
         switch layer {
@@ -323,7 +342,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             return ["qwertyuiop", "asdfghjkl", "zxcvbnm"].map { $0.map(String.init) }
         case .numbers:
             return [
-                "1234567890".map(String.init),
+                numberRowCharacters,
                 ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""],
                 punctuation,
             ]
@@ -351,15 +370,26 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         let rows = characterRows(for: layer)
         let left = inset + m.side
         let right = width - inset - m.side
+        let showsNumberRow = layer == .letters && m.numberRowHeight > 0
+        let keyHeight = showsNumberRow ? m.keyHeight : m.keyHeight + m.numberRowArea / 4
+        let firstRow = showsNumberRow ? 1 : 0
+        let shiftRow = firstRow + 2
+        let spaceRow = firstRow + 3
 
         func rowY(_ row: Int) -> CGFloat {
-            m.stripArea + m.keysTop + CGFloat(row) * (m.keyHeight + m.rowGap)
+            let top = m.stripArea + m.keysTop
+            guard row >= firstRow else { return top }
+            return top + (showsNumberRow ? m.numberRowArea : 0) + CGFloat(row - firstRow) * (keyHeight + m.rowGap)
+        }
+
+        func rowHeight(_ row: Int) -> CGFloat {
+            row < firstRow ? m.numberRowHeight : keyHeight
         }
 
         var drawn: [(KeyKind, Int, CGRect, String)] = []
 
         func add(_ kind: KeyKind, row: Int, x: CGFloat, w: CGFloat, label: String) {
-            drawn.append((kind, row, CGRect(x: x, y: rowY(row), width: w, height: m.keyHeight), label))
+            drawn.append((kind, row, CGRect(x: x, y: rowY(row), width: w, height: rowHeight(row)), label))
         }
 
         func addCharacters(_ chars: [String], row: Int, startX: CGFloat, keyWidth: CGFloat) {
@@ -375,32 +405,36 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             return inset + (innerWidth - total) / 2
         }
 
+        if showsNumberRow {
+            addCharacters(numberRowCharacters, row: 0, startX: centredStart(count: 10, keyWidth: lw), keyWidth: lw)
+        }
+
         // Rows 1 and 2.
         for row in 0..<2 {
             let chars = rows[row]
-            addCharacters(chars, row: row, startX: centredStart(count: chars.count, keyWidth: lw), keyWidth: lw)
+            addCharacters(chars, row: firstRow + row, startX: centredStart(count: chars.count, keyWidth: lw), keyWidth: lw)
         }
 
         // Row 3: shift (or the symbol-page switch), the middle keys, delete.
         switch layer {
         case .letters:
-            add(.shift, row: 2, x: left, w: modW, label: "shift")
+            add(.shift, row: shiftRow, x: left, w: modW, label: "shift")
         case .numbers:
-            add(.layerSwitch(.symbols), row: 2, x: left, w: modW, label: "#+=")
+            add(.layerSwitch(.symbols), row: shiftRow, x: left, w: modW, label: "#+=")
         case .symbols:
-            add(.layerSwitch(.numbers), row: 2, x: left, w: modW, label: "123")
+            add(.layerSwitch(.numbers), row: shiftRow, x: left, w: modW, label: "123")
         }
         let middle = rows[2]
         if layer == .letters {
-            addCharacters(middle, row: 2, startX: centredStart(count: middle.count, keyWidth: lw), keyWidth: lw)
+            addCharacters(middle, row: shiftRow, startX: centredStart(count: middle.count, keyWidth: lw), keyWidth: lw)
         } else {
             // Apple's punctuation row: five wide keys aligned to the s..k columns between modifiers.
             let edgeGap = 1.5 * (lw + m.gap) - modW
             let count = CGFloat(middle.count)
             let middleW = (innerWidth - 2 * m.side - 2 * modW - 2 * edgeGap - (count - 1) * m.gap) / count
-            addCharacters(middle, row: 2, startX: left + modW + edgeGap, keyWidth: middleW)
+            addCharacters(middle, row: shiftRow, startX: left + modW + edgeGap, keyWidth: middleW)
         }
-        add(.delete, row: 2, x: right - modW, w: modW, label: "delete")
+        add(.delete, row: shiftRow, x: right - modW, w: modW, label: "delete")
 
         let isCompactBottomRow = globe != .hidden || field != .text || aroundSpace.contains(.period)
         let switchW = isCompactBottomRow ? modW : lw * bottomSwitchWidthRatio
@@ -443,13 +477,13 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         let spaceW = max(lw, (right - left) - fixed - (itemCount - 1) * m.gap)
         var x = left
         for (kind, w, label) in leading {
-            add(kind, row: 3, x: x, w: w, label: label)
+            add(kind, row: spaceRow, x: x, w: w, label: label)
             x += w + m.gap
         }
-        add(.space, row: 3, x: x, w: spaceW, label: "space")
+        add(.space, row: spaceRow, x: x, w: spaceW, label: "space")
         x += spaceW + m.gap
         for (kind, w, label) in trailing {
-            add(kind, row: 3, x: x, w: w, label: label)
+            add(kind, row: spaceRow, x: x, w: w, label: label)
             x += w + m.gap
         }
 
@@ -457,10 +491,10 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         let top = m.stripArea
         let bottom = m.totalHeight
         var keys: [KeyboardKey] = []
-        for row in 0..<4 {
+        for row in 0...spaceRow {
             let rowKeys = drawn.filter { $0.1 == row }.sorted { $0.2.minX < $1.2.minX }
             let y0 = row == 0 ? top : rowY(row) - m.rowGap / 2
-            let y1 = row == 3 ? bottom : rowY(row + 1) - m.rowGap / 2
+            let y1 = row == spaceRow ? bottom : rowY(row + 1) - m.rowGap / 2
             for (i, item) in rowKeys.enumerated() {
                 let x0 = i == 0 ? 0 : (rowKeys[i - 1].2.maxX + item.2.minX) / 2
                 let x1 = i == rowKeys.count - 1 ? width : (item.2.maxX + rowKeys[i + 1].2.minX) / 2
