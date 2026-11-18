@@ -1,8 +1,0 @@
-{
-  "_comment": "Things only the owner can renew. Update the date after renewing. status.py warns 30 days ahead.",
-  "items": [
-    {"name": "Apple distribution certificate", "expires": "2027-10-28", "renew": "python3 -I .github/typr/provision.py testflight (after a new certificate), then update the secrets"},
-    {"name": "Provisioning profiles (TestFlight)", "expires": "2027-10-28", "renew": "python3 -I .github/typr/provision.py testflight"},
-    {"name": "Claude token (CLAUDE_CODE_OAUTH_TOKEN)", "expires": "2027-11-05", "approximate": true, "renew": "claude setup-token, then set it in environment typr-agent"}
-  ]
-}

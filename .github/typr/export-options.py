@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 
-def validate_profile(profile, team, distribution, now=None):
+def validate_profile(profile, team, now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     if team not in profile.get('TeamIdentifier', []):
         raise ValueError('Profile belongs to a different Apple team')
@@ -24,9 +24,7 @@ def validate_profile(profile, team, distribution, now=None):
         raise ValueError('Use distribution profiles, not development profiles')
     if profile.get('ProvisionsAllDevices'):
         raise ValueError('Enterprise profiles are not supported')
-    if distribution == 'ad-hoc' and not profile.get('ProvisionedDevices'):
-        raise ValueError('Ad Hoc profile must include registered devices')
-    if distribution == 'testflight' and profile.get('ProvisionedDevices'):
+    if profile.get('ProvisionedDevices'):
         raise ValueError('TestFlight requires App Store distribution profiles')
     if not re.fullmatch(r'[A-Fa-f0-9-]{36}', profile['UUID']):
         raise ValueError('Invalid profile UUID')
@@ -38,15 +36,12 @@ def main():
     archive, profile_dir, destination = map(Path, sys.argv[1:])
     config = json.loads(os.environ['APP_CONFIG'])
     team = os.environ['APPLE_TEAM_ID']
-    distribution = os.environ['DISTRIBUTION']
-    if distribution not in ('ad-hoc', 'testflight'):
-        raise ValueError('Unsupported distribution')
     validate(archive, config['bundle_ids'])
     profiles = {}
     for path in profile_dir.rglob('*.mobileprovision'):
         raw = subprocess.check_output(['security', 'cms', '-D', '-i', str(path)])
         profile = plistlib.loads(raw)
-        bundle = validate_profile(profile, team, distribution)
+        bundle = validate_profile(profile, team)
         if bundle in profiles:
             raise ValueError(f'Duplicate profiles for {bundle}')
         profiles[bundle] = (profile, path)
@@ -69,7 +64,7 @@ def main():
         installed_paths.append(str(target))
     Path(os.environ['RUNNER_TEMP'], 'installed-profiles.json').write_text(json.dumps(installed_paths))
     options = {
-        'method': 'release-testing' if distribution == 'ad-hoc' else 'app-store-connect',
+        'method': 'app-store-connect',
         'teamID': team,
         'signingStyle': 'manual',
         'signingCertificate': 'Apple Distribution',

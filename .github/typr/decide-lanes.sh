@@ -13,10 +13,7 @@ case "$EVENT" in
       automatic) [[ "$REF" == refs/heads/main ]] \
                    || { echo 'Automatic distribution only from main'; exit 1; }
                  sign=testflight ;;
-      unsigned|simulator) ;;
-      ad-hoc) [[ "$REF" == refs/heads/main || "$REF" == refs/heads/feature/* ]] \
-                || { echo 'Ad-hoc signing only from main or feature/*'; exit 1; }
-              sign=ad-hoc ;;
+      simulator) ;;
       testflight) [[ "$REF" == refs/heads/main ]] || { echo 'TestFlight only from main'; exit 1; }
                   sign=testflight ;;
     esac ;;

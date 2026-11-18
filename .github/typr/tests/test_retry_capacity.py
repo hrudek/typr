@@ -122,7 +122,7 @@ class CapacityTests(unittest.TestCase):
 
     def test_workflow_uses_trusted_code_and_bounded_linux_wait(self):
         source = (ROOT / '.github/workflows/typr-retry.yml').read_text()
-        self.assertIn('workflows: ["TestFlight", "Simulator tests", "Typr* PR to iPhone"]', source)
+        self.assertIn('workflows: ["TestFlight", "Simulator tests"]', source)
         self.assertIn('ref: main', source)
         self.assertIn('runs-on: ubuntu-latest', source)
         self.assertIn('timeout-minutes: 25', source)

@@ -1,6 +1,6 @@
 # Device archives and signing only. Simulator tests run in typr-simulator.yml.
 name: TestFlight
-run-name: "${{ inputs.distribution == 'unsigned' && 'Unsigned build' || inputs.distribution == 'ad-hoc' && 'Ad-hoc build' || 'TestFlight' }} · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }} · ${{ inputs.distribution || github.event.action || github.event_name }}"
+run-name: "TestFlight · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }} · ${{ inputs.distribution || github.event.action || github.event_name }}"
 
 on:
   push:
@@ -8,10 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       distribution:
-        description: Unsigned builds; ad-hoc/TestFlight sign; automatic routes main app changes
+        description: TestFlight always builds; automatic routes main app changes
         type: choice
-        options: [unsigned, ad-hoc, testflight, automatic]
-        default: unsigned
+        options: [testflight, automatic]
+        default: testflight
         required: true
       base_sha:
         description: "Automatic lane only: compare main against this merge parent (empty: main's first parent)"
@@ -164,7 +164,7 @@ jobs:
   sign:
     name: Sign (${{ needs.decide.outputs.sign }})
     # Ships as soon as the archive compiled; the tests run in parallel. Red tests are fixed
-    # locally afterwards through a normal PR (the status issue shows them).
+    # locally afterwards through a normal PR.
     needs: [decide, build]
     if: needs.decide.outputs.sign != '' && needs.build.result == 'success'
     concurrency:
@@ -172,11 +172,10 @@ jobs:
       cancel-in-progress: false
     runs-on: ${{ vars.MACOS_BUILD_RUNNER || 'macos-15-intel' }}
     timeout-minutes: 30
-    environment: typr-${{ needs.decide.outputs.sign }}
+    environment: typr-testflight
     env:
       APP_CONFIG: ${{ needs.decide.outputs.config }}
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      DISTRIBUTION: ${{ needs.decide.outputs.sign }}
       ARTIFACT_AGE_RECIPIENT: ${{ vars.ARTIFACT_AGE_RECIPIENT }}
     steps:
       # Only Typr's own scripts; no source build runs on this runner.
@@ -218,7 +217,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Upload to App Store Connect for TestFlight processing
-        if: needs.decide.outputs.sign == 'testflight'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

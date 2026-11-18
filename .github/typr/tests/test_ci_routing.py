@@ -60,8 +60,7 @@ class RoutingTests(unittest.TestCase):
 
     def test_explicit_distributions_ignore_unchanged_baseline(self):
         base = self.git('rev-parse', 'HEAD')
-        for distribution, sign in (('unsigned', ''), ('simulator', ''),
-                                   ('ad-hoc', 'ad-hoc'), ('testflight', 'testflight')):
+        for distribution, sign in (('simulator', ''), ('testflight', 'testflight')):
             with self.subTest(distribution=distribution):
                 self.assertEqual(self.decide(base, 'workflow_dispatch', distribution),
                                  {'test': 'true', 'build': 'true', 'sign': sign})
