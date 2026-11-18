@@ -249,13 +249,7 @@ struct ContentView: View {
                 }
                 SettingsSection(title: "Statistics") {
                     NavigationLink(value: SettingsDestination.statistics) {
-                        HStack(spacing: 12) {
-                            Image(systemName: "chart.bar.xaxis").foregroundStyle(TyprTheme.agentBlue)
-                            Text("Statistics").foregroundStyle(TyprTheme.textBase)
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(TyprTheme.textMuted)
-                        }
-                        .padding(16).frame(minHeight: 44)
+                        SettingsLink(title: "Statistics", detail: "Typing and dictation statistics", icon: "chart.bar.xaxis")
                     }
                 }
                 SettingsPreferences()
