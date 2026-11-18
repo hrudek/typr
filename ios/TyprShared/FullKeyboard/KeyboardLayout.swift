@@ -358,7 +358,6 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         }
         add(.delete, row: 2, x: right - modW, w: modW, label: "delete")
 
-        // Row 4: globe spacer?, 123/ABC, globe?, space, field extras (@ . / . /), Typr, return.
         let isCompactBottomRow = globe != .hidden || field != .text
         let switchW = isCompactBottomRow ? modW : lw * bottomSwitchWidthRatio
         let returnW = isCompactBottomRow ? (lw * compactReturnWidthRatio) : (lw * returnWidthRatio + m.gap)
