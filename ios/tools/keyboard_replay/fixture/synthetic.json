@@ -1,0 +1,2109 @@
+{
+  "appBuild" : "fixture",
+  "exportedAt" : "2026-09-21T14:23:20Z",
+  "format" : "typr-typing-log",
+  "touchModel" : {
+    "bigrams" : {
+      "following" : {
+
+      },
+      "updates" : 0
+    },
+    "counts" : {
+
+    },
+    "kept" : {
+
+    },
+    "layouts" : {
+      "portrait-392-strip-no-globe" : {
+        "global" : {
+          "covarianceXY" : 0.0011347078988959275,
+          "meanX" : 0.14075635273874806,
+          "meanY" : 0.07565151647488295,
+          "n" : 256,
+          "varianceX" : 0.008642130943093235,
+          "varianceY" : 0.0016432040830520662
+        },
+        "keys" : {
+          "a" : {
+            "covarianceXY" : 0.0008920194437362553,
+            "meanX" : 0.15043239492833324,
+            "meanY" : 0.0770290369997481,
+            "n" : 43,
+            "varianceX" : 0.0009094165358062838,
+            "varianceY" : 0.0009186751532604171
+          },
+          "b" : {
+            "covarianceXY" : 0.0007322784048852757,
+            "meanX" : 0.15117616580310864,
+            "meanY" : 0.0795535714285714,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291037,
+            "varianceY" : 0.000696739477040825
+          },
+          "c" : {
+            "covarianceXY" : 0.0007746279924020075,
+            "meanX" : 0.15244136113481194,
+            "meanY" : 0.08074330938656941,
+            "n" : 41,
+            "varianceX" : 0.0008148873876595335,
+            "varianceY" : 0.0007363648876073925
+          },
+          "d" : {
+            "covarianceXY" : 0.0007729811266924586,
+            "meanX" : 0.15216460170216384,
+            "meanY" : 0.08103477953632077,
+            "n" : 41,
+            "varianceX" : 0.0007899388396266008,
+            "varianceY" : 0.000767504929597826
+          },
+          "e" : {
+            "covarianceXY" : 0.0006795934046337342,
+            "meanX" : 0.15772186915815883,
+            "meanY" : 0.08098496579088538,
+            "n" : 45,
+            "varianceX" : 0.001122688838460363,
+            "varianceY" : 0.0007889258330104633
+          },
+          "f" : {
+            "covarianceXY" : 0.0006870933220054448,
+            "meanX" : 0.14993587839420142,
+            "meanY" : 0.08010434364846075,
+            "n" : 41,
+            "varianceX" : 0.0008123911328327312,
+            "varianceY" : 0.0006918798327874038
+          },
+          "g" : {
+            "covarianceXY" : 0.0007247084008682649,
+            "meanX" : 0.15079667191803983,
+            "meanY" : 0.07887566558558465,
+            "n" : 41,
+            "varianceX" : 0.0007566192429171634,
+            "varianceY" : 0.0006981280845375562
+          },
+          "h" : {
+            "covarianceXY" : 0.0004917793973390908,
+            "meanX" : 0.15311727736720898,
+            "meanY" : 0.08038474268172466,
+            "n" : 44,
+            "varianceX" : 0.0010493340872060025,
+            "varianceY" : 0.0008647658900249359
+          },
+          "i" : {
+            "covarianceXY" : 0.0006098231488708871,
+            "meanX" : 0.14933488690148958,
+            "meanY" : 0.07905731653956387,
+            "n" : 43,
+            "varianceX" : 0.0008458123036193939,
+            "varianceY" : 0.0008994182770370201
+          },
+          "j" : {
+            "covarianceXY" : 0.00073227840488527,
+            "meanX" : 0.1511761658031092,
+            "meanY" : 0.07955357142857143,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291035,
+            "varianceY" : 0.0006967394770408144
+          },
+          "k" : {
+            "covarianceXY" : 0.00073227840488527,
+            "meanX" : 0.1511761658031092,
+            "meanY" : 0.07955357142857143,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291035,
+            "varianceY" : 0.0006967394770408144
+          },
+          "l" : {
+            "covarianceXY" : 0.00073227840488527,
+            "meanX" : 0.1511761658031092,
+            "meanY" : 0.07955357142857143,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291035,
+            "varianceY" : 0.0006967394770408144
+          },
+          "m" : {
+            "covarianceXY" : 0.0006822050006066315,
+            "meanX" : 0.1501882497518542,
+            "meanY" : 0.08007930872508186,
+            "n" : 43,
+            "varianceX" : 0.0007423635458164359,
+            "varianceY" : 0.0008933189775610331
+          },
+          "n" : {
+            "covarianceXY" : 0.0006938735460557508,
+            "meanX" : 0.15044735981278193,
+            "meanY" : 0.0798352231124806,
+            "n" : 42,
+            "varianceX" : 0.0007439587021954744,
+            "varianceY" : 0.0006660674391817869
+          },
+          "o" : {
+            "covarianceXY" : 0.0006553291121760445,
+            "meanX" : 0.15287177705003943,
+            "meanY" : 0.0786823687293006,
+            "n" : 41,
+            "varianceX" : 0.0008658625185936322,
+            "varianceY" : 0.000710105596988003
+          },
+          "p" : {
+            "covarianceXY" : 0.00073227840488527,
+            "meanX" : 0.1511761658031092,
+            "meanY" : 0.07955357142857143,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291035,
+            "varianceY" : 0.0006967394770408144
+          },
+          "q" : {
+            "covarianceXY" : 0.0007410824766215552,
+            "meanX" : 0.1495594917021056,
+            "meanY" : 0.07914123537674471,
+            "n" : 41,
+            "varianceX" : 0.000855404024519155,
+            "varianceY" : 0.0006865466720447734
+          },
+          "r" : {
+            "covarianceXY" : 0.000626767479133481,
+            "meanX" : 0.14859188186974182,
+            "meanY" : 0.0799682517607064,
+            "n" : 42,
+            "varianceX" : 0.0008782192919345073,
+            "varianceY" : 0.0008745272260913343
+          },
+          "s" : {
+            "covarianceXY" : 0.0006971977120116697,
+            "meanX" : 0.15086079796287113,
+            "meanY" : 0.08091866337651533,
+            "n" : 41,
+            "varianceX" : 0.0007548368935512175,
+            "varianceY" : 0.0007542848723129818
+          },
+          "t" : {
+            "covarianceXY" : 0.0006868998017854011,
+            "meanX" : 0.1487305576726589,
+            "meanY" : 0.07695705735929982,
+            "n" : 44,
+            "varianceX" : 0.0010662040652141217,
+            "varianceY" : 0.0008778968021071258
+          },
+          "u" : {
+            "covarianceXY" : 0.0019124731747616453,
+            "meanX" : 0.13615453178827253,
+            "meanY" : 0.07574706081982288,
+            "n" : 43,
+            "varianceX" : 0.013769004559567867,
+            "varianceY" : 0.0008632171314022663
+          },
+          "v" : {
+            "covarianceXY" : 0.0007322784048852757,
+            "meanX" : 0.15117616580310864,
+            "meanY" : 0.0795535714285714,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291037,
+            "varianceY" : 0.000696739477040825
+          },
+          "w" : {
+            "covarianceXY" : 0.0007112170038907351,
+            "meanX" : 0.15112590902684578,
+            "meanY" : 0.08114587018553493,
+            "n" : 41,
+            "varianceX" : 0.0007509596483073925,
+            "varianceY" : 0.0007811624445164312
+          },
+          "x" : {
+            "covarianceXY" : 0.0007322784048852717,
+            "meanX" : 0.1511761658031088,
+            "meanY" : 0.0795535714285714,
+            "n" : 40,
+            "varianceX" : 0.0007696300840290952,
+            "varianceY" : 0.000696739477040825
+          },
+          "y" : {
+            "covarianceXY" : 0.0007322784048852701,
+            "meanX" : 0.15117616580310864,
+            "meanY" : 0.07955357142857143,
+            "n" : 40,
+            "varianceX" : 0.0007696300840291037,
+            "varianceY" : 0.0006967394770408144
+          },
+          "z" : {
+            "covarianceXY" : 0.0007362317070257856,
+            "meanX" : 0.15085036521935577,
+            "meanY" : 0.07787971385065728,
+            "n" : 41,
+            "varianceX" : 0.0007551044593799238,
+            "varianceY" : 0.0007918177989049628
+          }
+        },
+        "lastUpdated" : "2026-11-19T06:06:33Z",
+        "signature" : {
+          "orientation" : "portrait",
+          "showsGlobe" : false,
+          "showsStrip" : true,
+          "widthBucket" : 392
+        },
+        "space" : {
+          "covarianceXY" : 0,
+          "meanX" : 0,
+          "meanY" : 0,
+          "n" : 14,
+          "varianceX" : 0,
+          "varianceY" : 0
+        }
+      }
+    },
+    "rejected" : [
+
+    ],
+    "schemaVersion" : 5
+  },
+  "version" : 1,
+  "words" : [
+    {
+      "at" : "2026-09-21T14:13:20Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "Morgen"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "Morgen",
+      "meant" : "Morgen",
+      "taps" : [
+        {
+          "key" : "m",
+          "t" : 0,
+          "text" : "M",
+          "x" : 318.12,
+          "y" : 178.1
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 340.12,
+          "y" : 59.95
+        },
+        {
+          "key" : "r",
+          "t" : 320,
+          "text" : "r",
+          "x" : 142.94,
+          "y" : 58.75
+        },
+        {
+          "key" : "g",
+          "t" : 480,
+          "text" : "g",
+          "x" : 201.73,
+          "y" : 116.4
+        },
+        {
+          "key" : "e",
+          "t" : 640,
+          "text" : "e",
+          "x" : 109.01,
+          "y" : 63.89
+        },
+        {
+          "key" : "n",
+          "t" : 800,
+          "text" : "n",
+          "x" : 279.05,
+          "y" : 174.53
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:21Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "fahre"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "fahre",
+      "meant" : "fahre",
+      "taps" : [
+        {
+          "key" : "f",
+          "t" : 0,
+          "text" : "f",
+          "x" : 161.77,
+          "y" : 119.22
+        },
+        {
+          "key" : "a",
+          "t" : 160,
+          "text" : "a",
+          "x" : 46.19,
+          "y" : 114.07
+        },
+        {
+          "key" : "h",
+          "t" : 320,
+          "text" : "h",
+          "x" : 243.53,
+          "y" : 114.91
+        },
+        {
+          "key" : "r",
+          "t" : 480,
+          "text" : "r",
+          "x" : 141.74,
+          "y" : 66.14
+        },
+        {
+          "key" : "e",
+          "t" : 640,
+          "text" : "e",
+          "x" : 108.87,
+          "y" : 60.76
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:22Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "ich"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "ich",
+      "meant" : "ich",
+      "taps" : [
+        {
+          "key" : "i",
+          "t" : 0,
+          "text" : "i",
+          "x" : 299.7,
+          "y" : 59.44
+        },
+        {
+          "key" : "c",
+          "t" : 160,
+          "text" : "c",
+          "x" : 165.74,
+          "y" : 176.69
+        },
+        {
+          "key" : "h",
+          "t" : 320,
+          "text" : "h",
+          "x" : 238.16,
+          "y" : 120.49
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:22Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "mit"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "mit",
+      "meant" : "mit",
+      "taps" : [
+        {
+          "key" : "m",
+          "t" : 0,
+          "text" : "m",
+          "x" : 316.86,
+          "y" : 174.94
+        },
+        {
+          "key" : "i",
+          "t" : 160,
+          "text" : "i",
+          "x" : 297.12,
+          "y" : 58.96
+        },
+        {
+          "key" : "t",
+          "t" : 320,
+          "text" : "t",
+          "x" : 181.67,
+          "y" : 64.31
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:23Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "Kalvenor"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "Kalvenor",
+      "meant" : "Kalvenor",
+      "taps" : [
+        {
+          "key" : "k",
+          "t" : 0,
+          "text" : "K",
+          "x" : 319.68,
+          "y" : 116.9
+        },
+        {
+          "key" : "a",
+          "t" : 160,
+          "text" : "a",
+          "x" : 47.58,
+          "y" : 113.63
+        },
+        {
+          "key" : "l",
+          "t" : 320,
+          "text" : "l",
+          "x" : 354.02,
+          "y" : 116.92
+        },
+        {
+          "key" : "v",
+          "t" : 480,
+          "text" : "v",
+          "x" : 199.71,
+          "y" : 171.28
+        },
+        {
+          "key" : "e",
+          "t" : 640,
+          "text" : "e",
+          "x" : 106.86,
+          "y" : 64.34
+        },
+        {
+          "key" : "n",
+          "t" : 800,
+          "text" : "n",
+          "x" : 282.78,
+          "y" : 175.45
+        },
+        {
+          "key" : "o",
+          "t" : 960,
+          "text" : "o",
+          "x" : 337.85,
+          "y" : 65.78
+        },
+        {
+          "key" : "r",
+          "t" : 1120,
+          "text" : "r",
+          "x" : 146.1,
+          "y" : 58.84
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:25Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "zum"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "zum",
+      "meant" : "zum",
+      "taps" : [
+        {
+          "key" : "z",
+          "t" : 0,
+          "text" : "z",
+          "x" : 86.02,
+          "y" : 170.11
+        },
+        {
+          "key" : "u",
+          "t" : 160,
+          "text" : "u",
+          "x" : 261.33,
+          "y" : 59.52
+        },
+        {
+          "key" : "m",
+          "t" : 320,
+          "text" : "m",
+          "x" : 317.79,
+          "y" : 170.09
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:25Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "Wolkenradweg"
+      },
+      "corrections" : [
+
+      ],
+      "end" : "\n",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "Wolkenradweg",
+      "meant" : "Wolkenradweg",
+      "taps" : [
+        {
+          "key" : "w",
+          "t" : 0,
+          "text" : "W",
+          "x" : 64.38,
+          "y" : 62.84
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 338.27,
+          "y" : 64.34
+        },
+        {
+          "key" : "l",
+          "t" : 320,
+          "text" : "l",
+          "x" : 359.48,
+          "y" : 118.17
+        },
+        {
+          "key" : "k",
+          "t" : 480,
+          "text" : "k",
+          "x" : 318.79,
+          "y" : 117.45
+        },
+        {
+          "key" : "e",
+          "t" : 640,
+          "text" : "e",
+          "x" : 105.4,
+          "y" : 60.84
+        },
+        {
+          "key" : "n",
+          "t" : 800,
+          "text" : "n",
+          "x" : 278.94,
+          "y" : 169.6
+        },
+        {
+          "key" : "r",
+          "t" : 960,
+          "text" : "r",
+          "x" : 141.77,
+          "y" : 62.02
+        },
+        {
+          "key" : "a",
+          "t" : 1120,
+          "text" : "a",
+          "x" : 46.25,
+          "y" : 116.26
+        },
+        {
+          "key" : "d",
+          "t" : 1280,
+          "text" : "d",
+          "x" : 124.01,
+          "y" : 119.12
+        },
+        {
+          "key" : "w",
+          "t" : 1440,
+          "text" : "w",
+          "x" : 65.43,
+          "y" : 60.07
+        },
+        {
+          "key" : "e",
+          "t" : 1600,
+          "text" : "e",
+          "x" : 108.32,
+          "y" : 62.27
+        },
+        {
+          "key" : "g",
+          "t" : 1760,
+          "text" : "g",
+          "x" : 199.52,
+          "y" : 114.34
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:28Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "the"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "the",
+      "meant" : "the",
+      "taps" : [
+        {
+          "key" : "t",
+          "t" : 0,
+          "text" : "t",
+          "x" : 180.25,
+          "y" : 57.97
+        },
+        {
+          "key" : "h",
+          "t" : 160,
+          "text" : "h",
+          "x" : 241.52,
+          "y" : 121.79
+        },
+        {
+          "key" : "e",
+          "t" : 320,
+          "text" : "e",
+          "x" : 108.7,
+          "y" : 64
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:28Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "house"
+      },
+      "corrections" : [
+        {
+          "erased" : [
+            {
+              "key" : "y",
+              "t" : 320,
+              "text" : "y",
+              "x" : 231.24,
+              "y" : 57.5
+            },
+            {
+              "key" : "s",
+              "t" : 480,
+              "text" : "s",
+              "x" : 87.15,
+              "y" : 118.43
+            },
+            {
+              "key" : "e",
+              "t" : 640,
+              "text" : "e",
+              "x" : 106.77,
+              "y" : 64.83
+            }
+          ],
+          "kind" : "backspace"
+        }
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "house",
+      "meant" : "house",
+      "taps" : [
+        {
+          "key" : "h",
+          "t" : 0,
+          "text" : "h",
+          "x" : 242.22,
+          "y" : 120.08
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 339.66,
+          "y" : 60.77
+        },
+        {
+          "key" : "u",
+          "t" : 1280,
+          "text" : "u",
+          "x" : 262.79,
+          "y" : 64.94
+        },
+        {
+          "key" : "s",
+          "t" : 1440,
+          "text" : "s",
+          "x" : 84.72,
+          "y" : 115.05
+        },
+        {
+          "key" : "e",
+          "t" : 1600,
+          "text" : "e",
+          "x" : 103.72,
+          "y" : 61.97
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:30Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "was"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "was",
+      "meant" : "was",
+      "taps" : [
+        {
+          "key" : "w",
+          "t" : 0,
+          "text" : "w",
+          "x" : 67.16,
+          "y" : 65.61
+        },
+        {
+          "key" : "a",
+          "t" : 160,
+          "text" : "a",
+          "x" : 46.04,
+          "y" : 113.71
+        },
+        {
+          "key" : "s",
+          "t" : 320,
+          "text" : "s",
+          "x" : 86.04,
+          "y" : 121.09
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:31Z",
+      "commit" : {
+        "correction" : "rule",
+        "kind" : "autocorrect",
+        "text" : "the"
+      },
+      "corrections" : [
+        {
+          "from" : "the",
+          "kind" : "undo",
+          "to" : "teh"
+        }
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "teh",
+      "meant" : "teh",
+      "taps" : [
+        {
+          "key" : "t",
+          "t" : 0,
+          "text" : "t",
+          "x" : 180.32,
+          "y" : 60.54
+        },
+        {
+          "key" : "e",
+          "t" : 160,
+          "text" : "e",
+          "x" : 105.94,
+          "y" : 65.06
+        },
+        {
+          "key" : "h",
+          "t" : 320,
+          "text" : "h",
+          "x" : 243.84,
+          "y" : 116.68
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:32Z",
+      "commit" : {
+        "correction" : "rule",
+        "kind" : "autocorrect",
+        "text" : "don't"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "dont",
+      "meant" : "don't",
+      "taps" : [
+        {
+          "key" : "d",
+          "t" : 0,
+          "text" : "d",
+          "x" : 126.7,
+          "y" : 114.06
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 336.4,
+          "y" : 60.46
+        },
+        {
+          "key" : "n",
+          "t" : 320,
+          "text" : "n",
+          "x" : 278.64,
+          "y" : 170.5
+        },
+        {
+          "key" : "t",
+          "t" : 480,
+          "text" : "t",
+          "x" : 182.69,
+          "y" : 63.31
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:33Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "world"
+      },
+      "corrections" : [
+        {
+          "erased" : [
+            {
+              "key" : "t",
+              "t" : 320,
+              "text" : "t",
+              "x" : 181.62,
+              "y" : 61.66
+            }
+          ],
+          "kind" : "backspace"
+        }
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "world",
+      "meant" : "world",
+      "taps" : [
+        {
+          "key" : "w",
+          "t" : 0,
+          "text" : "w",
+          "x" : 66.84,
+          "y" : 61.4
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 339.53,
+          "y" : 60.78
+        },
+        {
+          "key" : "r",
+          "t" : 640,
+          "text" : "r",
+          "x" : 144.63,
+          "y" : 58.71
+        },
+        {
+          "key" : "l",
+          "t" : 800,
+          "text" : "l",
+          "x" : 356.78,
+          "y" : 115.14
+        },
+        {
+          "key" : "d",
+          "t" : 960,
+          "text" : "d",
+          "x" : 125.75,
+          "y" : 117.85
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:34Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "quiet"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "quiet",
+      "meant" : "quiet",
+      "taps" : [
+        {
+          "key" : "q",
+          "t" : 0,
+          "text" : "q",
+          "x" : 26.08,
+          "y" : 61.01
+        },
+        {
+          "key" : "u",
+          "t" : 160,
+          "text" : "u",
+          "x" : 263.2,
+          "y" : 59.68
+        },
+        {
+          "key" : "i",
+          "t" : 320,
+          "text" : "i",
+          "x" : 296.63,
+          "y" : 66.27
+        },
+        {
+          "key" : "e",
+          "t" : 480,
+          "text" : "e",
+          "x" : 108.03,
+          "y" : 59.67
+        },
+        {
+          "key" : "t",
+          "t" : 640,
+          "text" : "t",
+          "x" : 185.75,
+          "y" : 58.6
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:35Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "and"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "and",
+      "meant" : "and",
+      "taps" : [
+        {
+          "key" : "a",
+          "t" : 0,
+          "text" : "a",
+          "x" : 50.34,
+          "y" : 120.01
+        },
+        {
+          "key" : "n",
+          "t" : 160,
+          "text" : "n",
+          "x" : 278.84,
+          "y" : 174.04
+        },
+        {
+          "key" : "d",
+          "t" : 320,
+          "text" : "d",
+          "x" : 126.7,
+          "y" : 121.36
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:35Z",
+      "commit" : {
+        "correction" : "rule",
+        "kind" : "autocorrect",
+        "text" : "I"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "i",
+      "meant" : "I",
+      "taps" : [
+        {
+          "key" : "i",
+          "t" : 0,
+          "text" : "i",
+          "x" : 297.02,
+          "y" : 63.15
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:36Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "Brisolde"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "Brisolde",
+      "meant" : "Brisolde",
+      "taps" : [
+        {
+          "key" : "b",
+          "t" : 0,
+          "text" : "B",
+          "x" : 243.18,
+          "y" : 172.99
+        },
+        {
+          "key" : "r",
+          "t" : 160,
+          "text" : "r",
+          "x" : 145.06,
+          "y" : 60.59
+        },
+        {
+          "key" : "i",
+          "t" : 320,
+          "text" : "i",
+          "x" : 298.03,
+          "y" : 62.27
+        },
+        {
+          "key" : "s",
+          "t" : 480,
+          "text" : "s",
+          "x" : 88.14,
+          "y" : 120.78
+        },
+        {
+          "key" : "o",
+          "t" : 640,
+          "text" : "o",
+          "x" : 334.67,
+          "y" : 61.74
+        },
+        {
+          "key" : "l",
+          "t" : 800,
+          "text" : "l",
+          "x" : 355.34,
+          "y" : 121.31
+        },
+        {
+          "key" : "d",
+          "t" : 960,
+          "text" : "d",
+          "x" : 124.59,
+          "y" : 114.49
+        },
+        {
+          "key" : "e",
+          "t" : 1120,
+          "text" : "e",
+          "x" : 104.54,
+          "y" : 61.42
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:37Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "fine"
+      },
+      "corrections" : [
+        {
+          "kind" : "reopen"
+        },
+        {
+          "erased" : [
+            {
+              "key" : "f",
+              "t" : 0,
+              "text" : "f",
+              "x" : 164.44,
+              "y" : 120.59
+            },
+            {
+              "key" : "i",
+              "t" : 160,
+              "text" : "i",
+              "x" : 301.31,
+              "y" : 65.84
+            },
+            {
+              "key" : "n",
+              "t" : 320,
+              "text" : "n",
+              "x" : 280.09,
+              "y" : 174.37
+            },
+            {
+              "key" : "e",
+              "t" : 480,
+              "text" : "e",
+              "x" : 107.26,
+              "y" : 58.47
+            }
+          ],
+          "kind" : "backspace"
+        }
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "great",
+      "meant" : "great",
+      "taps" : [
+        {
+          "key" : "g",
+          "t" : 1600,
+          "text" : "g",
+          "x" : 201.35,
+          "y" : 114.5
+        },
+        {
+          "key" : "r",
+          "t" : 1760,
+          "text" : "r",
+          "x" : 146.32,
+          "y" : 61.51
+        },
+        {
+          "key" : "e",
+          "t" : 1920,
+          "text" : "e",
+          "x" : 103.27,
+          "y" : 58.56
+        },
+        {
+          "key" : "a",
+          "t" : 2080,
+          "text" : "a",
+          "x" : 48.37,
+          "y" : 115.38
+        },
+        {
+          "key" : "t",
+          "t" : 2240,
+          "text" : "t",
+          "x" : 181.92,
+          "y" : 63.45
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:40Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "Sonnenblumenfeld"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "Sonnenblumenfeld",
+      "meant" : "Sonnenblumenfeld",
+      "taps" : [
+        {
+          "key" : "s",
+          "t" : 0,
+          "text" : "S",
+          "x" : 83.84,
+          "y" : 122.47
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 334.24,
+          "y" : 59.09
+        },
+        {
+          "key" : "n",
+          "t" : 320,
+          "text" : "n",
+          "x" : 279.92,
+          "y" : 170.61
+        },
+        {
+          "key" : "n",
+          "t" : 480,
+          "text" : "n",
+          "x" : 276.36,
+          "y" : 175.32
+        },
+        {
+          "key" : "e",
+          "t" : 640,
+          "text" : "e",
+          "x" : 107.27,
+          "y" : 62.5
+        },
+        {
+          "key" : "n",
+          "t" : 800,
+          "text" : "n",
+          "x" : 282.49,
+          "y" : 170.69
+        },
+        {
+          "key" : "b",
+          "t" : 960,
+          "text" : "b",
+          "x" : 243.51,
+          "y" : 171.24
+        },
+        {
+          "key" : "l",
+          "t" : 1120,
+          "text" : "l",
+          "x" : 356.37,
+          "y" : 119.49
+        },
+        {
+          "key" : "u",
+          "t" : 1280,
+          "text" : "u",
+          "x" : 258.71,
+          "y" : 63.02
+        },
+        {
+          "key" : "m",
+          "t" : 1440,
+          "text" : "m",
+          "x" : 315.18,
+          "y" : 170.42
+        },
+        {
+          "key" : "e",
+          "t" : 1600,
+          "text" : "e",
+          "x" : 102.8,
+          "y" : 65.78
+        },
+        {
+          "key" : "n",
+          "t" : 1760,
+          "text" : "n",
+          "x" : 282.62,
+          "y" : 176.54
+        },
+        {
+          "key" : "f",
+          "t" : 1920,
+          "text" : "f",
+          "x" : 162.69,
+          "y" : 116.56
+        },
+        {
+          "key" : "e",
+          "t" : 2080,
+          "text" : "e",
+          "x" : 104.43,
+          "y" : 61.13
+        },
+        {
+          "key" : "l",
+          "t" : 2240,
+          "text" : "l",
+          "x" : 354.87,
+          "y" : 119.81
+        },
+        {
+          "key" : "d",
+          "t" : 2400,
+          "text" : "d",
+          "x" : 127.33,
+          "y" : 115.89
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:43Z",
+      "corrections" : [
+
+      ],
+      "end" : "dismiss",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "today",
+      "meant" : "today",
+      "taps" : [
+        {
+          "key" : "t",
+          "t" : 0,
+          "text" : "t",
+          "x" : 186.16,
+          "y" : 66.06
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 337.24,
+          "y" : 58.32
+        },
+        {
+          "key" : "d",
+          "t" : 320,
+          "text" : "d",
+          "x" : 127.17,
+          "y" : 115.26
+        },
+        {
+          "key" : "a",
+          "t" : 480,
+          "text" : "a",
+          "x" : 48.47,
+          "y" : 115.34
+        },
+        {
+          "key" : "y",
+          "t" : 640,
+          "text" : "y",
+          "x" : 224.09,
+          "y" : 62.23
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:43Z",
+      "commit" : {
+        "kind" : "swipe",
+        "text" : "weather"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "literal" : "",
+      "meant" : "weather",
+      "swipe" : true,
+      "taps" : [
+
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:43Z",
+      "corrections" : [
+
+      ],
+      "end" : "field",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "literal" : "cá",
+      "meant" : "cá",
+      "taps" : [
+        {
+          "key" : "c",
+          "t" : 0,
+          "text" : "c",
+          "x" : 120,
+          "y" : 160
+        },
+        {
+          "key" : "a",
+          "t" : 150,
+          "text" : "á"
+        }
+      ]
+    }
+  ]
+}
