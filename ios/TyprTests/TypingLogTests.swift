@@ -302,27 +302,30 @@ final class TypingLogTests: XCTestCase {
         XCTAssertEqual(try store.words().map(\.meant), ["again"])
     }
 
-    func testExportIsVersionedAndCarriesOnlyTouchCalibration() throws {
+    func testExportIsVersionedAndCarriesLearningAndPersonalWords() throws {
         type("hello w")
         let store = TypingLogStore(directory: directory)
         written.forEach(store.append)
         let model = PersonalTypingModel(now: { [unowned self] in self.wall })
         model.keep("typr")
+        _ = model.rejectCorrection(typed: "brisolde", replacement: "brisole")
         let a = try XCTUnwrap(engine.layout.key(.character("a"))).frame
         model.learn([TouchLabel(point: CGPoint(x: a.midX, y: a.midY), letter: "a")], layout: engine.layout, source: .literalValid)
         XCTAssertFalse(model.state.layouts.isEmpty)
 
-        let file = try store.export(touchModel: model.state, appBuild: "42", into: directory,
-                                    now: wall)
+        let file = try store.export(learning: model.state, protectedWords: ["Kalvenor"], appBuild: "42",
+                                    into: directory, now: wall)
         let data = try Data(contentsOf: file)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(Set(object.keys), ["format", "version", "exportedAt", "appBuild", "touchModel", "words"])
+        XCTAssertEqual(Set(object.keys),
+                       ["format", "version", "exportedAt", "appBuild", "learning", "protectedWords", "words"])
         XCTAssertEqual(object["format"] as? String, "typr-typing-log")
-        XCTAssertEqual(object["version"] as? Int, 1)
+        XCTAssertEqual(object["version"] as? Int, 2)
         let export = try TypingLogExport.decoder().decode(TypingLogExport.self, from: data)
         XCTAssertEqual(export.words, written)
-        XCTAssertEqual(export.touchModel?.layouts, model.state.layouts)
-        XCTAssertEqual(export.touchModel?.kept, [:])
-        XCTAssertNotNil(export.touchModel?.validated())
+        XCTAssertEqual(export.learning, model.state)
+        XCTAssertNotNil(export.learning?.kept["typr"])
+        XCTAssertEqual(export.learning?.rejected.map(\.typed), ["brisolde"])
+        XCTAssertEqual(export.protectedWords, ["Kalvenor"])
     }
 }

@@ -3,9 +3,10 @@ import Foundation
 
 /// One settled word of the on-device typing log (JSON Lines on disk, `words` in the export).
 ///
-/// Export file (`TypingLogExport`), format `typr-typing-log`, version 1:
+/// Export file (`TypingLogExport`), format `typr-typing-log`, version 2:
 /// `{ "format", "version", "exportedAt" (ISO 8601), "appBuild",
-///    "touchModel": PersonalTypingModel.State with only `layouts` (touch calibration),
+///    "learning": PersonalTypingModel.State (touch calibration, kept and counted words, rejected
+///    corrections, word pairs), "protectedWords": imported personal words (`ProtectedPersonalLexicon`),
 ///    "words": [TypingLogWord], oldest first }`
 ///
 /// Word fields:
@@ -20,7 +21,7 @@ import Foundation
 /// - `corrections`: in order; `meant`: the word as it stood when the user moved on.
 /// - `swipe`: true for a swiped word, which keeps no taps or layout.
 ///
-/// Optional fields are absent when empty: `touchModel` without saved learning, `layout` without a
+/// Optional fields are absent when empty: `learning` without saved learning, `layout` without a
 /// tap point, `commit` for a word that never reached a boundary, `x`/`y` of an ambiguous tap.
 nonisolated struct TypingLogWord: Codable, Equatable, Sendable {
     var at: Date
@@ -137,12 +138,13 @@ nonisolated struct TypingLogLayout: Codable, Equatable, Sendable {
 
 nonisolated struct TypingLogExport: Codable, Sendable {
     static let format = "typr-typing-log"
-    static let version = 1
+    static let version = 2
     var format = Self.format
     var version = Self.version
     var exportedAt: Date
     var appBuild: String
-    var touchModel: PersonalTypingModel.State?
+    var learning: PersonalTypingModel.State?
+    var protectedWords: [String] = []
     var words: [TypingLogWord]
 
     static func encoder() -> JSONEncoder {

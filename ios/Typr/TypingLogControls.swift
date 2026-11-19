@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import SwiftUI
 
-/// Exports and deletes the keyboard's typing log; the export adds the touch calibration for replay.
+/// Exports and deletes the keyboard's typing log; the export adds the learning and personal words for replay.
 @MainActor @Observable
 final class TypingLogSettingsModel {
     private(set) var wordCount: Int?
@@ -29,11 +29,13 @@ final class TypingLogSettingsModel {
         guard let store, !isExporting else { return }
         isExporting = true
         problem = nil
-        let touchModel = KeyboardLearningStore(directory: directory).learnedWords()
+        let learning = KeyboardLearningStore(directory: directory).learnedWords()
+        let protectedWords = ProtectedPersonalLexicon.load(directory: directory).words
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
         Task {
             let result = await Task.detached {
-                try store.export(touchModel: touchModel, appBuild: build, into: FileManager.default.temporaryDirectory)
+                try store.export(learning: learning, protectedWords: protectedWords, appBuild: build,
+                                 into: FileManager.default.temporaryDirectory)
             }.result
             isExporting = false
             switch result {
