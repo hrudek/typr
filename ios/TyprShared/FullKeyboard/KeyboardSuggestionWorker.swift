@@ -54,6 +54,8 @@ final class KeyboardSuggestionWorker {
         let calibration: SpatialTouchCalibration?
         let personal: PersonalLexiconSnapshot
         let lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon]
+        var context: KeyboardContextModel.WordContext? = nil
+        var variants: [String] = []
         /// A compatible decode the main actor already holds; the identical search is not re-run.
         var ready: SpatialWordDecoder.Outcome?
         /// Display-only corpus/personal prefix retrieval for the current token, if eligible.
@@ -92,7 +94,8 @@ final class KeyboardSuggestionWorker {
             }
             let outcome = request.ready ?? request.evidence.map {
                 ranking!.decodeDetailed($0, languages: request.languages,
-                                        calibration: request.calibration, personal: request.personal)
+                                        calibration: request.calibration, personal: request.personal,
+                                        context: request.context, variants: request.variants)
             }
             // Bounded (512 pops, eight results; ≤17 personal range queries), off the main actor.
             let completion = request.completionReady

@@ -38,7 +38,6 @@ func makeFixture(words data: WordData, to url: URL) async throws {
             learning.learn(labels, layout: layout, source: .keep)
         }
     }
-    teach(aim: 0.18)
     learning.keep("Ive")
     learning.keep("Brisolde")
 
@@ -75,6 +74,13 @@ func makeFixture(words data: WordData, to url: URL) async throws {
         press(CGPoint(x: a.midX + (b.midX - a.midX) * share, y: a.midY + (b.midY - a.midY) * share))
     }
     func word(_ text: String) { type(text); press(.space) }
+    func center(_ letters: String) {
+        for letter in letters {
+            let key = engine.layout.key(.character(String(letter)))!
+            press(CGPoint(x: key.frame.midX, y: key.frame.midY))
+        }
+    }
+    teach(aim: 0.18)
 
     ["Morgen", "fahre", "ich", "mit", "Kalvenor", "zum"].forEach(word)
     type("Wolkenradweg"); press(.returnKey)
@@ -98,12 +104,6 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     autocorrect.german = nil
     engine.width = 390
     teach(aim: 0.3)
-    func center(_ letters: String) {
-        for letter in letters {
-            let key = engine.layout.key(.character(String(letter)))!
-            press(CGPoint(x: key.frame.midX, y: key.frame.midY))
-        }
-    }
     let m = engine.layout.key(.character("m"))!
     autocorrect.hitAreas = .adaptive
     center("arou")
@@ -121,6 +121,11 @@ func makeFixture(words data: WordData, to url: URL) async throws {
         throw ReplayError("The strip offers no `around` for the fixture's edge miss")
     }
     engine.acceptSuggestion(around)
+    // Key-centre taps the replay test reads again with an untrained touch model: the two-letter `jn`,
+    // and the same `kf` after `most` and after `even`. Return keeps each from teaching aim.
+    word("most"); center("kf"); press(.space); press(.returnKey)
+    word("even"); center("kf"); press(.space); press(.returnKey)
+    center("jn"); press(.space); press(.returnKey)
     type("today")
     engine.endTypingLogWord("dismiss")
 

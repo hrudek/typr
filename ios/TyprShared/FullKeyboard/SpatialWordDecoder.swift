@@ -170,6 +170,8 @@ final class SpatialWordDecoder {
         let edit: Edit
         /// Candidate letter -> observed tap; missing letters have no tap.
         let alignment: [Int?]
+        /// The literal's own letters with an apostrophe restored (`dont` -> `don't`).
+        var addsApostrophe = false
 
         /// Extending an exhausted tap prefix is a completion even when its prefix was noisy.
         var isCompletion: Bool {
@@ -195,20 +197,11 @@ final class SpatialWordDecoder {
         /// `editSuggestionLimit`, within one edit penalty of it), retrieved only when the
         /// literal is absent from every selected corpus. Best effort from the remaining
         /// budget: NOT covered by `complete`, never part of `candidates`, and never used
-        /// by `automaticDecision` or `geometryPrefersAlternative`.
+        /// by `automaticDecision`.
         var editSuggestions: [Candidate] = []
 
         /// Display order: exact above-literal candidates, then best-effort edit suggestions.
         var suggestions: [Candidate] { candidates + editSuggestions }
-
-        var geometryPrefersAlternative: Bool {
-            candidates.contains { candidate in
-                switch candidate.edit {
-                case .none, .transposition: candidate.spatialScore >= literalSpatialScore
-                case .missingLetter, .extraTap: false
-                }
-            }
-        }
 
         /// With two languages on, a candidate outside the preferred language ranks this much lower
         /// against the other candidates (twice the ambiguity margin to win against a preferred one).
@@ -228,21 +221,28 @@ final class SpatialWordDecoder {
         /// Dictionary/casing, keeps, rejected pairs and field guards remain the caller's job.
         /// As in iikb's `Corrector.correction`: the likeliest whole word that beats the literal
         /// wins, without a fixed margin or an ambiguity gap, and the best word found so far counts
-        /// when the search budget ran out. A valid literal yields only to a word its taps fit better.
+        /// when the search budget ran out. A valid literal yields only to a word its taps fit better,
+        /// or, as iikb's `Corrector.contraction`, to its apostrophe spelling at `apostropheLogOdds`.
         func automaticDecision(literalIsValid: Bool, preferring isPreferred: ((Candidate) -> Bool)? = nil) -> AutoDecision {
             let candidates = ranked(preferring: isPreferred)
             guard let best = candidates.first(where: { !$0.isCompletion }) else {
                 return .refuse(candidates.isEmpty ? .noCandidate : .belowMargin)
             }
             guard best.score > literalScore else { return .refuse(.belowMargin) }
-            if literalIsValid && best.spatialScore <= literalSpatialScore { return .refuse(.editNeedsInvalidLiteral) }
+            if literalIsValid && best.spatialScore <= literalSpatialScore
+                && !(best.addsApostrophe && best.score - literalScore >= Self.apostropheLogOdds) {
+                return .refuse(.editNeedsInvalidLiteral)
+            }
             return .replace(best)
         }
+
+        static let apostropheLogOdds = log(10.0)
     }
 
     static let bundled = SpatialWordDecoder(bundle: .main)
     nonisolated static let searchBudget = 6_000
     nonisolated static let maxGenerated = 12_000
+    nonisolated static let minLetters = 2
     nonisolated static let maxLetters = 32
     nonisolated static let editSuggestionLimit = 2
     private var lexicons: [Language: SpatialWordLexicon]
@@ -304,17 +304,19 @@ final class SpatialWordDecoder {
     func decode(_ word: KeyboardTouchWord, languages: Set<Language>,
                 budget: Int = SpatialWordDecoder.searchBudget,
                 calibration: SpatialTouchCalibration? = nil,
-                personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true) -> Result? {
+                personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true,
+                context: KeyboardContextModel.WordContext? = nil, variants: [String] = []) -> Result? {
         ranking.decode(word, languages: languages, budget: budget, calibration: calibration,
-                       personal: personal, allowsEdits: allowsEdits)
+                       personal: personal, allowsEdits: allowsEdits, context: context, variants: variants)
     }
 
     func decodeDetailed(_ word: KeyboardTouchWord, languages: Set<Language>,
                         budget: Int = SpatialWordDecoder.searchBudget,
                         calibration: SpatialTouchCalibration? = nil,
-                        personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true) -> Outcome {
+                        personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true,
+                        context: KeyboardContextModel.WordContext? = nil, variants: [String] = []) -> Outcome {
         ranking.decodeDetailed(word, languages: languages, budget: budget, calibration: calibration,
-                               personal: personal, allowsEdits: allowsEdits)
+                               personal: personal, allowsEdits: allowsEdits, context: context, variants: variants)
     }
 
     nonisolated static func align(word: String, taps: [Character]) -> [Int?]? {

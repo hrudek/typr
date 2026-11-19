@@ -23,7 +23,7 @@ final class AutocorrectOrthographyTests: XCTestCase {
     private func engine() throws -> AutocorrectEngine {
         let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let english: Set<String> = ["were", "well", "ill", "wont", "shell", "hell", "its", "cant", "house", "gift"]
-        let german: Set<String> = ["Haus", "Buch", "Arbeit", "Essen", "essen", "Laut", "laut", "Masse", "Maße", "Steuer", "Mauer", "Israel", "Michael", "Strasse", "strasse", "weiss", "im", "die", "am", "war", "will", "also", "Gift", "Chef", "schon"]
+        let german: Set<String> = ["für", "über", "möchte", "heiß", "Haus", "Buch", "Arbeit", "Essen", "essen", "Laut", "laut", "Masse", "Maße", "Steuer", "Mauer", "Israel", "Michael", "Strasse", "strasse", "weiss", "im", "die", "am", "war", "will", "also", "Gift", "Chef", "schon"]
         let result = AutocorrectEngine(checker: Checker(english), spatialDecoder: nil,
                                       contextResources: .init(model: model))
         result.german = GermanAutocorrect(checker: Checker(german))

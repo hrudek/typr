@@ -36,12 +36,12 @@ final class GermanAutocorrectTests: XCTestCase {
 
     private func makeEngine(
         english: Set<String> = ["does", "blue", "queue", "I'm", "the"],
-        german: Set<String> = ["neue", "Feuer", "dass", "im"],
+        german: Set<String> = ["neue", "Feuer", "dass", "im", "für", "über", "straße"],
         germanGuesses: [String: [String]] = [:],
         germanOn: Bool = true
     ) -> AutocorrectEngine {
         let engine = AutocorrectEngine(
-            checker: FakeTextChecker(valid: english),
+            checker: FakeTextChecker(valid: english, guesses: ["teh": ["the"]]),
             learning: KeyboardLearningSession(defaults: defaults), spatialDecoder: nil
         )
         if germanOn {
@@ -54,7 +54,7 @@ final class GermanAutocorrectTests: XCTestCase {
         engine.replacementOnSpace(beforeInput: word, field: .text, autocorrectionType: .default)?.replacement
     }
 
-    func testTableAndCasing() {
+    func testUmlautDigraphsAndCasing() {
         let engine = makeEngine()
         XCTAssertEqual(fix(engine, "fuer"), "für")
         XCTAssertEqual(fix(engine, "Fuer"), "Für")
@@ -209,14 +209,14 @@ final class GermanAutocorrectTests: XCTestCase {
         return engine
     }
 
-    func testPreferredLanguageWinsSpellingFixAndStripOrder() {
-        let cases: [(SpatialWordDecoder.Language, String, String)] = [(.german, "wird", "work"), (.english, "work", "wird")]
-        for (preferred, first, second) in cases {
+    func testSpellingFallbackDoesNotDependOnWhichLanguageSuppliesFirst() {
+        // `work` is one adjacent-key edit, `wird` one distant edit: the cost decides, not the order.
+        for preferred in SpatialWordDecoder.Language.allCases {
             let engine = makeBilingualEngine(englishGuesses: ["work"], germanGuesses: ["wird"])
             engine.preferredLanguage = preferred
-            XCTAssertEqual(fix(engine, "wirk"), first, "\(preferred)")
+            XCTAssertEqual(fix(engine, "wirk"), "work", "\(preferred)")
             let strip = engine.suggestions(beforeInput: "wirk", field: .text, autocorrectionType: .default)
-            XCTAssertEqual(strip.map(\.replacement), ["wirk", first, second], "\(preferred)")
+            XCTAssertEqual(strip.map(\.replacement), ["wirk", "work", "wird"], "\(preferred)")
         }
     }
 

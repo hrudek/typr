@@ -157,6 +157,7 @@ final class AutocorrectEngine {
     private struct DecodeCache {
         let evidence: KeyboardTouchWord
         let languages: Set<SpatialWordDecoder.Language>
+        let context: KeyboardContextModel.WordContext?
         let generation: Int
         let resources: Int
         let outcome: SpatialWordDecoder.Outcome
@@ -188,7 +189,7 @@ final class AutocorrectEngine {
         if (oldValue == nil) != (german == nil) { discardFeedback() }
         invalidateDecode()
     } }
-    /// The language that wins ties while both are on: first in spelling fixes and guesses, and
+    /// The language that wins ties while both are on: first in displayed spelling guesses, and
     /// ranked ahead of the other language's spatial candidates.
     var preferredLanguage = SpatialWordDecoder.Language.german
     private(set) var lexiconShortcuts: [String: String] = [:]
@@ -268,6 +269,33 @@ final class AutocorrectEngine {
         return model.supports(german: german != nil, english: englishEnabled)
     }
 
+    /// The caret's sentence context from prepared packs for every selected language, or nil.
+    private func sentenceContext(before beforeInput: String?,
+                                 token: String?) -> (model: KeyboardContextModel, context: KeyboardContextModel.Context)? {
+        guard isEnabled, let model = contextResources.model,
+              model.supports(german: german != nil, english: englishEnabled) else { return nil }
+        var languagePrior = 0.0
+        if learning.isLearningEnabled {
+            if languagePriorCache?.generation != learning.generation {
+                languagePriorCache = (learning.generation, model.personalLanguagePrior(learning.model.state.counts))
+            }
+            languagePrior = languagePriorCache?.value ?? 0
+        }
+        return (model, model.context(before: beforeInput, currentToken: token, prior: languagePrior))
+    }
+
+    private func wordContext(_ sentence: (model: KeyboardContextModel, context: KeyboardContextModel.Context)?)
+        -> KeyboardContextModel.WordContext? {
+        sentence.map {
+            KeyboardContextModel.WordContext(model: $0.model, context: $0.context, german: german != nil,
+                                             english: englishEnabled, personal: learning.personalBigrams)
+        }
+    }
+
+    private func wordContext(before beforeInput: String?, token: String?) -> KeyboardContextModel.WordContext? {
+        wordContext(sentenceContext(before: beforeInput, token: token))
+    }
+
     /// Called only by the worker's deferred preparation, never by key insertion.
     func suggestionRequest(ownership: KeyboardSuggestionOwnership,
                            evidence: KeyboardTouchWord?) -> KeyboardSuggestionWorker.Request {
@@ -279,15 +307,16 @@ final class AutocorrectEngine {
             && !Self.shorthandAllowlist.contains(token.lowercased())
         let evidence = eligible ? evidence : nil
         let languages = suggestionLanguages
+        let context = evidence == nil ? nil : wordContext(before: ownership.context, token: ownership.token)
         // Warmup, remount or poll refreshes with unchanged taps reuse the held decode.
         let completion = ownership.token.flatMap { completionJob(for: $0, evidence: rawEvidence) }
         let held = completion.flatMap { job in completionCache.flatMap { $0.job == job ? $0 : nil } }
         if let evidence, let cache = decodeCache, cache.evidence == evidence,
-           cache.languages == languages, cache.generation == learning.generation,
+           cache.languages == languages, cache.context == context, cache.generation == learning.generation,
            cache.resources == (spatialDecoder?.resourceRevision ?? -1) {
             var request = KeyboardSuggestionWorker.Request(
                 ownership: ownership, evidence: evidence, languages: languages, calibration: nil,
-                personal: .empty, lexicons: spatialDecoder?.resourceSnapshot ?? [:])
+                personal: .empty, lexicons: spatialDecoder?.resourceSnapshot ?? [:], context: context)
             request.ready = cache.outcome
             request.completion = completion
             request.completionReady = held
@@ -300,7 +329,8 @@ final class AutocorrectEngine {
             ownership: ownership, evidence: evidence, languages: languages,
             calibration: evidence.flatMap { learning.calibration(for: $0.layout) },
             personal: evidence == nil ? .empty : learning.personalPriors,
-            lexicons: spatialDecoder?.resourceSnapshot ?? [:])
+            lexicons: spatialDecoder?.resourceSnapshot ?? [:], context: context,
+            variants: evidence == nil ? [] : orthographicVariants(of: token))
         request.completion = completion
         request.completionReady = held
         request.boundary = boundaryJob(beforeInput: ownership.context)
@@ -366,7 +396,7 @@ final class AutocorrectEngine {
     func finishSuggestions(_ result: KeyboardSuggestionWorker.Result) -> [KeyboardSuggestion] {
         if let evidence = result.request.evidence, let outcome = result.outcome {
             decodeCache = DecodeCache(evidence: evidence, languages: result.request.languages,
-                                      generation: learning.generation,
+                                      context: result.request.context, generation: learning.generation,
                                       resources: result.request.ownership.resources, outcome: outcome)
             // A reused decode was already counted when it was searched.
             if result.request.ready == nil, case .result = outcome, spatialDecoder?.isResourceLoading == false {
@@ -796,17 +826,9 @@ final class AutocorrectEngine {
         let evidence = touchInput.evidence(beforeInput: beforeInput)
         guard field == .text, autocorrectionType != .no else { return [] }
         let activeToken = Self.currentToken(in: beforeInput)
-        let contextModel = isEnabled ? contextResources.model.flatMap {
-            $0.supports(german: german != nil, english: englishEnabled) ? $0 : nil
-        } : nil
-        var languagePrior = 0.0
-        if let model = contextModel, learning.isLearningEnabled {
-            if languagePriorCache?.generation != learning.generation {
-                languagePriorCache = (learning.generation, model.personalLanguagePrior(learning.model.state.counts))
-            }
-            languagePrior = languagePriorCache?.value ?? 0
-        }
-        let context = contextModel?.context(before: beforeInput, currentToken: activeToken, prior: languagePrior)
+        let sentence = sentenceContext(before: beforeInput, token: activeToken)
+        let contextModel = sentence?.model
+        let context = sentence?.context
         guard let token = activeToken else {
             guard canPredictNextWord(after: beforeInput), let context, context.canPredict,
                   let model = contextModel else { return [] }
@@ -826,9 +848,10 @@ final class AutocorrectEngine {
 
         rejectionContext = RejectedCorrection.context(before: beforeInput, token: token)
         let lower = token.lowercased()
-        let decision = isEnabled ? decide(token, evidence: evidence, forSuggestions: true) : nil
+        let scoring = wordContext(sentence)
+        let decision = isEnabled ? decide(token, evidence: evidence, forSuggestions: true, context: scoring) : nil
         let autoFix = decision?.text
-        let spatial = spatialResult(for: token, evidence: evidence, forSuggestions: true)
+        let spatial = spatialResult(for: token, evidence: evidence, forSuggestions: true, context: scoring)
         var pool: [String] = []
         var completions: Set<String> = []
         var spatialScores: [String: Double] = [:]
@@ -870,7 +893,7 @@ final class AutocorrectEngine {
                 ?? heldBoundary(job, evidence: evidence)
                 ?? KeyboardBoundaryDecoder.retrieve(job, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
                                                      whole: spatialOutcome(for: token, evidence: evidence,
-                                                                           forSuggestions: true),
+                                                                           forSuggestions: true, context: scoring),
                                                      model: contextResources.model, includeMultipart: false)
             if spatialDecoder?.isResourceLoading != true {
                 boundaryCache = BoundaryCache(retrieval: retrieval, evidence: evidence,
@@ -1076,7 +1099,8 @@ final class AutocorrectEngine {
         guard let token = Self.currentToken(in: beforeInput) else { return nil }
         rejectionContext = RejectedCorrection.context(before: beforeInput, token: token)
         let started = DispatchTime.now().uptimeNanoseconds
-        let decision = decide(token, evidence: evidence, forSuggestions: false)
+        let decision = decide(token, evidence: evidence, forSuggestions: false,
+                              context: wordContext(before: beforeInput, token: token))
         let learnable = decision.text == nil && evidence?.learningIntact == true && learning.isLearningEnabled
             && (literalIsValid(token) || learning.model.state.rejected.contains(where: {
                 $0.typed == PersonalLexiconSnapshot.normalize(token)
@@ -1086,7 +1110,7 @@ final class AutocorrectEngine {
                                           learnable: learnable, epoch: learning.feedbackEpoch)
         learning.increment(.boundaries)
         // Complete means usable by the decoder, not merely observed by the tracker.
-        if !(3...SpatialWordDecoder.maxLetters).contains(token.count) {
+        if !(SpatialWordDecoder.minLetters...SpatialWordDecoder.maxLetters).contains(token.count) {
             learning.increment(.evidenceLengthOutOfRange)
         } else if !token.lowercased().allSatisfy({ ("a"..."z").contains($0) }) {
             learning.increment(.evidenceUnsupported)
@@ -1125,17 +1149,18 @@ final class AutocorrectEngine {
 
     // MARK: - Spatial decoding
 
-    private func spatialResult(for token: String, evidence: KeyboardTouchWord?,
-                               forSuggestions: Bool) -> SpatialWordDecoder.Result? {
-        if case .result(let result)? = spatialOutcome(for: token, evidence: evidence, forSuggestions: forSuggestions) {
+    private func spatialResult(for token: String, evidence: KeyboardTouchWord?, forSuggestions: Bool,
+                               context: KeyboardContextModel.WordContext?) -> SpatialWordDecoder.Result? {
+        if case .result(let result)? = spatialOutcome(for: token, evidence: evidence, forSuggestions: forSuggestions,
+                                                      context: context) {
             return result
         }
         return nil
     }
 
-    /// One decode per (evidence, languages, learning generation, resources), shared by strip and boundary.
-    private func spatialOutcome(for token: String, evidence: KeyboardTouchWord?,
-                                forSuggestions: Bool) -> SpatialWordDecoder.Outcome? {
+    /// One decode per (evidence, languages, context, learning generation, resources), shared by strip and boundary.
+    private func spatialOutcome(for token: String, evidence: KeyboardTouchWord?, forSuggestions: Bool,
+                                context: KeyboardContextModel.WordContext?) -> SpatialWordDecoder.Outcome? {
         guard isEnabled, let evidence, evidence.text == token,
               token == token.lowercased() || (token.first?.isUppercase == true && String(token.dropFirst()) == token.dropFirst().lowercased()),
               !Self.shorthandAllowlist.contains(token.lowercased()) else {
@@ -1148,7 +1173,8 @@ final class AutocorrectEngine {
         guard !languages.isEmpty else { return nil }
         let generation = learning.generation
         if let cache = decodeCache, cache.generation == generation, cache.languages == languages,
-           cache.resources == (spatialDecoder?.resourceRevision ?? -1), cache.evidence == evidence {
+           cache.context == context, cache.resources == (spatialDecoder?.resourceRevision ?? -1),
+           cache.evidence == evidence {
             return cache.outcome
         }
         let outcome: SpatialWordDecoder.Outcome
@@ -1157,7 +1183,8 @@ final class AutocorrectEngine {
             // Calibration and personal words are supplied only while learning is on.
             outcome = spatialDecoder.decodeDetailed(evidence, languages: languages,
                                                     calibration: learning.calibration(for: evidence.layout),
-                                                    personal: learning.personalPriors)
+                                                    personal: learning.personalPriors, context: context,
+                                                    variants: orthographicVariants(of: token))
             if forSuggestions, case .result = outcome, !spatialDecoder.isResourceLoading {
                 learning.increment(.suggestionDecodes)
                 learning.recordLatency(Self.seconds(since: started), kind: .suggestion)
@@ -1166,7 +1193,7 @@ final class AutocorrectEngine {
             outcome = .unavailable(.resource)
         }
         decodeCache = spatialDecoder?.isResourceLoading == true ? nil
-            : DecodeCache(evidence: evidence, languages: languages, generation: generation,
+            : DecodeCache(evidence: evidence, languages: languages, context: context, generation: generation,
                           resources: spatialDecoder?.resourceRevision ?? -1, outcome: outcome)
         return outcome
     }
@@ -1182,6 +1209,7 @@ final class AutocorrectEngine {
 
     private func spatialSpelling(_ candidate: SpatialWordDecoder.Candidate, token: String) -> (text: String, validated: Bool) {
         let plain = Self.matchCase(of: token, onto: candidate.word)
+        if candidate.addsApostrophe { return (plain, true) }
         if candidate.language == .english { return (plain, checker.isWordValid(plain)) }
         let guesses = germanGuesses(for: token)
         if let cached = spellingCache?.spatial[candidate.word] { return cached }
@@ -1189,6 +1217,8 @@ final class AutocorrectEngine {
         let spelling: (text: String, validated: Bool)
         if let guess = guesses.first(where: { $0.lowercased() == candidate.word }), german?.isValid(guess) == true {
             spelling = (Self.matchCase(of: token, onto: guess), true)
+        } else if candidate.language == .german, german?.isValid(swipeSpelling(candidate.word, language: .german)) == true {
+            spelling = (Self.matchCase(of: token, onto: swipeSpelling(candidate.word, language: .german)), true)
         } else if candidate.language == nil, englishEnabled, checker.isWordValid(plain) {
             spelling = (plain, true)
         } else {
@@ -1284,95 +1314,71 @@ final class AutocorrectEngine {
         return Decision(text: text, kind: kind, counter: counter, alignment: alignment)
     }
 
-    /// One correction path, in order: explicit text replacement, deterministic DE/EN rules,
-    /// context guards, protections, spatial decoder on complete evidence, spelling-only fallback.
-    /// Explicit keeps and shorthand veto everything, as the learned-word protection did.
-    private func decide(_ token: String, evidence: KeyboardTouchWord?, forSuggestions: Bool) -> Decision {
+    /// One correction contract, as iikb's `Corrector.correction`. Owner policy comes first: keeps,
+    /// shorthand, explicit text replacements, identifiers (camelCase stays, ALL-CAPS takes only another
+    /// spelling of its own letters, `DONT` -> `DON'T`) and contacts. Then the likeliest reading
+    /// by touch likelihood plus language probability in sentence context replaces the literal, which
+    /// is scored the same way; a valid literal yields only to a word its taps fit better. System
+    /// spelling supplies candidates only when the word lists or the touch evidence are unavailable.
+    private func decide(_ token: String, evidence: KeyboardTouchWord?, forSuggestions: Bool,
+                        context: KeyboardContextModel.WordContext?) -> Decision {
         let lower = token.lowercased()
         guard !protectedLexicon.contains(token),
               !suppressedInSession.contains(lower), !learning.protections.isKept(token),
               !Self.shorthandAllowlist.contains(lower) else { return Decision(refusal: .refusedProtected) }
-        // 1. Explicit iOS Text Replacement (`omw` -> `On my way!`).
         if let shortcut = lexiconShortcuts[lower] {
             return automatic(shortcut, token: token, kind: .autoRule, counter: .autoRule)
         }
-        // Leave ALL-CAPS acronyms (`API`, `PR`, `NYC`) alone unless matched in `UILexicon` above,
-        // except unambiguous all-caps contractions/typos of 3+ letters (`DONT` -> `DON'T`, `TEH` -> `THE`).
+        if token == "i", englishEnabled {
+            return automatic("I", token: token, kind: .autoRule, counter: .autoRule)
+        }
         let isAllCaps = token.count >= 2 && token == token.uppercased() && token != lower
-        // Leave camelCase / PascalCase identifiers (`TyprKey`, `iOS`) alone.
-        let hasInternalCaps = token.dropFirst().contains(where: \.isUppercase) && !isAllCaps
-        guard !hasInternalCaps else { return Decision(refusal: .refusedProtected) }
-
-        // 2. Deterministic rules. Typr: German umlaut digraphs first, so `FUER` -> `FÜR`.
-        if let german,
-           let umlaut = german.umlautReplacement(
-               for: token,
-               englishValid: englishEnabled && (checker.isWordValid(token) || checker.isWordValid(lower))
-           ) {
-            return automatic(umlaut, token: token, kind: .autoRule, counter: .autoRule)
+        guard isAllCaps || !token.dropFirst().contains(where: \.isUppercase) else {
+            return Decision(refusal: .refusedProtected)
         }
-        if englishEnabled, let fixed = Self.unambiguousFixes[lower], german?.blocksEnglishFix(lower) != true {
-            if isAllCaps && token.count < 3 { return Decision(refusal: .refusedProtected) }
-            return automatic(Self.matchCase(of: token, onto: fixed), token: token, kind: .autoRule, counter: .autoRule)
+        guard token.count >= SpatialWordDecoder.minLetters, !token.contains("'"), !token.contains("’") else {
+            return Decision()
         }
-
-        // A valid contraction homograph is manual-only even if a device dictionary
-        // omits it or spelling/spatial guesses prefer the apostrophe form.
-        if englishEnabled, Self.suggestOnlyContractions[lower] != nil {
-            return Decision(refusal: .refusedLiteralValid)
-        }
-
-        // 3. Context guards: inferred corrections only for plain words of 2+ letters.
-        guard !isAllCaps else { return Decision(refusal: .refusedProtected) }
-        guard token.count >= 2, !token.contains("'"), !token.contains("’") else { return Decision() }
-
-        // 4. Protections: Contacts/lexicon terms. A word valid in an enabled dictionary is
-        //    replaced only when its taps fit another word better (iikb's rule), never by
-        //    the spelling fallback.
         guard !lexiconTermKeys.contains(lower) else { return Decision(refusal: .refusedProtected) }
         let literalValid = dictionaryAcceptsLiteral(token)
+        if isAllCaps {
+            guard !literalValid, let variant = spellingFallback(token, variantsOnly: true) else {
+                return Decision(refusal: .refusedProtected)
+            }
+            return automatic(Self.matchCase(of: token, onto: variant), token: token,
+                             kind: .autoSpelling, counter: .autoSpellingFallback)
+        }
 
-        // 5. Spatial decoder. The best word found replaces, also when the budget ran out; a valid
-        //    literal (including a lowercase-typed German noun) yields only to better-fitting taps.
-        var refusal: KeyboardDiagnostics.Counter?
-        switch spatialOutcome(for: token, evidence: evidence, forSuggestions: forSuggestions) {
-        case nil, .unavailable(.evidence)?:
-            break
+        let refusal: KeyboardDiagnostics.Counter?
+        switch spatialOutcome(for: token, evidence: evidence, forSuggestions: forSuggestions, context: context) {
+        case .result(let result)?:
+            return spatialDecision(result, token: token, literalValid: literalValid)
         case .unavailable(.resource)?:
             refusal = spatialDecoder?.isResourceLoading == true ? .resourceLoading : .refusedMissingResource
-        case .result(let result)?:
-            switch result.automaticDecision(literalIsValid: literalValid, preferring: isPreferredCandidate) {
-            case .replace(let best):
-                let spelling = spatialSpelling(best, token: token)
-                if spelling.validated {
-                    let decision = automatic(spelling.text, token: token, kind: .autoSpatial,
-                                             counter: best.edit == .none ? .autoSpatialSameLength : .autoSpatialEdit,
-                                             alignment: best.alignment)
-                    if decision.text != nil { return decision }
-                    refusal = decision.refusal
-                } else {
-                    refusal = .refusedValidation
-                }
-            case .refuse(let reason):
-                refusal = switch reason {
-                case .editNeedsInvalidLiteral: .refusedLiteralValid
-                case .noCandidate, .belowMargin: .refusedBelowMargin
-                }
-            }
-            // #96: only geometry that genuinely points elsewhere vetoes the spelling fallback;
-            // prior-promoted, geometrically worse neighbours do not. An incomplete search never
-            // authorizes any inferred replacement.
-            if !result.complete || result.geometryPrefersAlternative { return Decision(refusal: refusal) }
+        case nil, .unavailable(.evidence)?:
+            refusal = nil
         }
         if literalValid { return Decision(refusal: refusal ?? .refusedLiteralValid) }
-
-        let fixes = preferredLanguage == .english ? [englishSpellingFix, germanSpellingFix]
-            : [germanSpellingFix, englishSpellingFix]
-        guard let fix = fixes.lazy.compactMap({ $0(token) }).first else { return Decision(refusal: refusal) }
+        guard let fix = spellingFallback(token) else { return Decision(refusal: refusal) }
         var decision = automatic(Self.matchCase(of: token, onto: fix), token: token,
                                  kind: .autoSpelling, counter: .autoSpellingFallback)
         decision.refusal = decision.refusal ?? refusal
         return decision
+    }
+
+    private func spatialDecision(_ result: SpatialWordDecoder.Result, token: String, literalValid: Bool) -> Decision {
+        switch result.automaticDecision(literalIsValid: literalValid, preferring: isPreferredCandidate) {
+        case .replace(let best):
+            let spelling = spatialSpelling(best, token: token)
+            guard spelling.validated else { return Decision(refusal: .refusedValidation) }
+            return automatic(spelling.text, token: token, kind: .autoSpatial,
+                             counter: best.edit == .none ? .autoSpatialSameLength : .autoSpatialEdit,
+                             alignment: best.alignment)
+        case .refuse(.editNeedsInvalidLiteral):
+            return Decision(refusal: .refusedLiteralValid)
+        case .refuse(.noCandidate), .refuse(.belowMargin):
+            return Decision(refusal: .refusedBelowMargin)
+        }
     }
 
     /// With both languages on, candidates the preferred language's corpus lacks rank second.
@@ -1383,41 +1389,54 @@ final class AutocorrectEngine {
         return { $0.language == nil || $0.language == preferred || lexicon?.logPrior(for: $0.word) != nil }
     }
 
-    private func germanSpellingFix(_ token: String) -> String? {
-        guard let german else { return nil }
+    /// Other spellings of the typed letters the word lists cannot reach by taps: English
+    /// contractions without their apostrophe and German umlauts typed as digraphs.
+    private func orthographicVariants(of token: String) -> [String] {
         let lower = token.lowercased()
-        var best: String?
-        var bestScore = Double.greatestFiniteMagnitude
-        for (rank, rawGuess) in germanGuesses(for: token).enumerated() {
-            guard !rawGuess.contains(" ") else { continue }
-            let normalized = rawGuess.replacingOccurrences(of: "'", with: "").lowercased()
-            guard let cost = german.costAdjustedForUmlauts(from: lower, to: normalized) else { continue }
-            let total = cost + Double(rank) * 0.08
-            if total < bestScore {
-                bestScore = total
-                best = rawGuess
-            }
+        var variants: [String] = []
+        if englishEnabled, let contraction = Self.contractions[lower] {
+            variants.append(contraction)
         }
-        return bestScore <= 1.6 ? best : nil
+        if german != nil { variants += GermanAutocorrect.variants(of: lower) }
+        return variants
     }
 
-    private func englishSpellingFix(_ token: String) -> String? {
-        guard englishEnabled else { return nil }
+    /// Without word lists or touch evidence: the system's single-edit guesses and the valid
+    /// orthographic variants compete on keyboard edit cost alone. Ties go to the alphabetically
+    /// first spelling, so the order in which sources supply candidates never decides. Apostrophe
+    /// spellings of the typed letters come only from the contraction table, as on the scored path.
+    private func spellingFallback(_ token: String, variantsOnly: Bool = false) -> String? {
         let lower = token.lowercased()
-        var best: String?
-        var bestScore = Double.greatestFiniteMagnitude
-        for (rank, rawGuess) in checker.guesses(for: token).prefix(8).enumerated() {
-            // Skip multi-word splits (`alot` -> `a lot` is fine only if single space, keep v1 single-token + apostrophe).
-            guard !rawGuess.contains(" ") else { continue }
-            let normalizedGuess = rawGuess.replacingOccurrences(of: "'", with: "").lowercased()
-            guard let editCost = Self.singleEditKeyboardCost(from: lower, to: normalizedGuess) else { continue }
-            let totalScore = editCost + Double(rank) * 0.08
-            if totalScore < bestScore {
-                bestScore = totalScore
-                best = rawGuess
+        var costs: [String: Double] = [:]
+        func offer(_ candidate: String, _ cost: Double?) {
+            guard let cost, !candidate.contains(" ") else { return }
+            costs[candidate] = min(costs[candidate] ?? .infinity, cost)
+        }
+        for spelling in orthographicVariants(of: token).compactMap(validSpelling) { offer(spelling, 0) }
+        func letters(_ guess: String) -> String? {
+            let letters = guess.replacingOccurrences(of: "'", with: "").lowercased()
+            return letters == lower ? nil : letters
+        }
+        if englishEnabled, !variantsOnly {
+            for guess in checker.guesses(for: token) {
+                offer(guess, letters(guess).flatMap { Self.singleEditKeyboardCost(from: lower, to: $0) })
             }
         }
-        return bestScore <= 1.35 ? best : nil
+        if let german, !variantsOnly {
+            for guess in germanGuesses(for: token) {
+                offer(guess, letters(guess).flatMap { german.costAdjustedForUmlauts(from: lower, to: $0) })
+            }
+        }
+        return costs.min { $0.value == $1.value ? $0.key < $1.key : $0.value < $1.value }?.key
+    }
+
+    /// A variant as an enabled dictionary spells it (German nouns capitalized); contractions come
+    /// from Typr's own table.
+    private func validSpelling(_ variant: String) -> String? {
+        if variant.contains("'") || (englishEnabled && checker.isWordValid(variant)) { return variant }
+        guard let german else { return nil }
+        let title = variant.prefix(1).uppercased() + variant.dropFirst()
+        return german.isValid(variant) ? variant : german.isValid(title) ? title : nil
     }
 
     private func rankedGuesses(for token: String) -> [String] {
@@ -1548,10 +1567,8 @@ final class AutocorrectEngine {
         "wanna", "gotta", "kinda", "sorta", "yeah", "yep", "nope", "nah", "hey", "yo",
     ]
 
-    /// ~125 unambiguous missing-apostrophe contractions and high-frequency QWERTY transpositions.
-    static let unambiguousFixes: [String: String] = [
-        // Pronoun & missing-apostrophe contractions
-        "i": "I",
+    /// English contractions typed without their apostrophe: spellings of the same taps.
+    static let contractions: [String: String] = [
         "im": "I'm",
         "ive": "I've",
         "dont": "don't",
@@ -1600,79 +1617,5 @@ final class AutocorrectEngine {
         "shouldve": "should've",
         "mightve": "might've",
         "mustve": "must've",
-        // High-frequency QWERTY transpositions & fat-finger typos
-        "teh": "the",
-        "hte": "the",
-        "taht": "that",
-        "thta": "that",
-        "adn": "and",
-        "nad": "and",
-        "wiht": "with",
-        "iwth": "with",
-        "waht": "what",
-        "hwat": "what",
-        "wich": "which",
-        "whcih": "which",
-        "thier": "their",
-        "theri": "their",
-        "recieve": "receive",
-        "definately": "definitely",
-        "seperate": "separate",
-        "occured": "occurred",
-        "untill": "until",
-        "abotu": "about",
-        "baout": "about",
-        "becuase": "because",
-        "beacuse": "because",
-        "jsut": "just",
-        "jstu": "just",
-        "knwo": "know",
-        "konw": "know",
-        "tiem": "time",
-        "tmie": "time",
-        "shoudl": "should",
-        "hsould": "should",
-        "woudl": "would",
-        "owuld": "would",
-        "coudl": "could",
-        "oculd": "could",
-        "ahve": "have",
-        "hvae": "have",
-        "maek": "make",
-        "mkae": "make",
-        "thign": "thing",
-        "hting": "thing",
-        "peopel": "people",
-        "poeple": "people",
-        "workign": "working",
-        "goign": "going",
-        "doign": "doing",
-        "runnign": "running",
-        "comign": "coming",
-        "thnaks": "thanks",
-        "htanks": "thanks",
-        "plase": "please",
-        "pleaes": "please",
-        "yuor": "your",
-        "yoru": "your",
-        "yuo": "you",
-        "oyu": "you",
-        "fomr": "from",
-        "verry": "very",
-        "evrey": "every",
-        "realyl": "really",
-        "realy": "really",
-        "actualyl": "actually",
-        "probalby": "probably",
-        "tomorow": "tomorrow",
-        "tommorow": "tomorrow",
-        "tonihgt": "tonight",
-        "tongiht": "tonight",
-        "mesasge": "message",
-        "messgae": "message",
-        "keybaord": "keyboard",
-        "keboard": "keyboard",
-        "iphnoe": "iPhone",
-        "ipohne": "iPhone",
     ]
 }

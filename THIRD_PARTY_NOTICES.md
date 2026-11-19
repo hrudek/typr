@@ -290,6 +290,15 @@ The existing **MIT, Copyright (c) 2026 Bassim Shahidy** notice above was verifie
 against that revision's LICENSE and also covers these rewritten adaptations.
 No additional iikb word data, neural weights or dependencies are included.
 
+The unified automatic correction score translates iikb's correction rule (the likeliest
+reading by touch likelihood and language probability in context replaces the literal; a
+known literal yields only to better-fitting taps) and its contraction odds (`apostropheLogOdds`
+= ln 10, skipped-apostrophe probability .5) from
+`Packages/KeyboardModules/Sources/KeyboardCore/Correction/Corrector.swift` and `Decoder.swift` at
+[iikb `e05a0ab8a670478d97765d26ffb8493ed5b7ab66`](https://github.com/AVGVSTVS96/iikb/tree/e05a0ab8a670478d97765d26ffb8493ed5b7ab66),
+MIT, **Copyright (c) 2026 Bassim Shahidy**. The full existing iikb notice above covers
+this rewritten adaptation; no iikb code file, data or model is included.
+
 R2-1 additionally reviews/translates the independent name/protection-layer idea
 from `Packages/KeyboardModules/Sources/KeyboardCore/Correction/Corrector.swift`
 (`setNames`, name handling before split/correction), with normalized lexical

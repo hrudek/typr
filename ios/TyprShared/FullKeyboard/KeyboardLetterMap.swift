@@ -47,12 +47,11 @@ nonisolated enum KeyboardLetterMap {
         func score(_ point: CGPoint) -> Double {
             let dx = Double(point.x - frame.midX) / pitchX - offsetX
             let dy = Double(point.y - frame.midY) / pitchY - offsetY
-            guard dx * dx + dy * dy <= 1.6 * 1.6 else { return -.infinity }
             return -0.5 * max(0, inverseXX * dx * dx + 2 * inverseXY * dx * dy + inverseYY * dy * dy) + normalizer
         }
     }
 
-    /// Same normalized, gated density for correction and noisy-prefix retrieval. Calibration
+    /// Same normalized density for correction and noisy-prefix retrieval, over every letter key. Calibration
     /// belongs to the physical key. This does not turn popup gestures into observed taps or labels.
     /// `prepared` selects the frozen per-key scorer; `false` keeps the original per-pair
     /// expression only for same-run legacy baselines.
@@ -100,14 +99,11 @@ nonisolated enum KeyboardLetterMap {
                 let x = Double(sample.point.x - frame.midX) / Double(frame.width + gap)
                 let y = Double(sample.point.y - frame.midY) / Double(frame.height + rowGap)
                 // The entire density is frozen before search, preserving max-path bounds.
-                let dx = x - key.offsetX, dy = y - key.offsetY
-                if dx * dx + dy * dy <= 1.6 * 1.6 { scores[index] = key.logDensity(x: x, y: y) }
+                scores[index] = key.logDensity(x: x, y: y)
             }
             guard scores[label].isFinite, let best = scores.max(), best.isFinite else { return nil }
-            // Literal is ungated by the relative six-log-unit candidate cutoff, and has no edits.
             literalSpatial += scores[label]
             bestScores.append(best)
-            for index in scores.indices where scores[index] < best - 6 { scores[index] = -.infinity }
             likelihoods.append(scores)
         }
         let rankedLabels: [[Int]] = prepared ? likelihoods.map { scores in
