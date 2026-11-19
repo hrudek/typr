@@ -6,6 +6,16 @@ set -euo pipefail
 tool=$(cd "$(dirname "$0")" && pwd)
 shared=$(cd "$tool/../../TyprShared" && pwd)
 build=${1:-${XDG_CACHE_HOME:-$HOME/.cache}/typr-keyboard-replay}
+case $build in /*) ;; *) build=$PWD/$build ;; esac
+dir=$build
+while :; do
+  if [ -L "$dir" ]; then
+    echo "build.sh: $build goes through the symbolic link $dir; use the real path" >&2
+    exit 1
+  fi
+  [ "$dir" = / ] && break
+  dir=$(dirname "$dir")
+done
 dir=$build
 while [ ! -d "$dir" ]; do dir=$(dirname "$dir"); done
 dir=$(cd "$dir" && pwd -P)

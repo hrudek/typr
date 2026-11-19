@@ -5,21 +5,32 @@ Usage: keyboard-replay EXPORT.json [--show-words] [--json] [--out FILE]
 Replays a Typr typing log export through the keyboard's own engine and compares hit-area settings.
   --show-words  list the words that changed between settings or did not reproduce (private text)
   --json        print the report as JSON
-  --out FILE    write the report to FILE (outside every Git checkout) instead of stdout
+  --out FILE    write the report to FILE (outside every Git checkout, no symlinks) instead of stdout
        keyboard-replay --make-fixture FILE
 Types the invented test text through the engine and writes it as an export to FILE.
 """
 
-/// Private text must not land where `git add` could pick it up, including through a symlink.
-func requireOutsideCheckout(_ url: URL) throws {
-    var resolved = url.standardizedFileURL.resolvingSymlinksInPath()
+/// Private text must not land where `git add` could pick it up, nor be redirected by a symlink:
+/// the path and every existing parent must be real directories or files, outside every checkout.
+func requirePrivatePath(_ url: URL, outsideCheckout: Bool = true) throws {
+    let path = url.standardizedFileURL
+    var prefix = URL(fileURLWithPath: "/")
+    for component in path.pathComponents.dropFirst() {
+        prefix.appendPathComponent(component)
+        let type = (try? FileManager.default.attributesOfItem(atPath: prefix.path))?[.type] as? FileAttributeType
+        if type == .typeSymbolicLink {
+            throw ReplayError("\(url.path) goes through the symbolic link \(prefix.path); use the real path")
+        }
+    }
+    guard outsideCheckout else { return }
+    var directory = path
     while true {
-        if FileManager.default.fileExists(atPath: resolved.appendingPathComponent(".git").path) {
+        if FileManager.default.fileExists(atPath: directory.appendingPathComponent(".git").path) {
             throw ReplayError("\(url.path) is inside a Git checkout; use a private directory outside it")
         }
-        let parent = resolved.deletingLastPathComponent().resolvingSymlinksInPath()
-        if parent.path == resolved.path { return }
-        resolved = parent
+        let parent = directory.deletingLastPathComponent()
+        if parent.path == directory.path { return }
+        directory = parent
     }
 }
 
@@ -70,13 +81,17 @@ func run(_ arguments: [String]) async throws {
         throw ReplayError("Cannot locate the WordData folder next to keyboard-replay")
     }
     let words = try WordData(directory: executable.deletingLastPathComponent().appendingPathComponent("WordData"))
-    if let fixture { return try await makeFixture(words: words, to: fixture) }
+    if let fixture {
+        try requirePrivatePath(fixture, outsideCheckout: false)
+        return try await makeFixture(words: words, to: fixture)
+    }
     guard let input else { throw ReplayError(usage) }
-    if let out { try requireOutsideCheckout(out) }
+    if let out { try requirePrivatePath(out) }
     let export = try readExport(input)
 
-    let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("typr-replay-\(UUID().uuidString)")
-    try requireOutsideCheckout(scratch)
+    let scratch = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        .appendingPathComponent("typr-replay-\(UUID().uuidString)")
+    try requirePrivatePath(scratch)
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false,
                                             attributes: [.posixPermissions: 0o700])
     defer { try? FileManager.default.removeItem(at: scratch) }

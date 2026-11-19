@@ -185,26 +185,50 @@ class ReplayTests(unittest.TestCase):
 
         checkout = self.dir / "checkout"
         (checkout / ".git").mkdir(parents=True, exist_ok=True)
-        link = self.dir / "link"
-        link.unlink(missing_ok=True)
-        link.symlink_to(checkout)
-        for out in [checkout / "report.txt", checkout / "sub" / "report.txt", link / "report.txt"]:
+        for out in [checkout / "report.txt", checkout / "sub" / "report.txt"]:
             with self.subTest(str(out)):
                 result = self.run_tool("--out", str(out))
                 self.assertEqual(result.returncode, 1)
                 self.assertIn("inside a Git checkout", result.stderr)
                 self.assertFalse(out.exists())
 
+        private = self.dir / "private"
+        private.mkdir(exist_ok=True)
+        (private / "real.txt").write_text("")
+        for name, target in [("checkout-link", checkout), ("private-link", private),
+                             ("file-link", private / "real.txt")]:
+            link = self.dir / name
+            link.unlink(missing_ok=True)
+            link.symlink_to(target)
+            for out in [link, link / "report.txt"] if target.is_dir() else [link]:
+                with self.subTest(str(out)):
+                    result = self.run_tool("--out", str(out))
+                    self.assertEqual(result.returncode, 1)
+                    self.assertIn("symbolic link", result.stderr)
+        self.assertEqual(sorted(p.name for p in private.iterdir()), ["real.txt"])
+        self.assertEqual((private / "real.txt").read_text(), "")
+        made = subprocess.run([self.binary, "--make-fixture", str(self.dir / "private-link" / "x.json")],
+                              capture_output=True, text=True, timeout=60)
+        self.assertEqual(made.returncode, 1)
+        self.assertIn("symbolic link", made.stderr)
+
         out = self.dir / "report.txt"
         self.assertEqual(self.run_tool("--out", str(out)).returncode, 0)
         self.assertIn("Standard vs meant word", out.read_text())
         self.assertEqual(out.stat().st_mode & 0o777, 0o600)
 
-    def test_build_refuses_a_directory_in_a_checkout(self):
+    def test_build_refuses_a_directory_in_a_checkout_or_through_a_symlink(self):
         result = subprocess.run(["bash", str(TOOL / "build.sh"), str(TOOL / "build")],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 1)
         self.assertIn("inside a Git checkout", result.stderr)
+        link = self.dir / "build-link"
+        link.unlink(missing_ok=True)
+        link.symlink_to(self.dir)
+        result = subprocess.run(["bash", str(TOOL / "build.sh"), str(link / "build")], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("symbolic link", result.stderr)
+
 
 
 if __name__ == "__main__":
