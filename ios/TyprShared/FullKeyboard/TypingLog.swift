@@ -165,8 +165,8 @@ nonisolated struct TypingLogExport: Codable, Sendable {
 @MainActor
 final class TypingLogRecorder {
     /// Words beyond these bounds are dropped, which keeps every record a few kilobytes.
-    static let maxTaps = 64
-    static let maxCorrections = 32
+    nonisolated static let maxTaps = 64
+    nonisolated static let maxCorrections = 32
 
     var languages: [String] = []
     var hitAreas = "standard"
