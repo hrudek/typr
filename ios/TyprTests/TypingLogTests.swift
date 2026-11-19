@@ -59,8 +59,6 @@ final class TypingLogTests: XCTestCase {
         for character in text { tap(character == " " ? .space : .character(String(character))) }
     }
 
-    // MARK: - Record building
-
     func testSettledWordRecordsTapsLayoutAndMeantWord() throws {
         type("hello w")
         XCTAssertEqual(written.count, 1)
@@ -128,7 +126,44 @@ final class TypingLogTests: XCTestCase {
         XCTAssertEqual(written.first?.end, "field")
     }
 
-    // MARK: - Exclusions
+    private func recorder() -> TypingLogRecorder {
+        TypingLogRecorder(write: { [unowned self] in self.written.append($0) }, now: { [unowned self] in self.wall })
+    }
+
+    /// Feeds the recorder what the engine reports for each typed character.
+    private func record(_ text: String, into log: TypingLogRecorder, field: inout String) {
+        let layout = KeyboardLayout(width: 393)
+        for character in text.map(String.init) {
+            field += character
+            if character == " " { log.boundary(" "); continue }
+            let point = layout.key(.character(character)).map { CGPoint(x: $0.frame.midX, y: $0.frame.midY) }
+            log.typed(character, point: point, key: point == nil ? nil : character, layout: layout,
+                      time: clock, token: AutocorrectEngine.currentToken(in: field))
+        }
+    }
+
+    func testApostropheWordsStayWhole() {
+        written = []
+        let log = recorder()
+        var field = ""
+        record("can't can’t 'hello' x", into: log, field: &field)
+        XCTAssertEqual(written.map(\.meant), ["can't", "can’t", "hello"])
+        XCTAssertEqual(written.map(\.literal), ["can't", "can’t", "hello'"])
+    }
+
+    func testEndlessEditsOfOneWordAreDropped() {
+        written = []
+        let log = recorder()
+        var field = ""
+        record("a", into: log, field: &field)
+        for _ in 0...TypingLogRecorder.maxCorrections {
+            record("b", into: log, field: &field)
+            field.removeLast()
+            log.deleted(token: AutocorrectEngine.currentToken(in: field))
+        }
+        log.end("field")
+        XCTAssertEqual(written, [])
+    }
 
     func testSecureURLEmailAndNoAutocorrectFieldsRecordNothing() {
         let fields: [(FixtureTextTarget) -> Void] = [
@@ -152,8 +187,6 @@ final class TypingLogTests: XCTestCase {
         engine.configureForField()
         XCTAssertEqual(written, [])
     }
-
-    // MARK: - Store
 
     private func word(_ meant: String) -> TypingLogWord {
         TypingLogWord(at: wall, end: " ", languages: ["en"],
@@ -196,6 +229,43 @@ final class TypingLogTests: XCTestCase {
         store.append(word("world"))
         store.waitForWrites()
         XCTAssertEqual(try store.words().map(\.meant), ["hello", "world"])
+    }
+
+    func testRotationByAnotherProcessIsNotMistakenForTheSameFile() throws {
+        let candidates = (1...64).flatMap { length in [" ", "\n"].map { end in
+            var entry = word(String(repeating: "a", count: length))
+            entry.end = end
+            return entry
+        } }
+        let sizes = try candidates.map { try TypingLogExport.encoder().encode($0).count + 1 }
+        var match: (TypingLogWord, TypingLogWord, TypingLogWord)?
+        for a in candidates.indices where match == nil {
+            for b in candidates.indices where match == nil {
+                if let c = sizes.firstIndex(of: sizes[a] + sizes[b]) { match = (candidates[a], candidates[b], candidates[c]) }
+            }
+        }
+        let (small, other, big) = try XCTUnwrap(match)
+        let first = TypingLogStore(directory: directory, segmentWords: 3)
+        let second = TypingLogStore(directory: directory, segmentWords: 3)
+        first.append(big)
+        first.waitForWrites()
+        for entry in [small, small, small, other] { second.append(entry) }
+        second.waitForWrites()
+        first.append(small)
+        first.append(small)
+        first.waitForWrites()
+        XCTAssertEqual(try first.words(), [small, other, small, small])
+    }
+
+    func testOversizedRecordIsNotWritten() throws {
+        let store = TypingLogStore(directory: directory)
+        var huge = word("hello")
+        huge.corrections = Array(repeating: .init(kind: .pick, from: String(repeating: "a", count: 1_000), to: "a"),
+                                 count: 20)
+        store.append(huge)
+        store.append(word("world"))
+        store.waitForWrites()
+        XCTAssertEqual(try store.words().map(\.meant), ["world"])
     }
 
     func testDeleteRemovesTheLog() throws {

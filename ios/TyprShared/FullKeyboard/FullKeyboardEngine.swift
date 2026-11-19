@@ -1256,8 +1256,6 @@ final class FullKeyboardEngine {
         }
     }
 
-    // MARK: - Typing log
-
     /// Records only where personal learning could: prose fields that allow autocorrection, never
     /// secure, URL or email fields, and only while learning is on. Anywhere else drops open words.
     private var typingLogAllowed: Bool {
