@@ -120,6 +120,34 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertEqual(ac.learning.model.state.layouts, state.layouts, "The Space tap is not learned as a letter or Space")
     }
 
+    func testCapitalizedWordInsideASentenceIsNotJoined() throws {
+        let ac = engine(try resources(), languages: [.english], model: try contextModel())
+        let space = try XCTUnwrap(grid.key(.space)).frame
+        let v = try XCTUnwrap(grid.key(.character("v"))).frame
+        func sample(_ text: String) throws -> KeyboardTouchWord.Sample {
+            let key = try XCTUnwrap(grid.key(.character(text.lowercased())))
+            return .init(text: text, point: CGPoint(x: key.frame.midX, y: key.frame.midY), key: key)
+        }
+        func install(_ before: String) throws {
+            ac.touchInput.clear()
+            var text = before
+            let samples = [try sample("N"), try sample("e"),
+                           .init(text: " ", point: CGPoint(x: v.midX, y: space.minY + 1), key: try XCTUnwrap(grid.key(.space))),
+                           try sample("e"), try sample("r")]
+            for item in samples {
+                ac.touchInput.append(text: item.text, point: item.point, key: item.key, layout: grid,
+                                     before: text, after: text + item.text)
+                text += item.text
+            }
+        }
+        try install("")
+        XCTAssertEqual(ac.replacementOnSpace(beforeInput: "Ne er", field: .text,
+                                             autocorrectionType: .default)?.replacement, "Never")
+        try install("so ")
+        XCTAssertNil(ac.replacementOnSpace(beforeInput: "so Ne er", field: .text, autocorrectionType: .default),
+                     "A capital inside a sentence is a name")
+    }
+
     func testValidSeparateWordsStayWithoutBetterTapEvidence() throws {
         let (keyboard, target) = try runKeyboard()
         try typeRun(keyboard, "a")

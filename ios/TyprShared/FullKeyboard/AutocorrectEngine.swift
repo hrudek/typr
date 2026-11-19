@@ -396,19 +396,25 @@ final class AutocorrectEngine {
     private func automaticBoundary(in retrieval: KeyboardBoundaryDecoder.Retrieval, beforeInput: String?)
         -> (candidate: KeyboardBoundaryDecoder.Candidate, replacement: String)? {
         let job = retrieval.job
-        guard let beforeInput, let touch = job.touch, touch.isUsable, touch.current.text == job.token,
+        guard let beforeInput, ownsTaps(job), let touch = job.touch,
               beforeInput.hasSuffix(touch.original) else { return nil }
-        if job.token.first?.isUppercase == true {
-            let head = beforeInput.dropLast(job.token.count).trimmingCharacters(in: .whitespaces)
-            guard head.isEmpty || head.last.map({ ".!?\n".contains($0) }) == true else { return nil }
-        }
         for candidate in retrieval.candidates {
             let pair = RejectedCorrection(typed: candidate.original, replacement: candidate.replacement)
             guard !boundaryRejections.contains(pair),
                   let replacement = boundaryReplacement(candidate, token: job.token) else { continue }
-            return candidate.automatic && beforeInput.hasSuffix(candidate.original) ? (candidate, replacement) : nil
+            guard candidate.automatic, beforeInput.hasSuffix(candidate.original) else { return nil }
+            if candidate.original.first?.isUppercase == true {
+                let head = beforeInput.dropLast(candidate.original.count).trimmingCharacters(in: .whitespaces)
+                guard head.isEmpty || head.last.map({ ".!?\n".contains($0) }) == true else { return nil }
+            }
+            return (candidate, replacement)
         }
         return nil
+    }
+
+    /// The job carries the taps of the run it reads.
+    private func ownsTaps(_ job: KeyboardBoundaryDecoder.Job) -> Bool {
+        job.touch.map { $0.isUsable && $0.current.text == job.token } ?? false
     }
 
     private func heldBoundary(_ job: KeyboardBoundaryDecoder.Job,
@@ -1135,7 +1141,7 @@ final class AutocorrectEngine {
         let started = DispatchTime.now().uptimeNanoseconds
         let context = wordContext(before: beforeInput, token: token)
         appliedBoundary = nil
-        if let job = boundaryJob(beforeInput: beforeInput) {
+        if let job = boundaryJob(beforeInput: beforeInput), ownsTaps(job) {
             let retrieval = heldBoundary(job, evidence: evidence).flatMap { $0.includesMultipart ? $0 : nil }
                 ?? KeyboardBoundaryDecoder.retrieve(job, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
                                                      whole: spatialOutcome(for: token, evidence: evidence,
