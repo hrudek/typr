@@ -90,7 +90,7 @@ nonisolated struct TypingLogLayout: Codable, Equatable, Sendable {
 
     init(_ layout: KeyboardLayout) {
         width = layout.width
-        orientation = layout.orientation == .portrait ? "portrait" : "landscape"
+        orientation = layout.orientation.rawValue
         layer = switch layout.layer { case .letters: "letters"; case .numbers: "numbers"; case .symbols: "symbols" }
         field = switch layout.field { case .text: "text"; case .url: "url"; case .email: "email" }
         showsGlobe = layout.showsGlobe
@@ -108,11 +108,7 @@ nonisolated struct TypingLogLayout: Codable, Equatable, Sendable {
 
     /// The layout these taps were made on; nil for values this build does not know.
     var keyboardLayout: KeyboardLayout? {
-        let orientation: KeyboardOrientation? = switch orientation {
-        case "portrait": .portrait
-        case "landscape": .landscape
-        default: nil
-        }
+        let orientation = KeyboardOrientation(rawValue: orientation)
         let layer: KeyboardLayer? = switch layer {
         case "letters": .letters
         case "numbers": .numbers

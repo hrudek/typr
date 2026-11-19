@@ -8,7 +8,7 @@ final class KeyboardAppearanceTests: XCTestCase {
     private var base: KeyboardAppearancePreview.Settings {
         KeyboardAppearancePreview.Settings(
             design: .standard, showsSuggestionBar: true, globeKey: .switches,
-            bottomRow: BottomRow(), numberRow: false, isDark: false, orientation: .portrait
+            bottomRow: BottomRow(), numberRow: false, isDark: false, container: CGSize(width: 393, height: 852)
         )
     }
 

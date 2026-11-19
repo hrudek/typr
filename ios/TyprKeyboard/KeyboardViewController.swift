@@ -94,6 +94,8 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
+        // The keyboard's own window is only as tall as the keyboard; the scene's screen is the display it is on.
+        fullKeyboard?.containerSize = view.window?.windowScene?.screen.bounds.size
         if let fullKeyboard, heightConstraint?.constant != fullKeyboard.preferredHeight {
             heightConstraint?.constant = fullKeyboard.preferredHeight
             preferredContentSize.height = fullKeyboard.preferredHeight

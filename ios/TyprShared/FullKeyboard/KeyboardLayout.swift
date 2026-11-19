@@ -15,9 +15,33 @@ nonisolated enum KeyboardFieldKind: Equatable, Sendable {
     case email
 }
 
-nonisolated enum KeyboardOrientation: Equatable, Sendable {
+/// Which keyboard geometry a display gets, picked by `init(container:)` from its size alone.
+nonisolated enum KeyboardOrientation: String, Equatable, Sendable {
     case portrait
     case landscape
+    /// A display at least `wideShortSide` across held upright: the iPhone Duo's inner display, 669 × 951 pt.
+    case widePortrait
+    /// The same display sideways, 951 × 669 pt.
+    case wideLandscape
+
+    /// iPhones are at most 440 pt across and the iPhone Duo's outer display 466 pt; its inner display is 669 pt.
+    static let wideShortSide: CGFloat = 540
+
+    /// The geometry for a display (or a page standing in for one) of this size. Size only, never the device
+    /// model, idiom or interface orientation: iOS gives keyboard extensions no hinge state, and Apple's own
+    /// keyboard lays out a half-open iPhone Duo like an open one.
+    init(container: CGSize) {
+        let isLandscape = container.width > container.height
+        let isWide = min(container.width, container.height) >= Self.wideShortSide
+        self = switch (isWide, isLandscape) {
+        case (false, false): .portrait
+        case (false, true): .landscape
+        case (true, false): .widePortrait
+        case (true, true): .wideLandscape
+        }
+    }
+
+    var isLandscape: Bool { self == .landscape || self == .wideLandscape }
 }
 
 /// The bottom row's globe where iOS needs one: a key that switches keyboards, an inert spacer
@@ -135,6 +159,26 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
         keysTop: 0, keysBottom: 3, cornerRadius: 7.5
     )
 
+    /// The iPhone Duo's inner display upright, after Apple's keyboard there (18 pt in, keys 9 apart, rows 14 apart,
+    /// keys 45.67 pt tall; iikb docs/design.md): 35 + 4 × 46 + 3 × 14 + 5 = 266 pt, 28% of the display's 951 pt.
+    static let widePortrait = KeyboardMetrics(
+        side: 18, gap: 9, rowGap: 14, keyHeight: 46,
+        stripTop: 0, stripHeight: 33, stripBottom: 2,
+        keysTop: 0, keysBottom: 5, cornerRadius: 8.5
+    )
+
+    /// The inner display sideways, after Apple's (9 pt in, keys 10 apart, rows 13 apart, keys 38.67 pt tall):
+    /// 39 + 4 × 39 + 3 × 13 + 4 = 238 pt, 36% of the display's 669 pt.
+    static let wideLandscape = KeyboardMetrics(
+        side: 9, gap: 10, rowGap: 13, keyHeight: 39,
+        stripTop: 0, stripHeight: 33, stripBottom: 6,
+        keysTop: 0, keysBottom: 4, cornerRadius: 8.5
+    )
+
+    /// The widest letter key on the inner display. iPhone letters are 31–38 pt and an 11-inch iPad's about 54 pt;
+    /// wider keyboards widen the side insets instead, so the keys stay centred and in thumb reach.
+    static let maxWideLetterWidth: CGFloat = 58
+
     /// Height of a panel's header row (recording, feedback), with or without the suggestion bar.
     static let headerHeight: CGFloat = 33
 
@@ -156,32 +200,44 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
         KeyboardMetrics(
             side: side, gap: gap, rowGap: rowGap, keyHeight: keyHeight,
             stripTop: 0, stripHeight: 0, stripBottom: 0,
-            keysTop: orientation == .portrait ? 6 : 4, keysBottom: keysBottom, cornerRadius: cornerRadius
+            keysTop: orientation.isLandscape ? 4 : 6, keysBottom: keysBottom, cornerRadius: cornerRadius
         )
     }
 
     private static func withStrip(_ orientation: KeyboardOrientation, innerWidth: CGFloat?) -> KeyboardMetrics {
-        guard orientation == .portrait else { return .landscape }
-        guard let innerWidth else { return .portrait }
-        let side: CGFloat = if innerWidth >= 390 {
-            6.5
-        } else if innerWidth >= 370 {
-            4.5
-        } else {
-            3.0
+        switch orientation {
+        case .landscape:
+            return .landscape
+        case .widePortrait:
+            return KeyboardMetrics.widePortrait.centringLetters(in: innerWidth)
+        case .wideLandscape:
+            return KeyboardMetrics.wideLandscape.centringLetters(in: innerWidth)
+        case .portrait:
+            guard let innerWidth else { return .portrait }
+            let side: CGFloat = if innerWidth >= 390 {
+                6.5
+            } else if innerWidth >= 370 {
+                4.5
+            } else {
+                3.0
+            }
+            return KeyboardMetrics.portrait.with(side: side)
         }
-        if side == KeyboardMetrics.portrait.side { return .portrait }
-        return KeyboardMetrics(
-            side: side,
-            gap: KeyboardMetrics.portrait.gap,
-            rowGap: KeyboardMetrics.portrait.rowGap,
-            keyHeight: KeyboardMetrics.portrait.keyHeight,
-            stripTop: KeyboardMetrics.portrait.stripTop,
-            stripHeight: KeyboardMetrics.portrait.stripHeight,
-            stripBottom: KeyboardMetrics.portrait.stripBottom,
-            keysTop: KeyboardMetrics.portrait.keysTop,
-            keysBottom: KeyboardMetrics.portrait.keysBottom,
-            cornerRadius: KeyboardMetrics.portrait.cornerRadius
+    }
+
+    /// Side insets that keep letter keys at most `maxWideLetterWidth` wide across `innerWidth`.
+    private func centringLetters(in innerWidth: CGFloat?) -> KeyboardMetrics {
+        guard let innerWidth else { return self }
+        let centred = (innerWidth - 10 * Self.maxWideLetterWidth - 9 * gap) / 2
+        return with(side: max(side, centred))
+    }
+
+    private func with(side: CGFloat) -> KeyboardMetrics {
+        KeyboardMetrics(
+            side: side, gap: gap, rowGap: rowGap, keyHeight: keyHeight,
+            stripTop: stripTop, stripHeight: stripHeight, stripBottom: stripBottom,
+            keysTop: keysTop, keysBottom: keysBottom, cornerRadius: cornerRadius,
+            numberRowHeight: numberRowHeight
         )
     }
 
@@ -287,7 +343,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         Self.letterWidth(innerWidth: width - 2 * horizontalInset, metrics: metrics)
     }
 
-    var showsBalloons: Bool { orientation == .portrait }
+    var showsBalloons: Bool { !orientation.isLandscape }
 
     /// iOS needs a way to the next keyboard and the globe key does not switch: holding 123/ABC does.
     var layerKeyHoldSwitchesKeyboard: Bool { showsGlobe && globeKey != .switches }

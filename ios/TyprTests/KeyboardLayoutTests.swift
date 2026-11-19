@@ -31,9 +31,9 @@ final class KeyboardLayoutTests: XCTestCase {
         [false, true].flatMap { numberRow in
             everyPortraitLayout(numberRow: numberRow) + everyPortraitLayout(showsStrip: false, numberRow: numberRow)
                 + [true, false].flatMap { showsStrip in
-                    landscapeLayouts().map {
+                    (landscapeLayouts() + wideLayouts()).map {
                         KeyboardLayout(
-                            width: $0.width, orientation: .landscape, layer: $0.layer, field: $0.field,
+                            width: $0.width, orientation: $0.orientation, layer: $0.layer, field: $0.field,
                             numberRow: numberRow, horizontalInset: $0.horizontalInset, showsStrip: showsStrip
                         )
                     }
@@ -569,6 +569,16 @@ final class KeyboardLayoutTests: XCTestCase {
         ]
     }
 
+    /// The iPhone Duo's inner display: upright, and sideways in the 801 pt iOS gives a keyboard and across all 951 pt.
+    private func wideLayouts() -> [KeyboardLayout] {
+        [
+            KeyboardLayout(width: 669, orientation: .widePortrait),
+            KeyboardLayout(width: 669, orientation: .widePortrait, layer: .symbols, field: .url),
+            KeyboardLayout(width: 801, orientation: .wideLandscape, layer: .numbers),
+            KeyboardLayout(width: 951, orientation: .wideLandscape, field: .email),
+        ]
+    }
+
     func testGlobeKeyChoicesShapeTheBottomRowOnlyWhereIOSNeedsAGlobe() {
         for layer in [KeyboardLayer.letters, .numbers] {
             let layerKey = KeyKind.layerSwitch(layer == .letters ? .numbers : .letters)
@@ -656,7 +666,7 @@ final class KeyboardLayoutTests: XCTestCase {
             [.space, .period, .typr], [.space, .typr, .period], [.period, .space, .typr],
             [.period, .typr, .space], [.typr, .space, .period], [.typr, .period, .space],
         ]
-        for base in everyPortraitLayout() + landscapeLayouts() {
+        for base in everyPortraitLayout() + landscapeLayouts() + wideLayouts() {
             for order in orders {
                 for periodKey in [false, true] {
                     let layout = KeyboardLayout(

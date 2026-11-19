@@ -59,7 +59,7 @@ nonisolated struct TapStatistics {
 
     static func board(_ signature: KeyboardLayoutSignature) -> KeyboardLayout {
         KeyboardLayout(width: CGFloat(signature.widthBucket),
-                       orientation: signature.orientation == "landscape" ? .landscape : .portrait,
+                       orientation: KeyboardOrientation(rawValue: signature.orientation) ?? .portrait,
                        showsGlobe: signature.showsGlobe, horizontalInset: 0, showsStrip: signature.showsStrip)
     }
     var effectiveSamples: Int { keys.reduce(0) { $0 + $1.samples } }
@@ -125,6 +125,11 @@ nonisolated struct TapStatistics {
 
 extension KeyboardLayoutSignature {
     var statisticsTitle: String {
-        "\(orientation.capitalized) · \(widthBucket) pt · \(showsStrip ? "suggestions" : "no suggestions") · \(showsGlobe ? "globe" : "no globe")"
+        let pose = switch KeyboardOrientation(rawValue: orientation) {
+        case .widePortrait: "Wide portrait"
+        case .wideLandscape: "Wide landscape"
+        default: orientation.capitalized
+        }
+        return "\(pose) · \(widthBucket) pt · \(showsStrip ? "suggestions" : "no suggestions") · \(showsGlobe ? "globe" : "no globe")"
     }
 }
