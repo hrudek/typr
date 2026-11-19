@@ -54,7 +54,6 @@ final class BackspaceUndoWindowTests: XCTestCase {
         }
     }
 
-    /// Types "teh " so the space corrects it at `now`, and returns that time.
     @discardableResult
     private func autocorrect() -> TimeInterval {
         type("teh")
