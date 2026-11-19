@@ -58,22 +58,22 @@ final class PersonalTypingModelTests: XCTestCase {
         model.learn([try label(0.4)], layout: layout, source: .keep)
         var key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
         XCTAssertEqual(key.offsetX, 0.2, accuracy: 1e-12, "no fast drift before the first pooled label")
-        XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
+        XCTAssertTrue(SpatialTouchCalibration.scaleRange(degrees: key.degrees).contains(key.sigmaX))
         model.learn(Array(repeating: try label(0.9), count: 300), layout: layout, source: .keep)
         key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
         XCTAssertEqual(key.offsetX, SpatialTouchCalibration.maxOffset)
-        XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
+        XCTAssertTrue(SpatialTouchCalibration.scaleRange(degrees: key.degrees).contains(key.sigmaX))
         model.resetFastAim()
-        let steady = try XCTUnwrap(model.calibration(for: layout)?.keys["a"]?.sigmaX)
-        XCTAssertLessThan(steady, 0.10)
-        XCTAssertGreaterThan(steady, SpatialTouchCalibration.sigmaRange.lowerBound)
+        let steady = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
+        XCTAssertEqual(steady.sigmaX, SpatialTouchCalibration.scaleRange(degrees: steady.degrees).lowerBound,
+                       accuracy: 1e-12)
         model.reset()
         for _ in 0..<150 {
             model.learn([try label(-0.9), try label(0.9)], layout: layout, source: .keep)
         }
-        let wide = try XCTUnwrap(model.calibration(for: layout)?.keys["a"]?.sigmaX)
-        XCTAssertGreaterThan(wide, 0.50)
-        XCTAssertLessThan(wide, SpatialTouchCalibration.sigmaRange.upperBound)
+        let wide = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
+        XCTAssertGreaterThan(wide.sigmaX, 0.50)
+        XCTAssertLessThan(wide.sigmaX, SpatialTouchCalibration.scaleRange(degrees: wide.degrees).upperBound)
     }
 
     func testRejectsNonFiniteOutlierUnknownKeyAndUnsupportedLayout() throws {

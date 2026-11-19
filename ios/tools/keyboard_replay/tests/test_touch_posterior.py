@@ -130,8 +130,9 @@ class TouchPosteriorTests(unittest.TestCase):
         self.assertTrue(malformed["droppedNaNDegrees"])
         clamped = malformed["clamped"]
         self.assertTrue(all(math.isfinite(v) for v in clamped.values()))
-        self.assertGreaterEqual(min(clamped["sigmaX"], clamped["sigmaY"]), 0.02 - 1e-12)
-        self.assertLessEqual(max(clamped["sigmaX"], clamped["sigmaY"]), 1.0 + 1e-12)
+        to_deviation = math.sqrt(clamped["degrees"] / (clamped["degrees"] - 2))
+        self.assertGreaterEqual(min(clamped["sigmaX"], clamped["sigmaY"]) * to_deviation, 0.08 - 1e-12)
+        self.assertLessEqual(max(clamped["sigmaX"], clamped["sigmaY"]) * to_deviation, 1.0 + 1e-12)
         self.assertTrue(math.isfinite(malformed["farDensity"]))
 
 

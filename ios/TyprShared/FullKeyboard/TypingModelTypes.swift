@@ -100,7 +100,10 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     static let priorSpread = 0.20
     static let prior = posterior(Moments(), spread: .prior)
     static let maxOffset = 0.5
-    static let sigmaRange: ClosedRange<Double> = 0.02...1.0
+    /// Standard deviation of a key's predictive covariance in every direction, in pitches. The floor
+    /// (about half a millimetre on a phone) lies below measured human touch precision; it keeps
+    /// near-collinear labels from collapsing a key onto a line.
+    static let deviationRange: ClosedRange<Double> = 0.08...1.0
     static let degreesRange: ClosedRange<Double> = 3...1_000
 
     init(keys: [Character: Key], space: Key? = nil) {
@@ -112,9 +115,15 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
         self.space = space.flatMap { Self.sanitized($0) }
     }
 
+    static func scaleRange(degrees: Double) -> ClosedRange<Double> {
+        let toScale = ((degrees - 2) / degrees).squareRoot()
+        return deviationRange.lowerBound * toScale...deviationRange.upperBound * toScale
+    }
+
     static func sanitized(_ key: Key) -> Key? {
         guard key.offsetX.isFinite, key.offsetY.isFinite, key.sigmaX.isFinite, key.sigmaY.isFinite,
               key.covarianceXY.isFinite, degreesRange.contains(key.degrees) else { return nil }
+        let sigmaRange = scaleRange(degrees: key.degrees)
         let sx = max(sigmaRange.lowerBound, min(sigmaRange.upperBound, key.sigmaX))
         let sy = max(sigmaRange.lowerBound, min(sigmaRange.upperBound, key.sigmaY))
         let offsetX = max(-maxOffset, min(maxOffset, key.offsetX))

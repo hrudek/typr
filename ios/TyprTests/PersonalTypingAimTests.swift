@@ -43,7 +43,7 @@ final class PersonalTypingAimTests: XCTestCase {
                 offsetX: 10, offsetY: -10, sigmaX: 0.3, sigmaY: 0.4, covarianceXY: xy)]).keys["a"])
             let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY
             let radius = hypot(xx - yy, 2 * key.covarianceXY)
-            let floor = SpatialTouchCalibration.sigmaRange.lowerBound
+            let floor = SpatialTouchCalibration.scaleRange(degrees: key.degrees).lowerBound
             XCTAssertGreaterThanOrEqual((xx + yy - radius) / 2, floor * floor - 1e-12)
             XCTAssertLessThanOrEqual((xx + yy + radius) / 2, 1 + 1e-12)
             XCTAssertGreaterThanOrEqual(xx * yy - key.covarianceXY * key.covarianceXY, pow(floor, 4) - 1e-12)

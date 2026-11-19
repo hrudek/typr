@@ -911,6 +911,37 @@ final class KeyboardKeyMapTests: XCTestCase {
         XCTAssertNotNil(adaptiveMap("arou", [.english], sources: sources, calibration: frozen, personal: personal))
     }
 
+    func testNearCollinearTrustedLabelsKeepCentredValidWords() throws {
+        let sources = try resources()
+        let history = "the quick brown fox jumps over the lazy dog and then runs around the house with a kind friend"
+        for hitAreas in [KeyboardHitAreas.standard, .adaptive] {
+            let (engine, target, _) = keyboard(sources, trained: false)
+            engine.autocorrect.hitAreas = hitAreas
+            let layout = engine.layout
+            var index = 0
+            for _ in 0..<8 {
+                for word in history.split(separator: " ") {
+                    let labels = word.map { letter -> TouchLabel in
+                        defer { index += 1 }
+                        let k = key(letter, layout)
+                        let jitter = Double(index % 3 - 1) * 0.06
+                        let y = jitter + Double(index / 3 % 3 - 1) * 0.01
+                        return TouchLabel(point: CGPoint(x: k.frame.midX + (0.25 + jitter) * (k.frame.width + layout.metrics.gap),
+                                                         y: k.frame.midY + y * (k.frame.height + layout.metrics.rowGap)),
+                                          letter: letter)
+                    }
+                    engine.autocorrect.learning.learn(labels, layout: layout, source: .literalValid)
+                }
+            }
+            XCTAssertEqual(engine.autocorrect.learning.diagnostics.acceptedLabels, index)
+            engine.refreshSuggestions()
+            type("kind", engine)
+            XCTAssertEqual(target.text, "kind")
+            tap(center(layout.key(.space)!), engine)
+            XCTAssertEqual(target.text, "kind ", "\(hitAreas)")
+        }
+    }
+
     func testAdaptiveTypesTheLikeliestKeyThroughTheEngine() throws {
         let sources = try resources()
         func settle(_ hitAreas: KeyboardHitAreas,
