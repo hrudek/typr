@@ -206,6 +206,13 @@ final class FullKeyboardEngine {
     }
 
     var clock: () -> TimeInterval = { CACurrentMediaTime() }
+    /// Runs `action` once after `delay` seconds on the main actor.
+    var scheduleAfter: (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(action) }
+    }
+    /// The next Delete restores the last automatic correction; the delete key shows undo.
+    private(set) var deleteUndoes = false
+    private var undoRedrawAt: TimeInterval?
     /// Called whenever something visible changed (page, shift, pressed keys, suggestions, accents).
     var onChange: (() -> Void)?
     /// Called after the keys typed or deleted anything.
@@ -273,6 +280,7 @@ final class FullKeyboardEngine {
         shift.reset()
         lastSpaceAt = nil
         autocorrect.clearPendingUndo()
+        refreshDeleteUndo()
         cancelAllTouches(republishing: false)
         autocorrect.touchInput.clearAtBoundary()
         rebuildLayout()
@@ -287,6 +295,7 @@ final class FullKeyboardEngine {
         invalidateTouchEvidence()
         lastSpaceAt = nil
         autocorrect.clearPendingUndo()
+        refreshDeleteUndo()
         refreshAutoCapitalization()
         refreshSuggestions()
     }
@@ -474,10 +483,11 @@ final class FullKeyboardEngine {
             } else { log.end("prediction") }
         }
         if let boundary = suggestion.boundary {
-            autocorrect.recordAppliedBoundary(boundary, replacement: suggestion.replacement)
+            autocorrect.recordAppliedBoundary(boundary, replacement: suggestion.replacement, at: clock())
         } else if suggestion.kind == .keepLiteral, let token {
-            autocorrect.recordAppliedKeep(token, wasNew: keepWasNew)
+            autocorrect.recordAppliedKeep(token, wasNew: keepWasNew, at: clock())
         }
+        refreshDeleteUndo()
         // The suggestion's separator counts as the first space of double-space period.
         lastSpaceAt = clock()
     }
@@ -631,6 +641,7 @@ final class FullKeyboardEngine {
                 lastSpaceAt = nil
                 autocorrect.clearPendingUndo()
                 touches[id] = touch
+                refreshDeleteUndo()
                 onSelectionStep?()
                 onChange?()
                 return
@@ -818,7 +829,7 @@ final class FullKeyboardEngine {
             return
         }
         if allowAutocorrectUndo,
-           let undo = autocorrect.consumePendingUndo(),
+           let undo = autocorrect.consumePendingUndo(at: clock()),
            let before = target.documentContextBeforeInput,
            before.hasSuffix(undo.insertedText) {
             if recordsStatistics { statistics?.deletion(undo: true) }
@@ -953,7 +964,7 @@ final class FullKeyboardEngine {
             for _ in 0..<original.count { target.deleteBackward() }
             target.insertText(replacement + text)
             logTyping { $0.boundary(text, replacement: replacement, correction: typingLogCorrection) }
-            autocorrect.recordAppliedCorrection(original: original, insertedText: replacement + text)
+            autocorrect.recordAppliedCorrection(original: original, insertedText: replacement + text, at: clock())
             autocorrect.discardFeedback()
             autocorrect.touchInput.clearAtBoundary()
             lastSpaceAt = nil
@@ -1024,7 +1035,7 @@ final class FullKeyboardEngine {
             autocorrect.touchInput.clear()
             target.insertText(inserted)
             logTyping { $0.boundary(" ", replacement: replacement, correction: typingLogCorrection) }
-            autocorrect.recordAppliedCorrection(original: original, insertedText: inserted)
+            autocorrect.recordAppliedCorrection(original: original, insertedText: inserted, at: clock())
             if let sample {
                 autocorrect.spaceTyped(at: sample.point, layout: layout, afterInput: target.documentContextBeforeInput)
             }
@@ -1089,7 +1100,26 @@ final class FullKeyboardEngine {
         // Keyboard-originated edits (including the Typr key) also lift a stale suspension.
         suggestionsAreActive = true
         refreshSuggestions()
+        refreshDeleteUndo()
         onEdit?()
+    }
+
+    /// Redraws the delete key when undo starts or ends, including once when its window closes.
+    func refreshDeleteUndo() {
+        let undo = autocorrect.pendingUndo(at: clock()).flatMap { undo in
+            target.documentContextBeforeInput?.hasSuffix(undo.correction.insertedText) == true ? undo : nil
+        }
+        if let closesAt = undo?.window.closesAt, undoRedrawAt != closesAt {
+            undoRedrawAt = closesAt
+            scheduleAfter(closesAt - clock()) { [weak self] in
+                guard let self else { return }
+                if undoRedrawAt == closesAt { undoRedrawAt = nil }
+                refreshDeleteUndo()
+            }
+        }
+        guard (undo != nil) != deleteUndoes else { return }
+        deleteUndoes = undo != nil
+        onChange?()
     }
 
     // MARK: - Swipe typing
