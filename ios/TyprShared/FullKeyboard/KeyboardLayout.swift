@@ -599,7 +599,13 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             x += w + m.gap
         }
 
-        // Touch targets: split every gap down the middle; outer keys reach the edges.
+        // Touch targets: split every gap down the middle; outer keys reach the edges. Like Apple's, the split halves'
+        // gap types nothing farther than half a key from either half.
+        func boundaries(_ a: CGRect, _ b: CGRect) -> (end: CGFloat, start: CGFloat) {
+            let middle = (a.maxX + b.minX) / 2
+            guard m.splitGap > 0, b.minX - a.maxX > lw else { return (middle, middle) }
+            return (min(middle, a.maxX + lw / 2), max(middle, b.minX - lw / 2))
+        }
         let top = m.stripArea
         let bottom = m.totalHeight
         var keys: [KeyboardKey] = []
@@ -608,8 +614,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             let y0 = row == 0 ? top : rowY(row) - m.rowGap / 2
             let y1 = row == spaceRow ? bottom : rowY(row + 1) - m.rowGap / 2
             for (i, item) in rowKeys.enumerated() {
-                let x0 = i == 0 ? 0 : (rowKeys[i - 1].2.maxX + item.2.minX) / 2
-                let x1 = i == rowKeys.count - 1 ? width : (item.2.maxX + rowKeys[i + 1].2.minX) / 2
+                let x0 = i == 0 ? 0 : boundaries(rowKeys[i - 1].2, item.2).start
+                let x1 = i == rowKeys.count - 1 ? width : boundaries(item.2, rowKeys[i + 1].2).end
                 keys.append(KeyboardKey(
                     kind: item.0,
                     row: row,

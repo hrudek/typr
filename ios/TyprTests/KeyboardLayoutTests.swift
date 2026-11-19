@@ -366,7 +366,8 @@ final class KeyboardLayoutTests: XCTestCase {
 
     func testHitTargetsTileTheKeyAreaWithNoDeadZonesOrOverlaps() {
         var generator = SystemRandomNumberGenerator()
-        for layout in everyLayout() {
+        // The split halves' gap is meant to type nothing; KeyboardPoseTests checks each half and the gap.
+        for layout in everyLayout() where layout.orientation != .splitLandscape {
             let area = layout.keysAreaFrame
             var rowTop = area.minY
             for row in 0...layout.bottomRowIndex {
@@ -688,6 +689,7 @@ final class KeyboardLayoutTests: XCTestCase {
                     let row = layout.keys.filter { $0.row == layout.bottomRowIndex }.sorted { $0.frame.minX < $1.frame.minX }
                     for (a, b) in zip(row, row.dropFirst()) {
                         XCTAssertLessThan(a.frame.maxX, b.frame.minX, name)
+                        if layout.orientation == .splitLandscape, b.frame.minX - a.frame.maxX > layout.letterWidth { continue }
                         XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, name)
                     }
                     XCTAssertLessThanOrEqual(row.last?.frame.maxX ?? 0, layout.width - layout.horizontalInset, name)

@@ -123,7 +123,7 @@ final class KeyboardPoseTests: XCTestCase {
                 for key in layout.keys {
                     XCTAssertEqual(layout.hitTest(CGPoint(x: key.frame.midX, y: key.frame.midY)), key, name)
                 }
-                XCTAssertNotNil(layout.hitTest(CGPoint(x: width / 2, y: q.frame.midY)), "the gap still types: \(name)")
+                assertTheGapTypesNothingPastHalfAKey(layout)
             }
         }
     }
@@ -156,6 +156,28 @@ final class KeyboardPoseTests: XCTestCase {
             view.frame = CGRect(x: 0, y: 0, width: display.width, height: view.preferredHeight)
             view.layoutIfNeeded()
             XCTAssertEqual(view.engine.layout.orientation, orientation, "\(display)")
+        }
+    }
+
+    private func assertTheGapTypesNothingPastHalfAKey(_ layout: KeyboardLayout, file: StaticString = #filePath, line: UInt = #line) {
+        let name = describe(layout)
+        let reach = layout.letterWidth / 2
+        for row in 0...layout.bottomRowIndex {
+            let keys = layout.keys.filter { $0.row == row }.sorted { $0.frame.minX < $1.frame.minX }
+            let leftHalf = keys.filter { $0.frame.maxX < layout.width / 2 }
+            let rightHalf = keys.filter { $0.frame.minX > layout.width / 2 }
+            for half in [leftHalf, rightHalf] {
+                for (a, b) in zip(half, half.dropFirst()) {
+                    XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, "row \(row) tiles: \(name)", file: file, line: line)
+                }
+            }
+            let inner = (leftHalf.last!, rightHalf.first!)
+            let y = inner.0.frame.midY
+            XCTAssertEqual(layout.hitTest(CGPoint(x: inner.0.frame.maxX + reach - 0.5, y: y)), inner.0, name, file: file, line: line)
+            XCTAssertEqual(layout.hitTest(CGPoint(x: inner.1.frame.minX - reach + 0.5, y: y)), inner.1, name, file: file, line: line)
+            XCTAssertNil(layout.hitTest(CGPoint(x: inner.0.frame.maxX + reach + 0.5, y: y)), "row \(row): \(name)", file: file, line: line)
+            XCTAssertNil(layout.hitTest(CGPoint(x: inner.1.frame.minX - reach - 0.5, y: y)), "row \(row): \(name)", file: file, line: line)
+            XCTAssertNil(layout.hitTest(CGPoint(x: layout.width / 2, y: y)), "row \(row): \(name)", file: file, line: line)
         }
     }
 
