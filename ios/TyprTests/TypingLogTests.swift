@@ -171,6 +171,31 @@ final class TypingLogTests: XCTestCase {
         XCTAssertEqual(try reopened.words().map(\.meant), ["w7", "w8", "w9", "w10"])
     }
 
+    func testTwoKeyboardProcessesShareTheRotation() throws {
+        let first = TypingLogStore(directory: directory, segmentWords: 3)
+        let second = TypingLogStore(directory: directory, segmentWords: 3)
+        for index in 1...10 {
+            let store = index.isMultiple(of: 2) ? second : first
+            store.append(word("w\(index)"))
+            store.waitForWrites()
+        }
+        XCTAssertEqual(try first.words().map(\.meant), ["w7", "w8", "w9", "w10"])
+    }
+
+    func testAppendAfterACutShortLineKeepsTheNewWord() throws {
+        let store = TypingLogStore(directory: directory)
+        store.append(word("hello"))
+        store.waitForWrites()
+        let file = directory.appendingPathComponent(TypingLogStore.currentName)
+        let handle = try FileHandle(forWritingTo: file)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("{\"at\":".utf8))
+        try handle.close()
+        store.append(word("world"))
+        store.waitForWrites()
+        XCTAssertEqual(try store.words().map(\.meant), ["hello", "world"])
+    }
+
     func testDeleteRemovesTheLog() throws {
         let store = TypingLogStore(directory: directory)
         store.append(word("hello"))

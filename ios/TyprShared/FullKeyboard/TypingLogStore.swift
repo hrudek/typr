@@ -12,8 +12,9 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
     let directory: URL
     let segmentWords: Int
     private let queue = DispatchQueue(label: "dev.rudek.typr.typing-log", qos: .utility)
-    /// Lines in `current`, counted once per process on the first append; only touched on `queue`.
-    private var currentLines: Int?
+    /// Lines and bytes of `current` after this process's last append; only touched on `queue`.
+    /// Other keyboard processes append too, so it counts only while the file size still matches.
+    private var currentCount: (lines: Int, bytes: UInt64)?
 
     init(directory: URL, segmentWords: Int = 10_000) {
         self.directory = directory
@@ -50,7 +51,7 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
                     let file = directory.appendingPathComponent(name)
                     if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
                 }
-                currentLines = 0
+                currentCount = nil
             }
         }
     }
@@ -73,23 +74,33 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
 
     private func appendLine(_ line: Data) throws {
         let current = directory.appendingPathComponent(Self.currentName)
-        var lines = try currentLines ?? countLines(current)
-        let exists = FileManager.default.fileExists(atPath: current.path)
-        if exists && lines >= segmentWords {
-            let previous = directory.appendingPathComponent(Self.previousName)
-            if FileManager.default.fileExists(atPath: previous.path) { try FileManager.default.removeItem(at: previous) }
-            try FileManager.default.moveItem(at: current, to: previous)
+        let size = (try? FileManager.default.attributesOfItem(atPath: current.path)[.size] as? NSNumber)?.uint64Value
+        var lines = 0
+        if let size {
+            lines = currentCount?.bytes == size ? currentCount?.lines ?? 0 : try countLines(current)
+            if lines >= segmentWords {
+                let previous = directory.appendingPathComponent(Self.previousName)
+                if FileManager.default.fileExists(atPath: previous.path) { try FileManager.default.removeItem(at: previous) }
+                try FileManager.default.moveItem(at: current, to: previous)
+            }
         }
-        if !exists || lines >= segmentWords {
+        if size == nil || lines >= segmentWords {
             try Data().write(to: current, options: .completeFileProtectionUntilFirstUserAuthentication)
             try KeyboardLearningStore.protect(current)
             lines = 0
         }
-        let handle = try FileHandle(forWritingTo: current)
+        let handle = try FileHandle(forUpdating: current)
         defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: line + Data([0x0A]))
-        currentLines = lines + 1
+        var data = line + Data([0x0A])
+        let end = try handle.seekToEnd()
+        if end > 0 {
+            // A line cut short by a crash must not swallow this one.
+            try handle.seek(toOffset: end - 1)
+            if try handle.read(upToCount: 1) != Data([0x0A]) { data.insert(0x0A, at: 0) }
+            try handle.seekToEnd()
+        }
+        try handle.write(contentsOf: data)
+        currentCount = (lines + data.count - line.count, end + UInt64(data.count))
     }
 
     private func countLines(_ file: URL) throws -> Int {
