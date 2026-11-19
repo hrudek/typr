@@ -146,6 +146,14 @@ final class BackspaceUndoWindowTests: XCTestCase {
         XCTAssertGreaterThan(changes, 0)
     }
 
+    func testUndoKeyEndsWhenTheSpacebarMovesTheCursor() {
+        autocorrect()
+        let space = engine.layout.key(.space)!.frame
+        engine.touchBegan(id: 1, at: CGPoint(x: space.midX, y: space.midY))
+        engine.touchMoved(id: 1, to: CGPoint(x: space.midX - 40, y: space.midY))
+        XCTAssertFalse(engine.deleteUndoes)
+    }
+
     func testUndoKeyEndsWhenTheFieldChanges() {
         autocorrect()
         engine.configureForField()

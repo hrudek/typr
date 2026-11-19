@@ -641,6 +641,7 @@ final class FullKeyboardEngine {
                 lastSpaceAt = nil
                 autocorrect.clearPendingUndo()
                 touches[id] = touch
+                refreshDeleteUndo()
                 onSelectionStep?()
                 onChange?()
                 return
