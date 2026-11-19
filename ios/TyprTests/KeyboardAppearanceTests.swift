@@ -152,6 +152,65 @@ final class KeyboardAppearanceTests: XCTestCase {
         XCTAssertEqual(target.keyboardType, .default)
     }
 
+    /// iPhone Duo outer 466 × 678 pt and inner 669 × 951 pt, each both ways; split only open and sideways.
+    func testPreviewPicksThePoseOfTheWholeWindow() {
+        let poses: [(CGSize, KeyboardOrientation, Bool)] = [
+            (CGSize(width: 393, height: 852), .portrait, false),
+            (CGSize(width: 466, height: 678), .portrait, false),
+            (CGSize(width: 678, height: 466), .landscape, false),
+            (CGSize(width: 669, height: 951), .widePortrait, false),
+            (CGSize(width: 951, height: 669), .wideLandscape, true),
+        ]
+        for (window, orientation, allowsSplit) in poses {
+            var settings = base
+            settings.container = window
+            XCTAssertEqual(settings.orientation, orientation, "\(window)")
+            XCTAssertEqual(settings.orientation.allowsSplit, allowsSplit, "\(window)")
+        }
+    }
+
+    func testPreviewStaysBelowAFoldAcrossThePage() {
+        let page = CGSize(width: 669, height: 830)
+        let height = KeyboardLayout.height(for: .widePortrait, numberRow: true)
+        XCTAssertEqual(KeyboardAppearancePage.previewScale(keyboardHeight: height, page: page, foldBottom: nil), 1)
+        XCTAssertEqual(KeyboardAppearancePage.previewScale(keyboardHeight: height, page: page, foldBottom: 400), 1,
+                       "a fold above the keyboard changes nothing")
+        let foldBottom: CGFloat = 600
+        let scale = KeyboardAppearancePage.previewScale(keyboardHeight: height, page: page, foldBottom: foldBottom)
+        XCTAssertLessThan(scale, 1)
+        XCTAssertEqual(height * scale, page.height - foldBottom, accuracy: 0.001)
+    }
+
+    func testPreviewFollowsTheWindowWhenItRotatesFoldsAndUnfolds() async throws {
+        let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 951, height: 669))
+        window.rootViewController = host
+        window.isHidden = false
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+        let poses: [(CGSize, KeyboardOrientation)] = [
+            (CGSize(width: 951, height: 669), .wideLandscape),
+            (CGSize(width: 669, height: 951), .widePortrait),
+            (CGSize(width: 466, height: 678), .portrait),
+            (CGSize(width: 678, height: 466), .landscape),
+        ]
+        for (size, orientation) in poses {
+            window.frame = CGRect(origin: .zero, size: size)
+            try await waitForState("the preview shows the \(orientation) keyboard") {
+                host.view.layoutIfNeeded()
+                let keyboard = Self.subviews(of: host.view).compactMap { $0 as? FullKeyboardView }.first
+                return keyboard?.engine.layout.orientation == orientation
+            }
+            let keyboard = try XCTUnwrap(Self.subviews(of: host.view).compactMap { $0 as? FullKeyboardView }.first)
+            XCTAssertEqual(keyboard.bounds.width, size.width, accuracy: 0.5, "\(size)")
+            if orientation == .wideLandscape {
+                XCTAssertEqual(keyboard.engine.layout.letterWidth, KeyboardMetrics.maxWideLetterWidth, accuracy: 0.001)
+            }
+        }
+    }
+
     private static func subviews(of view: UIView) -> [UIView] {
         view.subviews + view.subviews.flatMap(subviews(of:))
     }
