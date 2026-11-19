@@ -93,11 +93,11 @@ final class SettingsPresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testDroppingAutocorrectLanguageTakesTheTargetPlace() {
+    func testMovingAutocorrectLanguageFollowsListMoveSemantics() {
         typealias Card = AutocorrectLanguageSettingsCard
-        XCTAssertEqual(Card.moving(.english, onto: .german, in: [.german, .english]), [.english, .german])
-        XCTAssertEqual(Card.moving(.german, onto: .english, in: [.german, .english]), [.english, .german])
-        XCTAssertEqual(Card.moving(.german, onto: .german, in: [.german, .english]), [.german, .english])
+        XCTAssertEqual(Card.moved([.german, .english], from: [1], to: 0), [.english, .german])
+        XCTAssertEqual(Card.moved([.german, .english], from: [0], to: 2), [.english, .german])
+        XCTAssertEqual(Card.moved([.german, .english], from: [0], to: 1), [.german, .english])
     }
 
     @MainActor
@@ -107,8 +107,8 @@ final class SettingsPresentationTests: XCTestCase {
         defaults.removePersistentDomain(forName: suite)
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = TyprSettings(defaults: defaults)
-        settings.autocorrectLanguageOrder = AutocorrectLanguageSettingsCard.moving(
-            .english, onto: .german, in: settings.autocorrectLanguageOrder)
+        settings.autocorrectLanguageOrder = AutocorrectLanguageSettingsCard.moved(
+            settings.autocorrectLanguageOrder, from: [1], to: 0)
         let stored = TyprSettings(defaults: defaults)
         XCTAssertEqual(stored.autocorrectLanguageOrder, [.english, .german])
         XCTAssertEqual(AutocorrectLanguageSettingsCard.summary(order: stored.autocorrectLanguageOrder,

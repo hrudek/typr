@@ -162,6 +162,8 @@ struct ContentView: View {
                         DictationHistoryView(store: Self.historyStore, router: feedbackRouter)
                     } else if destination == .keyboardAppearance {
                         KeyboardAppearancePage()
+                    } else if destination == .autocorrectLanguages {
+                        AutocorrectLanguageSettingsCard()
                     } else if destination == .keyboardLearnedWords {
                         KeyboardLearnedWordsView(
                             fixture: Self.learnedWordsUsesFixture(arguments: ProcessInfo.processInfo.arguments))
@@ -169,9 +171,8 @@ struct ContentView: View {
                         SettingsPage(title: destination.title, subtitle: destination.subtitle) {
                             switch destination {
                             case .keyboard: KeyboardSettingsCard()
-                            case .autocorrectLanguages: AutocorrectLanguageSettingsCard()
                             case .keyboardWordsPrivacy: KeyboardWordsPrivacyCard()
-                            case .keyboardAppearance, .keyboardLearnedWords, .statistics, .history:
+                            case .keyboardAppearance, .autocorrectLanguages, .keyboardLearnedWords, .statistics, .history:
                                 EmptyView() // Handled above.
                             case .textProcessing: TextProcessingSettingsCard()
                             case .speechEngine: SpeechEngineCard(dictation: dictation)

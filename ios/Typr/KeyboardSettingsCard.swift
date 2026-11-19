@@ -168,57 +168,55 @@ struct AutocorrectLanguageSettingsCard: View {
         return codes.isEmpty ? "None" : codes.joined(separator: ", ")
     }
 
-    static func moving(_ language: Language, onto target: Language, in order: [Language]) -> [Language] {
-        guard language != target, let targetIndex = order.firstIndex(of: target) else { return order }
-        var moved = order.filter { $0 != language }
-        moved.insert(language, at: targetIndex)
+    static func moved(_ order: [Language], from source: IndexSet, to destination: Int) -> [Language] {
+        var moved = order
+        moved.move(fromOffsets: source, toOffset: destination)
         return moved
     }
 
     static let footer = "For autocorrect only. Your dictation language stays as it is."
-    static let orderFooter = "Autocorrect prefers the top language. Drag a language to move it."
+    static let orderFooter = "Autocorrect prefers the top language. Drag the handle to move a language."
     static let noneSelected = "No autocorrect languages selected."
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SettingsSection {
+        List {
+            Section {
                 ForEach(Array(order.enumerated()), id: \.element) { index, language in
-                    if index > 0 { SettingsDivider() }
                     row(language, at: index)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(TyprTheme.bgBase)
                 }
+                .onMove { source, destination in move(from: source, to: destination) }
+            } footer: {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !german && !english { Text(Self.noneSelected) }
+                    Text(Self.orderFooter)
+                    Text(Self.footer)
+                }
+                .font(.footnote).foregroundStyle(TyprTheme.textMuted)
             }
-            if !german && !english { SettingsFooter(Self.noneSelected) }
-            SettingsFooter(Self.orderFooter)
-            SettingsFooter(Self.footer)
         }
+        .environment(\.editMode, .constant(.active))
+        .scrollContentBackground(.hidden)
+        .background(TyprTheme.bgDeep.ignoresSafeArea())
+        .navigationTitle(SettingsDestination.autocorrectLanguages.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+        .toolbarBackground(TyprTheme.bgDeep, for: .navigationBar)
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
     private func row(_ language: Language, at index: Int) -> some View {
-        HStack(spacing: 0) {
-            SettingsChoiceRow(title: language.title, isSelected: isSelected(language)) { toggle(language) }
-                .accessibilityActions {
-                    if index > 0 {
-                        Button("Move up") { move(language, onto: order[index - 1]) }
-                    }
-                    if index < order.count - 1 {
-                        Button("Move down") { move(language, onto: order[index + 1]) }
-                    }
+        SettingsChoiceRow(title: language.title, isSelected: isSelected(language)) { toggle(language) }
+            .accessibilityActions {
+                if index > 0 {
+                    Button("Move up") { move(from: [index], to: index - 1) }
                 }
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(TyprTheme.textMuted)
-                .padding(.trailing, 16)
-                .accessibilityHidden(true)
-        }
-        .background(TyprTheme.bgBase, in: RoundedRectangle(cornerRadius: TyprTheme.cardRadius))
-        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: TyprTheme.cardRadius))
-        .draggable(language.rawValue)
-        .dropDestination(for: String.self) { items, _ in
-            guard let dragged = items.first.flatMap(Language.init(rawValue:)) else { return false }
-            move(dragged, onto: language)
-            return true
-        }
+                if index < order.count - 1 {
+                    Button("Move down") { move(from: [index], to: index + 2) }
+                }
+            }
     }
 
     private func isSelected(_ language: Language) -> Bool {
@@ -236,8 +234,8 @@ struct AutocorrectLanguageSettingsCard: View {
         }
     }
 
-    private func move(_ language: Language, onto target: Language) {
-        withAnimation { order = Self.moving(language, onto: target, in: order) }
+    private func move(from source: IndexSet, to destination: Int) {
+        order = Self.moved(order, from: source, to: destination)
         TyprSettings().autocorrectLanguageOrder = order
     }
 
