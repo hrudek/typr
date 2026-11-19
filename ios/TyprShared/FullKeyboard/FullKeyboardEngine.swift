@@ -1311,6 +1311,7 @@ final class FullKeyboardEngine {
         guard let typingLog else { return }
         guard typingLogAllowed else { typingLog.discard(); return }
         typingLog.languages = autocorrect.suggestionLanguages.map(\.rawValue).sorted()
+        typingLog.hitAreas = autocorrect.hitAreas.rawValue
         event(typingLog)
     }
 

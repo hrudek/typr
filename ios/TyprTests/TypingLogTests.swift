@@ -59,6 +59,12 @@ final class TypingLogTests: XCTestCase {
         for character in text { tap(character == " " ? .space : .character(String(character))) }
     }
 
+    func testWordRecordsTheActiveHitAreasSetting() throws {
+        engine.autocorrect.hitAreas = .adaptive
+        type("hello w")
+        XCTAssertEqual(try XCTUnwrap(written.first).hitAreas, "adaptive")
+    }
+
     func testSettledWordRecordsTapsLayoutAndMeantWord() throws {
         type("hello w")
         XCTAssertEqual(written.count, 1)
