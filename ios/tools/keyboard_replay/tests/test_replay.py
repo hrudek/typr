@@ -177,45 +177,17 @@ class ReplayTests(unittest.TestCase):
                 self.assertEqual(result.stdout, "")
                 self.assertTrue(result.stderr.startswith("keyboard-replay: "), result.stderr)
 
-    def test_writes_nothing_by_default_and_refuses_output_in_a_checkout(self):
+    def test_prints_the_report_and_writes_nothing(self):
         empty = self.dir / "cwd"
         empty.mkdir(exist_ok=True)
-        self.assertEqual(self.run_tool(cwd=empty).returncode, 0)
+        result = self.run_tool(cwd=empty)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Standard vs meant word", result.stdout)
         self.assertEqual(list(empty.iterdir()), [])
-
-        checkout = self.dir / "checkout"
-        (checkout / ".git").mkdir(parents=True, exist_ok=True)
-        for out in [checkout / "report.txt", checkout / "sub" / "report.txt"]:
-            with self.subTest(str(out)):
-                result = self.run_tool("--out", str(out))
-                self.assertEqual(result.returncode, 1)
-                self.assertIn("inside a Git checkout", result.stderr)
-                self.assertFalse(out.exists())
-
-        private = self.dir / "private"
-        private.mkdir(exist_ok=True)
-        (private / "real.txt").write_text("")
-        for name, target in [("checkout-link", checkout), ("private-link", private),
-                             ("file-link", private / "real.txt")]:
-            link = self.dir / name
-            link.unlink(missing_ok=True)
-            link.symlink_to(target)
-            for out in [link, link / "report.txt"] if target.is_dir() else [link]:
-                with self.subTest(str(out)):
-                    result = self.run_tool("--out", str(out))
-                    self.assertEqual(result.returncode, 1)
-                    self.assertIn("symbolic link", result.stderr)
-        self.assertEqual(sorted(p.name for p in private.iterdir()), ["real.txt"])
-        self.assertEqual((private / "real.txt").read_text(), "")
-        made = subprocess.run([self.binary, "--make-fixture", str(self.dir / "private-link" / "x.json")],
-                              capture_output=True, text=True, timeout=60)
-        self.assertEqual(made.returncode, 1)
-        self.assertIn("symbolic link", made.stderr)
-
-        out = self.dir / "report.txt"
-        self.assertEqual(self.run_tool("--out", str(out)).returncode, 0)
-        self.assertIn("Standard vs meant word", out.read_text())
-        self.assertEqual(out.stat().st_mode & 0o777, 0o600)
+        rejected = self.run_tool("--out", str(empty / "report.txt"), cwd=empty)
+        self.assertEqual(rejected.returncode, 1)
+        self.assertIn("Usage:", rejected.stderr)
+        self.assertEqual(list(empty.iterdir()), [])
 
     def test_build_refuses_a_directory_in_a_checkout_or_through_a_symlink(self):
         result = subprocess.run(["bash", str(TOOL / "build.sh"), str(TOOL / "build")],

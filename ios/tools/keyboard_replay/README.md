@@ -32,8 +32,9 @@ bin=$(ios/tools/keyboard_replay/build.sh)   # builds into ~/.cache/typr-keyboard
 
 Options: `--show-words` lists the words that changed between settings or did not reproduce
 (private text, keep it off screenshots and issues), `--json` prints the report as JSON,
-`--out FILE` writes the report to a file outside every Git checkout, with no symbolic link in its
-path. Rebuild after pulling keyboard changes, so the replay runs today's code.
+The report goes to the terminal only; to keep it, redirect it into your private folder, for
+example `"$bin" ~/typr-private/typr-typing-log.json > ~/typr-private/report.txt`. Rebuild after
+pulling keyboard changes, so the replay runs today's code.
 
 ## 4. Read the result
 
