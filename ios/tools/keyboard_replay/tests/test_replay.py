@@ -43,86 +43,116 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
+    def only(self, predicate, index: int = 0) -> dict:
+        """The fixture with one of its words, the `index`th that `predicate` accepts."""
+        export = copy.deepcopy(self.fixture)
+        export["words"] = [[w for w in export["words"] if predicate(w)][index]]
+        return export
+
     def test_fixture_reproduces_what_the_keyboard_committed(self):
         report = self.report()
-        self.assertEqual(report["exported"], 26)
-        self.assertEqual(report["replayed"], 24)
-        self.assertEqual(report["skipped"], {"swipe": 1, "tap without point": 1})
-        reproduction = report["reproduction"]["standard"]
-        self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
-        self.assertEqual(reproduction["literals"], 24)
-        self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
-        self.assertEqual(reproduction["commits"], 21)
-        self.assertEqual(reproduction["commitsNotComparable"], 2)
+        self.assertEqual(report["exported"], 27)
+        self.assertEqual(report["replayed"], 21)
+        self.assertEqual(report["skipped"], {"learning state uncertain": 4, "swipe": 1, "tap without point": 1})
+        standard = report["reproduction"]["standard"]
+        self.assertEqual((standard["commitMatches"], standard["commits"], standard["picked"]), (18, 18, 1))
+        self.assertEqual((standard["literalMatches"], standard["literals"]), (20, 20))
+        adaptive = report["reproduction"]["adaptive"]
+        self.assertEqual((adaptive["commitMatches"], adaptive["commits"]), (1, 1))
 
-    def test_reproduction_leads_the_report(self):
+    def test_standard_reproduction_leads_the_report(self):
         lines = self.run_tool().stdout.splitlines()
-        self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 21/21 words, 100.0%")
-        self.assertEqual(lines[2], "  not compared: 0 fixed by system spelling, 2 picked or edited after the separator")
+        self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 18/18 words, 100.0%")
+        self.assertEqual(lines[2], "  not compared: 0 fixed by system spelling, 1 picked from the strip")
+        self.assertTrue(lines[4].startswith("Reproduction (Adaptive)"))
+        lines = self.run_tool(export=self.only(lambda w: w["hitAreas"] == "adaptive")).stdout.splitlines()
+        self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 0/0 words, -")
+        self.assertEqual(lines[4], "Reproduction (Adaptive): committed word matches the iPhone for 1/1 words, 100.0%")
 
     def test_a_fresh_fixture_reproduces_with_the_current_keyboard_code(self):
         fresh = self.dir / "fresh.json"
         made = subprocess.run([self.binary, "--make-fixture", str(fresh)], capture_output=True, text=True, timeout=60)
         self.assertEqual(made.returncode, 0, made.stderr)
-        reproduction = self.report(export=json.loads(fresh.read_text()))["reproduction"]["standard"]
-        self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
-        self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
+        for reproduction in self.report(export=json.loads(fresh.read_text()))["reproduction"].values():
+            self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
+            self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
 
-    def test_imported_words_are_protected_as_on_the_iphone(self):
-        export = copy.deepcopy(self.fixture)
-        export["protectedWords"] = []
-        report = self.report("--show-words", export=export)
-        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 20)
-        self.assertEqual([(line["meant"], line["replayed"]["standard"]) for line in report["words"]], [("Ive", "I've")])
+    def test_edits_replay_in_order_up_to_the_first_boundary(self):
+        # Adaptive `aroumd`: the last letter deleted and typed again.
+        retyped = self.only(lambda w: w["hitAreas"] == "adaptive")
+        self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
+        self.assertEqual(self.report(export=retyped)["reproduction"]["adaptive"]["commitMatches"], 1)
+        # `fine`, then the space deleted and the word retyped as `great`: the boundary saw `fine`.
+        reopened = self.only(lambda w: w["meant"] == "great")
+        self.assertEqual(reopened["words"][0]["commit"]["text"], "fine")
+        report = self.report(export=reopened)
+        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 1)
+        self.assertEqual(report["variants"]["standard"]["known"]["wordErrors"], 1)
+        # Erased taps the log cannot place are not guessed.
+        reopened["words"][0]["corrections"][1]["erased"] = []
+        self.assertEqual(self.report(export=reopened)["skipped"], {"edits not replayable": 1})
 
-    def test_learning_from_an_undo_applies_only_after_it(self):
-        export = copy.deepcopy(self.fixture)
-        first = next(w for w in export["words"] if w["meant"] == "teh")
-        self.assertEqual(first["commit"]["text"], "the")
-        first["corrections"] = []
-        report = self.report("--show-words", export=export)
-        self.assertEqual([(line["meant"], line["replayed"]["standard"]) for line in report["words"]], [("teh", "teh")])
+    def test_earlier_learning_is_not_dated_from_the_log(self):
+        # Kept before the log began; replaying without that keep would give `I've`.
+        kept = self.only(lambda w: w["meant"] == "Ive")
+        self.assertEqual(self.report(export=kept)["skipped"], {"learning state uncertain": 1})
+        del kept["learning"]["kept"]["ive"]
+        unkept = self.report("--show-words", export=kept)
+        self.assertEqual([line["replayed"]["standard"] for line in unkept["words"]], ["I've"])
+        # Kept before the log began: not counted as an unknown word.
+        brisolde = self.only(lambda w: w["meant"] == "Brisolde")
+        self.assertEqual(self.report(export=brisolde)["skipped"], {"learning state uncertain": 1})
+        # Imported names are protected the same way.
+        kalvenor = self.only(lambda w: w["meant"] == "Kalvenor")
+        self.assertEqual(self.report(export=kalvenor)["skipped"], {"learning state uncertain": 1})
+
+    def test_only_the_words_own_log_adjusts_learning(self):
+        # The first `teh` was autocorrected, so it was not kept or rejected then, although the export
+        # keeps it after the undo. The later `teh` cannot be dated and is not compared.
+        first = self.report(export=self.only(lambda w: w["meant"] == "teh"))
+        self.assertEqual(first["reproduction"]["standard"]["commitMatches"], 1)
+        self.assertEqual(first["variants"]["standard"]["unknown"]["wordErrors"], 1)
+        later = self.report(export=self.only(lambda w: w["meant"] == "teh", 1))
+        self.assertEqual(later["skipped"], {"learning state uncertain": 1})
 
     def test_scores_both_settings_against_the_meant_word(self):
         report = self.report()
-        # Misses: the undone `teh` -> `the` and the edge miss `aroumd`, fixed on the iPhone with a pick.
-        # Unknown: the two compounds, Brisolde (nobody taught it), `I` (not in the lists) and the first
-        # `teh`, typed before the undo kept it.
+        # Misses: `fine` before the user rewrote it as `great`, and the undone `teh` -> `the`.
+        # Unknown: the two compounds, `I` (not in the lists) and the first `teh`.
         for setting in ["standard", "adaptive"]:
             scores = report["variants"][setting]
-            self.assertEqual(scores["known"]["wordErrors"], 1)
-            self.assertEqual(scores["known"]["letterErrors"], 1)
-            self.assertEqual(scores["unknown"]["wordErrors"], 1)
-            self.assertEqual(scores["unknown"]["letterErrors"], 2)
-            self.assertEqual(scores["unknown"]["words"], 5)
-            self.assertEqual(scores["known"]["words"] + scores["unknown"]["words"], 24)
+            self.assertEqual((scores["known"]["wordErrors"], scores["known"]["letterErrors"]), (1, 5))
+            self.assertEqual((scores["unknown"]["wordErrors"], scores["unknown"]["letterErrors"]), (1, 2))
+            self.assertEqual((scores["known"]["words"], scores["unknown"]["words"]), (17, 4))
         self.assertEqual(report["changes"], {"standard->adaptive": {"fixed": {"known": 0, "unknown": 0},
                                                                     "broken": {"known": 0, "unknown": 0}}})
 
     def test_words_are_listed_only_on_request(self):
         export = copy.deepcopy(self.fixture)
-        word = next(w for w in export["words"] if w["meant"] == "Kalvenor")
-        word["commit"]["text"] = "Kalvenors"
+        word = next(w for w in export["words"] if w["meant"] == "quiet")
+        word["commit"]["text"] = "quiets"
         self.assertNotIn("words", self.report(export=export))
-        self.assertNotIn("Kalvenor", self.run_tool(export=export).stdout)
+        self.assertNotIn("quiet", self.run_tool(export=export).stdout)
         report = self.report("--show-words", export=export)
-        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 20)
-        self.assertEqual([line["meant"] for line in report["words"]], ["Kalvenor"])
+        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 17)
+        self.assertEqual([line["meant"] for line in report["words"]], ["quiet"])
 
-    def test_spelling_corrections_are_not_compared(self):
+    def test_spelling_corrections_and_unavailable_picks_are_not_compared(self):
         export = copy.deepcopy(self.fixture)
         word = next(w for w in export["words"] if w["meant"] == "don't")
         word["commit"]["correction"] = "spelling"
         reproduction = self.report(export=export)["reproduction"]["standard"]
-        self.assertEqual(reproduction["systemSpelling"], 1)
-        self.assertEqual(reproduction["commits"], 20)
+        self.assertEqual((reproduction["systemSpelling"], reproduction["commits"]), (1, 17))
+        picked = self.only(lambda w: (w.get("commit") or {}).get("kind") == "pick")
+        picked["words"][0]["corrections"][0]["to"] = "arbitrary"
+        self.assertEqual(self.report(export=picked)["skipped"], {"pick not offered": 1})
 
     def test_unusable_layouts_are_skipped(self):
         export = copy.deepcopy(self.fixture)
         export["words"][0]["layout"]["orientation"] = "sideways"
         export["words"][1]["layout"]["metrics"]["gap"] += 1
         del export["words"][2]["layout"]
-        export["words"][3]["taps"] *= 30
+        export["words"][3]["taps"] *= 50
         report = self.report(export=export)
         self.assertEqual(report["skipped"]["over bounds"], 1)
         self.assertEqual(report["skipped"]["unknown layout"], 2)

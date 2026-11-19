@@ -37,25 +37,29 @@ keyboard changes, so the replay runs today's code.
 
 ## 4. Read the result
 
-- **Reproduction** (first lines): replaying a word under the setting it was typed with should
-  commit what your iPhone committed. The percentage tells how far to trust the rest; mismatches
-  mean the replay differs from your iPhone (see below). Words fixed by system spelling, by a
-  suggestion pick or edited again after the space are not compared and are counted.
-- **Skipped**: swiped words, words with a tap the log has no point for (slides, accents, hold-123)
-  and words whose keyboard layout this build cannot rebuild.
+Each word is replayed as you typed it up to its first space or punctuation: every tap, the
+backspaces between them and a suggestion you picked. Later edits (undo, retyping after the space)
+are what you meant, not input.
+
+- **Reproduction** (first lines, Standard first): the replay should commit what your iPhone
+  committed under the same setting. The percentage tells how far to trust the rest. Words fixed by
+  system spelling or picked from the suggestion strip are counted, not compared.
+- **Skipped**: swiped words, words with a tap the log has no point for (slides, accents, hold-123),
+  layouts this build cannot rebuild, edits whose order the log does not tell, picks the replayed
+  strip does not offer, and words whose learning state is uncertain: the export keeps, protects or
+  rejects them, and their own log cannot tell whether that was already so when you typed them.
 - **Vs meant word**: for each setting, the share of words whose committed text differs from the
   word you finally kept (word errors) and the edit distance per letter (letter errors). Known words
-  are in the bundled German or English word list, imported as personal words or kept before the
-  word was typed; unknown words are everything else, such as new names, compounds and
-  abbreviations.
+  are in the bundled German or English word list; unknown words are everything else, such as new
+  names, compounds and abbreviations.
 - **standard->other**: words a setting gets right that Standard got wrong (fixed) and the reverse
   (broken). Broken unknown words matter most: names and compounds must not get worse.
 
-The replay differs from the iPhone in known ways. It has no system spelling dictionary, so it
-validates words against the bundled word lists and never makes spelling-only corrections. It uses
-the learning saved at export time for every word, minus the undos and keeps the log shows from
-that word on; touch aim and word counts are not rewound. It sees at most the three words logged
-before each word as context.
+The replay uses the learning state at export time, changed only where a word's own log proves it
+(an autocorrected word was not kept then). It has no system spelling dictionary, so it validates
+words against the bundled word lists and never makes spelling-only corrections. Within one keyboard
+session the iPhone also adapts touch aim in memory, which the export does not carry. The replay sees
+at most the three words logged before each word as context.
 
 ## Tests
 

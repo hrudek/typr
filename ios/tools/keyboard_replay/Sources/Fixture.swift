@@ -5,7 +5,7 @@ import UIKit
 /// recorder attached, the way a user types (slips, backspace, undo, an edit after the space, a pick).
 @MainActor
 func makeFixture(words data: WordData, to url: URL) async throws {
-    let protectedWords = ["Kalvenor", "Ive"]
+    let protectedWords = ["Kalvenor"]
     var logged: [TypingLogWord] = []
     var clockDate = Date(timeIntervalSince1970: 1_790_000_000)
     let recorder = TypingLogRecorder(write: { logged.append($0) }, now: { clockDate })
@@ -26,16 +26,21 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     engine.width = 393
     engine.configureForField()
 
-    let layout = engine.layout
-    for round in 0..<40 {
-        let jitter = Double(round % 3 - 1) * 0.04
-        let labels = "abcdefghijklmnopqrstuvwxyz".map { letter -> TouchLabel in
-            let key = layout.key(.character(String(letter)))!
-            return TouchLabel(point: CGPoint(x: key.frame.midX + (0.18 + jitter) * key.frame.width,
-                                             y: key.frame.midY + (0.1 + jitter) * key.frame.height), letter: letter)
+    func teach(aim: Double) {
+        let layout = engine.layout
+        for round in 0..<40 {
+            let jitter = Double(round % 3 - 1) * 0.04
+            let labels = "abcdefghijklmnopqrstuvwxyz".map { letter -> TouchLabel in
+                let key = layout.key(.character(String(letter)))!
+                return TouchLabel(point: CGPoint(x: key.frame.midX + (aim + jitter) * key.frame.width,
+                                                 y: key.frame.midY + (0.1 + jitter) * key.frame.height), letter: letter)
+            }
+            learning.learn(labels, layout: layout, source: .keep)
         }
-        learning.learn(labels, layout: layout, source: .keep)
     }
+    teach(aim: 0.18)
+    learning.keep("Ive")
+    learning.keep("Brisolde")
 
     var seed: UInt64 = 7
     func noise() -> Double {
@@ -86,12 +91,31 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     for _ in 0..<5 { press(.delete) }
     ["great", "Sonnenblumenfeld"].forEach(word)
 
-    // English only: an edge miss of n on m in `around`, fixed with the suggestion strip.
+    // English only, on a narrower keyboard this typist hits far right of each key's center: an
+    // edge miss of n on m in `around`. Under Adaptive its last letter is deleted and typed again,
+    // under Standard the strip fixes it. The pick goes last: what it teaches the session's fast
+    // aim is not in the export.
     autocorrect.german = nil
-    type("arou")
+    engine.width = 390
+    teach(aim: 0.3)
+    func center(_ letters: String) {
+        for letter in letters {
+            let key = engine.layout.key(.character(String(letter)))!
+            press(CGPoint(x: key.frame.midX, y: key.frame.midY))
+        }
+    }
     let m = engine.layout.key(.character("m"))!
+    autocorrect.hitAreas = .adaptive
+    center("arou")
     press(CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY))
-    type("d")
+    center("d")
+    press(.delete)
+    center("d")
+    press(.space)
+    autocorrect.hitAreas = .standard
+    center("arou")
+    press(CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY))
+    center("d")
     await engine.waitForSuggestions()
     guard let around = engine.suggestions.first(where: { $0.replacement == "around" }) else {
         throw ReplayError("The strip offers no `around` for the fixture's edge miss")

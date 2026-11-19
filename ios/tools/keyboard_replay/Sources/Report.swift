@@ -46,8 +46,8 @@ struct Reproduction: Codable {
     var literalMatches = 0
     var commits = 0
     var commitMatches = 0
-    /// Committed by a strip pick, or edited again after the separator before the user moved on.
-    var commitsNotComparable = 0
+    /// Committed by a strip pick; replayed with the same pick.
+    var picked = 0
     /// Corrected by system spelling, which the replay does not have.
     var systemSpelling = 0
 }
@@ -69,35 +69,36 @@ struct Report: Codable {
     var words: [WordLine]?
 
     /// `results[i]`: the variants' replays of the word, in `KeyboardHitAreas.allCases` order.
-    static func build(words logged: [TypingLogWord], results: [Result<[ReplayedWord], SkipReason>],
-                      isKnown: (Int, TypingLogWord) -> Bool, showWords: Bool) -> Report {
+    /// `results[i]`: the word's preparation and its replays in `KeyboardHitAreas.allCases` order.
+    static func build(words logged: [TypingLogWord], results: [Result<(PreparedWord, [ReplayedWord]), SkipReason>],
+                      showWords: Bool) -> Report {
         var report = Report(exported: logged.count)
         let variants = KeyboardHitAreas.allCases
         let baseline = variants[0]
         for variant in variants.dropFirst() { report.changes["\(baseline.rawValue)->\(variant.rawValue)"] = Change() }
         var lines: [WordLine] = []
-        for (index, (word, result)) in zip(logged, results).enumerated() {
-            let replays: [ReplayedWord]
+        for (word, result) in zip(logged, results) {
+            let prepared: PreparedWord, replays: [ReplayedWord]
             switch result {
-            case .success(let replayed): replays = replayed
+            case .success(let replayed): (prepared, replays) = replayed
             case .failure(let reason): report.skipped[reason.rawValue, default: 0] += 1; continue
             }
             report.replayed += 1
-            let known = isKnown(index, word)
+            let known = prepared.known
             var reproduced = true
             if let index = variants.firstIndex(where: { $0.rawValue == word.hitAreas }) {
                 let replay = replays[index]
                 var reproduction = report.reproduction[word.hitAreas, default: Reproduction()]
                 reproduction.literals += 1
-                if replay.literal == word.literal { reproduction.literalMatches += 1 } else { reproduced = false }
+                if replay.literal == prepared.plan.literal { reproduction.literalMatches += 1 } else { reproduced = false }
                 if let commit = word.commit {
                     if commit.correction == .spelling {
                         reproduction.systemSpelling += 1
-                    } else if commitIsComparable(word, commit) {
+                    } else if commit.kind == .pick {
+                        reproduction.picked += 1
+                    } else {
                         reproduction.commits += 1
                         if replay.committed == commit.text { reproduction.commitMatches += 1 } else { reproduced = false }
-                    } else {
-                        reproduction.commitsNotComparable += 1
                     }
                 }
                 report.reproduction[word.hitAreas] = reproduction
@@ -127,23 +128,14 @@ struct Report: Codable {
         return report
     }
 
-    /// The logged taps stood at the separator unless the word was picked, reopened or typed on after an undo.
-    static func commitIsComparable(_ word: TypingLogWord, _ commit: TypingLogWord.Commit) -> Bool {
-        guard commit.kind == .literal || commit.kind == .autocorrect,
-              !word.corrections.contains(where: { $0.kind == .reopen }) else { return false }
-        guard let undo = word.corrections.firstIndex(where: { $0.kind == .undo }) else { return true }
-        return undo == word.corrections.count - 1 && word.corrections[undo].to == word.literal
-    }
-
     func text() -> String {
         var out = "Typing log replay: \(exported) words exported, \(replayed) replayed\n"
-        if reproduction.isEmpty { out += "Reproduction: no replayed word was logged with a setting this tool knows\n" }
-        for (setting, r) in reproduction.sorted(by: { $0.key < $1.key }) {
-            out += "Reproduction (\(setting.capitalized)): committed word matches the iPhone for"
+        for setting in KeyboardHitAreas.allCases {
+            guard let r = reproduction[setting.rawValue] ?? (setting == .standard ? Reproduction() : nil) else { continue }
+            out += "Reproduction (\(setting.rawValue.capitalized)): committed word matches the iPhone for"
             out += " \(r.commitMatches)/\(r.commits) words, \(Self.percent(r.commitMatches, r.commits))\n"
-            out += "  not compared: \(r.systemSpelling) fixed by system spelling,"
-            out += " \(r.commitsNotComparable) picked or edited after the separator\n"
-            out += "  typed letters match for \(r.literalMatches)/\(r.literals) words\n"
+            out += "  not compared: \(r.systemSpelling) fixed by system spelling, \(r.picked) picked from the strip\n"
+            out += "  letters at the first boundary match for \(r.literalMatches)/\(r.literals) words\n"
         }
         if !skipped.isEmpty {
             out += "Skipped: " + skipped.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }

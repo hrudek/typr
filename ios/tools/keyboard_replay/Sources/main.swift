@@ -82,26 +82,24 @@ func run(_ arguments: [String]) async throws {
     defer { try? FileManager.default.removeItem(at: scratch) }
     let replayer = try Replayer(words: words, export: export, learningStore: scratch)
 
-    var results: [Result<[ReplayedWord], SkipReason>] = []
+    var results: [Result<(PreparedWord, [ReplayedWord]), SkipReason>] = []
     var previous: [String] = []
-    for (index, word) in export.words.enumerated() {
+    for word in export.words {
         let context = previous.joined()
-        var replays: [ReplayedWord] = []
-        var skip: SkipReason?
+        var result = replayer.prepare(word).map { ($0, [ReplayedWord]()) }
         for hitAreas in KeyboardHitAreas.allCases {
-            switch try replayer.replay(word, at: index, context: context, hitAreas: hitAreas) {
-            case .success(let replay): replays.append(replay)
-            case .failure(let reason): skip = reason
-            }
+            guard case .success((let prepared, let replays)) = result else { break }
+            result = try await replayer.replay(word, prepared, context: context, hitAreas: hitAreas)
+                .map { (prepared, replays + [$0]) }
         }
-        results.append(skip.map { .failure($0) } ?? .success(replays))
+        results.append(result)
         if Replayer.separators.contains(word.end), !word.meant.isEmpty {
             previous = Array((previous + [word.meant + word.end]).suffix(3))
         } else {
             previous = []
         }
     }
-    let report = Report.build(words: export.words, results: results, isKnown: replayer.isKnown, showWords: showWords)
+    let report = Report.build(words: export.words, results: results, showWords: showWords)
     let text: String
     if json {
         let encoder = JSONEncoder()
