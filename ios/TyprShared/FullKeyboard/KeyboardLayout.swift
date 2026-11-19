@@ -36,12 +36,13 @@ nonisolated enum KeyboardOrientation: String, Equatable, Sendable {
     init(container: CGSize, split: Bool = false) {
         let isLandscape = container.width > container.height
         let isWide = min(container.width, container.height) >= Self.wideShortSide
-        self = switch (isWide, isLandscape) {
+        let full: KeyboardOrientation = switch (isWide, isLandscape) {
         case (false, false): .portrait
         case (false, true): .landscape
         case (true, false): .widePortrait
-        case (true, true): split ? .splitLandscape : .wideLandscape
+        case (true, true): .wideLandscape
         }
+        self = split && full.allowsSplit ? .splitLandscape : full
     }
 
     var isLandscape: Bool { self == .landscape || self == .wideLandscape || self == .splitLandscape }

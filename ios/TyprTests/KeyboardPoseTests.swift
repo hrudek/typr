@@ -128,6 +128,17 @@ final class KeyboardPoseTests: XCTestCase {
         }
     }
 
+    func testTheJoinedSpaceAndTyprKeycapTakesOnlyTheRightSpaceBarWhenSplit() throws {
+        for width: CGFloat in [801, innerLandscape.width] {
+            let layout = KeyboardLayout(width: width, orientation: .splitLandscape)
+            let spaces = layout.keys.filter { $0.kind == .space }.sorted { $0.frame.minX < $1.frame.minX }
+            XCTAssertEqual(spaces.count, 2)
+            let joined = try XCTUnwrap(JoinedSpaceKeycap(layout: layout))
+            XCTAssertEqual(joined.space, spaces[1].frame, "width \(width)")
+            XCTAssertNotEqual(joined.space, spaces[0].frame, "the left space bar keeps its own keycap")
+        }
+    }
+
     /// The keyboard extension and the settings preview both hand `FullKeyboardView` a display size.
     @MainActor
     func testTheKeyboardViewTakesItsGeometryFromTheDisplaySize() {
