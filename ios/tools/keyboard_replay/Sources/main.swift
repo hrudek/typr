@@ -44,7 +44,7 @@ func readExport(_ path: String) throws -> TypingLogExport {
 }
 
 @MainActor
-func run(_ arguments: [String]) throws {
+func run(_ arguments: [String]) async throws {
     var input: String?
     var showWords = false, json = false
     var out: URL?
@@ -70,7 +70,7 @@ func run(_ arguments: [String]) throws {
         throw ReplayError("Cannot locate the WordData folder next to keyboard-replay")
     }
     let words = try WordData(directory: executable.deletingLastPathComponent().appendingPathComponent("WordData"))
-    if let fixture { return try makeFixture(words: words, to: fixture) }
+    if let fixture { return try await makeFixture(words: words, to: fixture) }
     guard let input else { throw ReplayError(usage) }
     if let out { try requireOutsideCheckout(out) }
     let export = try readExport(input)
@@ -88,7 +88,7 @@ func run(_ arguments: [String]) throws {
         let context = previous.joined()
         var replays: [ReplayedWord] = []
         var skip: SkipReason?
-        for hitAreas in HitAreas.allCases {
+        for hitAreas in KeyboardHitAreas.allCases {
             switch try replayer.replay(word, at: index, context: context, hitAreas: hitAreas) {
             case .success(let replay): replays.append(replay)
             case .failure(let reason): skip = reason
@@ -119,7 +119,7 @@ func run(_ arguments: [String]) throws {
 }
 
 do {
-    try MainActor.assumeIsolated { try run(Array(CommandLine.arguments.dropFirst())) }
+    try await run(Array(CommandLine.arguments.dropFirst()))
 } catch {
     FileHandle.standardError.write(Data("keyboard-replay: \(error)\n".utf8))
     exit(1)

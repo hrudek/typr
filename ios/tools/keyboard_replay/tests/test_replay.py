@@ -45,20 +45,20 @@ class ReplayTests(unittest.TestCase):
 
     def test_fixture_reproduces_what_the_keyboard_committed(self):
         report = self.report()
-        self.assertEqual(report["exported"], 25)
-        self.assertEqual(report["replayed"], 23)
+        self.assertEqual(report["exported"], 26)
+        self.assertEqual(report["replayed"], 24)
         self.assertEqual(report["skipped"], {"swipe": 1, "tap without point": 1})
         reproduction = report["reproduction"]["standard"]
         self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
-        self.assertEqual(reproduction["literals"], 23)
+        self.assertEqual(reproduction["literals"], 24)
         self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
         self.assertEqual(reproduction["commits"], 21)
-        self.assertEqual(reproduction["commitsNotComparable"], 1)
+        self.assertEqual(reproduction["commitsNotComparable"], 2)
 
     def test_reproduction_leads_the_report(self):
         lines = self.run_tool().stdout.splitlines()
         self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 21/21 words, 100.0%")
-        self.assertEqual(lines[2], "  not compared: 0 fixed by system spelling, 1 picked or edited after the separator")
+        self.assertEqual(lines[2], "  not compared: 0 fixed by system spelling, 2 picked or edited after the separator")
 
     def test_a_fresh_fixture_reproduces_with_the_current_keyboard_code(self):
         fresh = self.dir / "fresh.json"
@@ -83,15 +83,21 @@ class ReplayTests(unittest.TestCase):
         report = self.report("--show-words", export=export)
         self.assertEqual([(line["meant"], line["replayed"]["standard"]) for line in report["words"]], [("teh", "teh")])
 
-    def test_scores_against_the_meant_word(self):
-        standard = self.report()["variants"]["standard"]
-        # The undone `teh` -> `the` is the only miss. Unknown: the two compounds, Brisolde (nobody
-        # taught it), `I` (not in the lists) and the first `teh`, typed before the undo kept it.
-        self.assertEqual(standard["known"]["wordErrors"], 0)
-        self.assertEqual(standard["unknown"]["wordErrors"], 1)
-        self.assertEqual(standard["unknown"]["letterErrors"], 2)
-        self.assertEqual(standard["unknown"]["words"], 5)
-        self.assertEqual(standard["known"]["words"] + standard["unknown"]["words"], 23)
+    def test_scores_both_settings_against_the_meant_word(self):
+        report = self.report()
+        # Misses: the undone `teh` -> `the` and the edge miss `aroumd`, fixed on the iPhone with a pick.
+        # Unknown: the two compounds, Brisolde (nobody taught it), `I` (not in the lists) and the first
+        # `teh`, typed before the undo kept it.
+        for setting in ["standard", "adaptive"]:
+            scores = report["variants"][setting]
+            self.assertEqual(scores["known"]["wordErrors"], 1)
+            self.assertEqual(scores["known"]["letterErrors"], 1)
+            self.assertEqual(scores["unknown"]["wordErrors"], 1)
+            self.assertEqual(scores["unknown"]["letterErrors"], 2)
+            self.assertEqual(scores["unknown"]["words"], 5)
+            self.assertEqual(scores["known"]["words"] + scores["unknown"]["words"], 24)
+        self.assertEqual(report["changes"], {"standard->adaptive": {"fixed": {"known": 0, "unknown": 0},
+                                                                    "broken": {"known": 0, "unknown": 0}}})
 
     def test_words_are_listed_only_on_request(self):
         export = copy.deepcopy(self.fixture)

@@ -2,9 +2,9 @@ import Foundation
 import UIKit
 
 /// Writes the synthetic export: invented text typed through the keyboard engine with the typing log
-/// recorder attached, the way a user types (slips, backspace, undo, an edit after the space).
+/// recorder attached, the way a user types (slips, backspace, undo, an edit after the space, a pick).
 @MainActor
-func makeFixture(words data: WordData, to url: URL) throws {
+func makeFixture(words data: WordData, to url: URL) async throws {
     let protectedWords = ["Kalvenor", "Ive"]
     var logged: [TypingLogWord] = []
     var clockDate = Date(timeIntervalSince1970: 1_790_000_000)
@@ -85,6 +85,18 @@ func makeFixture(words data: WordData, to url: URL) throws {
     ["quiet", "and", "i", "Brisolde", "fine"].forEach(word)
     for _ in 0..<5 { press(.delete) }
     ["great", "Sonnenblumenfeld"].forEach(word)
+
+    // English only: an edge miss of n on m in `around`, fixed with the suggestion strip.
+    autocorrect.german = nil
+    type("arou")
+    let m = engine.layout.key(.character("m"))!
+    press(CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY))
+    type("d")
+    await engine.waitForSuggestions()
+    guard let around = engine.suggestions.first(where: { $0.replacement == "around" }) else {
+        throw ReplayError("The strip offers no `around` for the fixture's edge miss")
+    }
+    engine.acceptSuggestion(around)
     type("today")
     engine.endTypingLogWord("dismiss")
 

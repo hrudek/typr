@@ -50,74 +50,78 @@
     "counts" : {
       "and" : {
         "count" : 2,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
+      },
+      "around" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "fahre" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "ich" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "ive" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "kalvenor" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "mit" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "morgen" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "quiet" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "teh" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "the" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "was" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       },
       "zum" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T06:29:50Z"
+        "lastUpdated" : "2026-11-19T06:42:46Z"
       }
     },
     "kept" : {
-      "teh" : "2026-11-19T06:29:50Z"
+      "teh" : "2026-11-19T06:42:46Z"
     },
     "layouts" : {
       "portrait-392-strip-no-globe" : {
         "global" : {
-          "covarianceXY" : 0.0009666822496819346,
-          "meanX" : 0.13958263165865986,
-          "meanY" : 0.07382849290337862,
+          "covarianceXY" : 0.0004565956498956828,
+          "meanX" : 0.1479494824364387,
+          "meanY" : 0.07404621212513544,
           "n" : 256,
-          "varianceX" : 0.007647626217743795,
-          "varianceY" : 0.0016230905431197107
+          "varianceX" : 0.009717934659337435,
+          "varianceY" : 0.0016764913222600565
         },
         "keys" : {
           "a" : {
-            "covarianceXY" : 0.0007498296893870434,
-            "meanX" : 0.14818891350393062,
-            "meanY" : 0.07465134881657791,
-            "n" : 45,
-            "varianceX" : 0.0008055707493129113,
-            "varianceY" : 0.0011169730306747046
+            "covarianceXY" : 0.0007563952201664271,
+            "meanX" : 0.14935997070686816,
+            "meanY" : 0.07508526207686353,
+            "n" : 46,
+            "varianceX" : 0.0008497702154839854,
+            "varianceY" : 0.0011011636405540593
           },
           "b" : {
             "covarianceXY" : 0.0007322784048852757,
@@ -136,12 +140,12 @@
             "varianceY" : 0.0007363648876073925
           },
           "d" : {
-            "covarianceXY" : 0.0007041676974136233,
-            "meanX" : 0.1507573318132556,
-            "meanY" : 0.07928376067399318,
-            "n" : 42,
-            "varianceX" : 0.0007655293588916184,
-            "varianceY" : 0.0006657145484286967
+            "covarianceXY" : 0.0007124184684102977,
+            "meanX" : 0.14982589009134017,
+            "meanY" : 0.07865425105567139,
+            "n" : 43,
+            "varianceX" : 0.0007841648651609412,
+            "varianceY" : 0.0006668766738458129
           },
           "e" : {
             "covarianceXY" : 0.000677520373059218,
@@ -216,20 +220,20 @@
             "varianceY" : 0.0008933189775610331
           },
           "n" : {
-            "covarianceXY" : 0.0007343845203042108,
-            "meanX" : 0.15250677878124183,
-            "meanY" : 0.07784340801062353,
-            "n" : 44,
-            "varianceX" : 0.0008666183412765837,
-            "varianceY" : 0.0007935159941869994
+            "covarianceXY" : 4.267260388917953e-05,
+            "meanX" : 0.16138026084171625,
+            "meanY" : 0.07611355449927634,
+            "n" : 45,
+            "varianceX" : 0.004311862246527585,
+            "varianceY" : 0.0009075476049389771
           },
           "o" : {
-            "covarianceXY" : 0.0006540820106255156,
-            "meanX" : 0.15308437775732164,
-            "meanY" : 0.08032933254424035,
-            "n" : 42,
-            "varianceX" : 0.0008470999058316157,
-            "varianceY" : 0.0008044104029857993
+            "covarianceXY" : 0.0006227344831311437,
+            "meanX" : 0.1522882667195663,
+            "meanY" : 0.08081192608721066,
+            "n" : 43,
+            "varianceX" : 0.0008540192049678854,
+            "varianceY" : 0.0007954848384758099
           },
           "p" : {
             "covarianceXY" : 0.00073227840488527,
@@ -248,12 +252,12 @@
             "varianceY" : 0.0006867684449915717
           },
           "r" : {
-            "covarianceXY" : 0.0005540107580509065,
-            "meanX" : 0.1496556765644302,
-            "meanY" : 0.07866606858645632,
-            "n" : 43,
-            "varianceX" : 0.0009053252718736959,
-            "varianceY" : 0.0009254079864346956
+            "covarianceXY" : 0.0005838240926907735,
+            "meanX" : 0.15024748519470862,
+            "meanY" : 0.08033240266585424,
+            "n" : 44,
+            "varianceX" : 0.0008998099080724265,
+            "varianceY" : 0.0010237727651020035
           },
           "s" : {
             "covarianceXY" : 0.0006971977120116697,
@@ -272,12 +276,12 @@
             "varianceY" : 0.000789203800018336
           },
           "u" : {
-            "covarianceXY" : 0.001976685546649457,
-            "meanX" : 0.13474470308966485,
-            "meanY" : 0.07612501565908356,
-            "n" : 43,
-            "varianceX" : 0.0135932334428675,
-            "varianceY" : 0.0008414209559291499
+            "covarianceXY" : 0.0019045445654359426,
+            "meanX" : 0.1368878847994038,
+            "meanY" : 0.07582968958758034,
+            "n" : 44,
+            "varianceX" : 0.013481805116327229,
+            "varianceY" : 0.0008260481043912151
           },
           "v" : {
             "covarianceXY" : 0.0007471797198724697,
@@ -320,7 +324,7 @@
             "varianceY" : 0.0007918177989049628
           }
         },
-        "lastUpdated" : "2026-11-19T06:29:50Z",
+        "lastUpdated" : "2026-11-19T06:42:46Z",
         "signature" : {
           "orientation" : "portrait",
           "showsGlobe" : false,
@@ -340,8 +344,8 @@
     "rejected" : [
       {
         "context" : "house was",
-        "globalRemaining" : 59,
-        "remaining" : 251,
+        "globalRemaining" : 58,
+        "remaining" : 250,
         "replacement" : "the",
         "typed" : "teh"
       }
@@ -2282,13 +2286,107 @@
     },
     {
       "at" : "2026-09-21T14:13:45Z",
+      "commit" : {
+        "kind" : "pick",
+        "text" : "around"
+      },
+      "corrections" : [
+        {
+          "chip" : "primary",
+          "from" : "aroumd",
+          "kind" : "pick",
+          "to" : "around"
+        }
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "aroumd",
+      "meant" : "around",
+      "taps" : [
+        {
+          "key" : "a",
+          "t" : 0,
+          "text" : "a",
+          "x" : 49.9,
+          "y" : 118.8
+        },
+        {
+          "key" : "r",
+          "t" : 160,
+          "text" : "r",
+          "x" : 145.38,
+          "y" : 66.01
+        },
+        {
+          "key" : "o",
+          "t" : 320,
+          "text" : "o",
+          "x" : 336.19,
+          "y" : 63.16
+        },
+        {
+          "key" : "u",
+          "t" : 480,
+          "text" : "u",
+          "x" : 263.24,
+          "y" : 61.04
+        },
+        {
+          "key" : "m",
+          "t" : 640,
+          "text" : "m",
+          "x" : 295,
+          "y" : 169.5
+        },
+        {
+          "key" : "d",
+          "t" : 800,
+          "text" : "d",
+          "x" : 123.57,
+          "y" : 116.42
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:46Z",
       "corrections" : [
 
       ],
       "end" : "dismiss",
       "hitAreas" : "standard",
       "languages" : [
-        "de",
         "en"
       ],
       "layout" : {
@@ -2327,41 +2425,41 @@
           "key" : "t",
           "t" : 0,
           "text" : "t",
-          "x" : 185,
-          "y" : 62.8
+          "x" : 185.91,
+          "y" : 64.79
         },
         {
           "key" : "o",
           "t" : 160,
           "text" : "o",
-          "x" : 338.38,
-          "y" : 66.01
+          "x" : 340.33,
+          "y" : 57.77
         },
         {
           "key" : "d",
           "t" : 320,
           "text" : "d",
-          "x" : 123.89,
-          "y" : 119.16
+          "x" : 122.62,
+          "y" : 117.89
         },
         {
           "key" : "a",
           "t" : 480,
           "text" : "a",
-          "x" : 50.94,
-          "y" : 117.04
+          "x" : 49.8,
+          "y" : 119.34
         },
         {
           "key" : "y",
           "t" : 640,
           "text" : "y",
-          "x" : 220.07,
-          "y" : 60.42
+          "x" : 220.54,
+          "y" : 63.24
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:46Z",
+      "at" : "2026-09-21T14:13:47Z",
       "commit" : {
         "kind" : "swipe",
         "text" : "weather"
@@ -2383,7 +2481,7 @@
       ]
     },
     {
-      "at" : "2026-09-21T14:13:46Z",
+      "at" : "2026-09-21T14:13:47Z",
       "corrections" : [
 
       ],

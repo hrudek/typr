@@ -56,3 +56,9 @@ validates words against the bundled word lists and never makes spelling-only cor
 the learning saved at export time for every word, minus the undos and keeps the log shows from
 that word on; touch aim and word counts are not rewound. It sees at most the three words logged
 before each word as context.
+
+## Tests
+
+`python3 -m unittest discover -s ios/tools/keyboard_replay/tests` builds the tool and replays
+`fixture/synthetic.json`, invented text typed through the engine. After changing the export format,
+regenerate it with `keyboard-replay --make-fixture ios/tools/keyboard_replay/fixture/synthetic.json`.

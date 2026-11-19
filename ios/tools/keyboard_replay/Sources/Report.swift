@@ -68,12 +68,13 @@ struct Report: Codable {
     var changes: [String: Change] = [:]
     var words: [WordLine]?
 
-    /// `results[i]`: the variants' replays of the word, in `HitAreas.allCases` order.
+    /// `results[i]`: the variants' replays of the word, in `KeyboardHitAreas.allCases` order.
     static func build(words logged: [TypingLogWord], results: [Result<[ReplayedWord], SkipReason>],
                       isKnown: (Int, TypingLogWord) -> Bool, showWords: Bool) -> Report {
         var report = Report(exported: logged.count)
-        let variants = HitAreas.allCases
+        let variants = KeyboardHitAreas.allCases
         let baseline = variants[0]
+        for variant in variants.dropFirst() { report.changes["\(baseline.rawValue)->\(variant.rawValue)"] = Change() }
         var lines: [WordLine] = []
         for (index, (word, result)) in zip(logged, results).enumerated() {
             let replays: [ReplayedWord]
@@ -148,7 +149,7 @@ struct Report: Codable {
             out += "Skipped: " + skipped.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }
                 .joined(separator: ", ") + "\n"
         }
-        for variant in HitAreas.allCases {
+        for variant in KeyboardHitAreas.allCases {
             guard let split = variants[variant.rawValue] else { continue }
             out += "\n\(variant.rawValue.capitalized) vs meant word:\n"
             out += Self.line("known", split.known) + Self.line("unknown", split.unknown)
@@ -160,7 +161,7 @@ struct Report: Codable {
         if let words {
             out += "\nChanged or not reproduced (\(words.count)):\n"
             for line in words {
-                let replays = HitAreas.allCases.compactMap { v in line.replayed[v.rawValue].map { "\(v.rawValue) \($0)" } }
+                let replays = KeyboardHitAreas.allCases.compactMap { v in line.replayed[v.rawValue].map { "\(v.rawValue) \($0)" } }
                 out += "  meant \(line.meant) | logged \(line.logged) | " + replays.joined(separator: " | ")
                 out += line.known ? "\n" : " (unknown)\n"
             }

@@ -3,11 +3,6 @@ import UIKit
 
 typealias Language = SpatialWordDecoder.Language
 
-/// The hit-area setting a replay runs with; `rawValue` matches `TypingLogWord.hitAreas`.
-enum HitAreas: String, CaseIterable {
-    case standard
-}
-
 struct WordData {
     let lexicons: [Language: SpatialWordLexicon]
     let context: KeyboardContextModel?
@@ -190,13 +185,14 @@ final class Replayer {
     /// `context`: the text before the word in its field, as far as the log tells.
     /// `index`: the word's position in the export.
     func replay(_ word: TypingLogWord, at index: Int, context: String,
-                hitAreas: HitAreas) throws -> Result<ReplayedWord, SkipReason> {
+                hitAreas: KeyboardHitAreas) throws -> Result<ReplayedWord, SkipReason> {
         if let reason = Self.skipReason(word) { return .failure(reason) }
         guard let logged = word.layout, let layout = logged.keyboardLayout else { return .failure(.unknownLayout) }
         let languages = Set(word.languages.compactMap(Language.init(rawValue:)))
         let autocorrect = AutocorrectEngine(checker: english, learning: try session(before: index), spatialDecoder: decoder,
                                             contextResources: contextResources)
         autocorrect.loadProtectedLexicon(protected)
+        autocorrect.hitAreas = hitAreas
         autocorrect.englishEnabled = languages.contains(.english)
         autocorrect.german = languages.contains(.german) ? german : nil
         let target = ReplayTarget(text: context)

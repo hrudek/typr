@@ -40,7 +40,7 @@ sources=(
   FullKeyboard/SpatialWordRanking FullKeyboard/SwipeDecoder FullKeyboard/SwipeEncoder FullKeyboard/TouchAimDrift
   FullKeyboard/TypingLog FullKeyboard/TypingModelTypes Statistics/UsageStatistics
   Statistics/UsageStatisticsSession Statistics/UsageStatisticsStore DictationFeedback DictationFeedbackBridge
-  DictationLanguage SpeechEngineChoice TyprSettings
+  DictationLanguage SpeechEngineChoice TyprSettings FullKeyboard/FullKeyboardSettings
 )
 files=()
 for name in "${sources[@]}"; do files+=("$shared/$name.swift"); done
