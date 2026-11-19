@@ -45,7 +45,6 @@ final class PersonalTypingModel {
             covarianceXY = max(-limit, min(limit, (1 - weight) * (covarianceXY + weight * dx * dy)))
         }
 
-        /// The bounded running variances stand in for scatter per tap.
         var moments: SpatialTouchCalibration.Moments {
             let n = Double(n)
             return .init(n: n, meanX: meanX, meanY: meanY,
@@ -69,9 +68,6 @@ final class PersonalTypingModel {
         var global: TouchStats?
         var space: TouchStats?
 
-        /// Letters' within-key covariance, so taps on common keys teach rare and unseen keys
-        /// how steady the typist is. Each key contributes at most 256 effective observations;
-        /// iteration order is fixed.
         var pooled: SpatialTouchCalibration.Spread {
             .init(pooling: keys.keys.sorted().compactMap { keys[$0].flatMap { $0.isValid ? $0.moments : nil } })
         }
@@ -80,7 +76,6 @@ final class PersonalTypingModel {
             SpatialTouchCalibration.posterior(stats?.moments ?? .init(), spread: pooled)
         }
 
-        /// Space keeps its own spread: its cell differs from a letter's.
         var spaceKey: SpatialTouchCalibration.Key? {
             space.map { SpatialTouchCalibration.posterior($0.moments, spread: .init(pooling: [$0.moments])) }
         }
@@ -228,6 +223,8 @@ final class PersonalTypingModel {
         var rejected: [TouchLabelRejection: Int] = [:]
     }
 
+    /// A key's posterior predictive: Student-t with `degrees` degrees of freedom whose
+    /// standard deviations are `sigmaX`, `sigmaY` and covariance `covarianceXY` (pitches).
     nonisolated struct KeySummary: Equatable, Sendable {
         let letter: String
         let n: Int
@@ -236,6 +233,7 @@ final class PersonalTypingModel {
         let sigmaX: Double
         let sigmaY: Double
         var covarianceXY: Double = 0
+        let degrees: Double
     }
 
     nonisolated struct LayoutSummary: Equatable, Sendable {
@@ -275,8 +273,6 @@ final class PersonalTypingModel {
         }
     }
 
-    /// The slow (persisted) posterior predictive the fast drift is measured against. Keys
-    /// without labels use the pooled spread and the layout-wide centre once any label exists.
     private static func slowKey(_ letter: String, in stats: LayoutStats) -> SpatialTouchCalibration.Key {
         let value = stats.keys[letter]
         let key = stats.slowKey(value)
@@ -332,9 +328,6 @@ final class PersonalTypingModel {
                     var stats = state.layouts[signature.id] ?? LayoutStats(signature: signature, lastUpdated: now())
                     activateAim(signature)
                     let letter = String(label.letter)
-                    // Prequential: the shared drift scores and learns this label against the
-                    // slow model BEFORE the slow aggregates absorb it. It starts with the
-                    // second pooled label, so it always has a learned reference.
                     if (stats.global?.n ?? 0) > 0,
                        let φ = TouchAimDrift.features(for: layout)[label.letter] {
                         fastDrift.update(x: x, y: y, slow: Self.slowKey(letter, in: stats), features: φ)
@@ -384,7 +377,6 @@ final class PersonalTypingModel {
         // on layout discontinuities; learning a different layout also activates a fresh field.
         let drift = fastLayout == stats.signature.id ? fastDrift : TouchAimDrift()
         // Migration does not invent an ordered global stream from old per-key data.
-        // Until the first pooled label, only legacy keys with their own labels are calibrated.
         let pooledReady = (stats.global?.n ?? 0) > 0
         let features = pooledReady ? TouchAimDrift.features(for: layout) : [:]
         var keys: [Character: SpatialTouchCalibration.Key] = [:]
@@ -510,8 +502,10 @@ final class PersonalTypingModel {
             LayoutSummary(signature: layout.signature, lastUpdated: layout.lastUpdated,
                 keys: layout.keys.sorted { $0.key < $1.key }.map { letter, stats in
                     let key = slowKey(letter, in: layout)
+                    let variance = key.degrees / (key.degrees - 2)
                     return KeySummary(letter: letter, n: stats.n, offsetX: key.offsetX, offsetY: key.offsetY,
-                                      sigmaX: key.sigmaX, sigmaY: key.sigmaY, covarianceXY: key.covarianceXY)
+                                      sigmaX: key.sigmaX * sqrt(variance), sigmaY: key.sigmaY * sqrt(variance),
+                                      covarianceXY: key.covarianceXY * variance, degrees: key.degrees)
                 })
         }
         return Summary(layouts: layouts, keptWords: state.kept.count, countedWords: state.counts.count,

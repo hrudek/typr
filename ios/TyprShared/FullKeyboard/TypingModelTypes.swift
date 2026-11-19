@@ -23,14 +23,10 @@ nonisolated struct KeyboardLayoutSignature: Hashable, Codable, Sendable {
     }
 }
 
-/// Read-only posterior-predictive tap densities in key pitches (frame width + gap, height + rowGap).
-/// Pitch units make every density invariant to the keyboard's physical size.
 // Normal-Inverse-Wishart touch posterior adapted from AVGVSTVS96/iikb
 // Packages/KeyboardModules/Sources/KeyboardCore/Correction/TouchModel.swift
 // at e05a0ab8a670478d97765d26ffb8493ed5b7ab66 (MIT).
 nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
-    /// Bivariate Student-t: centre offset, scale matrix (sigmaX², covarianceXY, sigmaY²) and
-    /// degrees of freedom. The one tap density shared by key assignment, word and boundary scoring.
     struct Key: Equatable, Sendable {
         let offsetX: Double
         let offsetY: Double
@@ -41,18 +37,15 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
 
         private var determinant: Double { sigmaX * sigmaX * sigmaY * sigmaY - covarianceXY * covarianceXY }
 
-        /// Squared Mahalanobis distance from the centre under the scale matrix.
         func mahalanobis(x: Double, y: Double) -> Double {
             let dx = x - offsetX, dy = y - offsetY
             return max(0, (sigmaY * sigmaY * dx * dx - 2 * covarianceXY * dx * dy + sigmaX * sigmaX * dy * dy) / determinant)
         }
 
-        /// Log density per square pitch. Sanitized by the snapshot initializer.
         func logDensity(x: Double, y: Double) -> Double {
             -log(2 * Double.pi) - 0.5 * log(determinant) - (degrees / 2 + 1) * log1p(mahalanobis(x: x, y: y) / degrees)
         }
 
-        /// Log density per pitch of the vertical marginal, a univariate Student-t.
         func logDensityY(_ y: Double) -> Double {
             let dy = y - offsetY, variance = sigmaY * sigmaY
             return lgamma((degrees + 1) / 2) - lgamma(degrees / 2) - 0.5 * log(degrees * Double.pi * variance)
@@ -60,14 +53,12 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
         }
     }
 
-    /// Sufficient statistics of one key's taps around their own mean.
     struct Moments: Equatable, Sendable {
         var n = 0.0
         var meanX = 0.0, meanY = 0.0
         var scatterXX = 0.0, scatterXY = 0.0, scatterYY = 0.0
     }
 
-    /// Expected within-key covariance of a group of keys, pooled around each key's own mean.
     struct Spread: Equatable, Sendable {
         let xx: Double, xy: Double, yy: Double
 
@@ -88,8 +79,6 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
         }
     }
 
-    /// Posterior predictive of a key's next tap: centre prior at the drawn centre worth
-    /// `centerPrior` taps, spread prior `spread` worth `priorWeight` taps.
     static func posterior(_ taps: Moments, spread: Spread) -> Key {
         let n = taps.n
         let kappa = centerPrior + n
@@ -106,18 +95,15 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
 
     let keys: [Character: Key]
     let space: Key?
-    /// iikb's touch-model priors: a key's centre is worth one tap at the drawn centre; the
-    /// pooled spread starts at `priorSpread` pitches worth ten taps.
     static let centerPrior = 1.0
     static let priorWeight = 10.0
     static let priorSpread = 0.20
-    /// A key before any of its own taps: the density of every untrained key.
     static let prior = posterior(Moments(), spread: .prior)
     /// One-hand thumb use moves far-side aim by up to about half a key; the one-pitch
     /// label gate and the 1.6-pitch decoder gate stay unchanged.
     static let maxOffset = 0.5
-    /// Numerical safety only: learned spreads stay far inside it.
     static let sigmaRange: ClosedRange<Double> = 0.02...1.0
+    static let degreesRange: ClosedRange<Double> = 3...1_000
 
     init(keys: [Character: Key], space: Key? = nil) {
         self.keys = keys.reduce(into: [:]) { result, entry in
@@ -128,13 +114,9 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
         self.space = space.flatMap { Self.sanitized($0) }
     }
 
-    /// Finite, bounded centres; both scale eigenvalues inside `sigmaRange`², hence a
-    /// positive determinant floor. Correlated spreads clamp their EIGENVALUES, preserving the
-    /// ellipse orientation; diagonal spreads clamp each axis exactly. `nil` for non-finite input
-    /// or degrees of freedom below one.
     static func sanitized(_ key: Key) -> Key? {
         guard key.offsetX.isFinite, key.offsetY.isFinite, key.sigmaX.isFinite, key.sigmaY.isFinite,
-              key.covarianceXY.isFinite, key.degrees.isFinite, key.degrees >= 1 else { return nil }
+              key.covarianceXY.isFinite, degreesRange.contains(key.degrees) else { return nil }
         let sx = max(sigmaRange.lowerBound, min(sigmaRange.upperBound, key.sigmaX))
         let sy = max(sigmaRange.lowerBound, min(sigmaRange.upperBound, key.sigmaY))
         let offsetX = max(-maxOffset, min(maxOffset, key.offsetX))

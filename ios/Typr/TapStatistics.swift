@@ -2,8 +2,6 @@ import Foundation
 import CoreGraphics
 
 /// Presentation math only. No inferred labels, text, or reconstructed individual taps.
-/// The board is rebuilt at the signature's 8-pt width-bucket midpoint (up to 4 pt off the
-/// original), so this describes the saved Gaussian model, not exact historical landings.
 /// Model counts are capped per key; they are not lifetime taps.
 nonisolated struct TapStatistics {
     struct Key: Identifiable {
@@ -40,7 +38,7 @@ nonisolated struct TapStatistics {
         let center = CGPoint(x: Double(key.frame.midX) + dx, y: Double(key.frame.midY) + dy)
         let xx = pow(summary.sigmaX * px, 2), yy = pow(summary.sigmaY * py, 2)
         let xy = summary.covarianceXY * px * py
-        let shares = landing(center: center, xx: xx, xy: xy, yy: yy, layout: board)
+        let shares = landing(center: center, xx: xx, xy: xy, yy: yy, degrees: summary.degrees, layout: board)
         var neighbors: [(letter: String, share: Double)] = []
         let onTarget: Double?
         if summary.n >= 20 {
@@ -99,21 +97,23 @@ nonisolated struct TapStatistics {
         return Array(deviations.prefix(3))
     }
 
-    // Gaussian lattice integration adapted from iikb Aim.swift (MIT); see notices.
+    // Lattice integration adapted from iikb Aim.swift (MIT); see notices.
     // Unlike upstream, off-board mass stays in the denominator. Hit regions include
     // modifiers: hitting delete/space or leaving the board is NOT an on-target letter.
-    static func landing(center: CGPoint, xx: Double, xy: Double, yy: Double,
+    /// Landing shares of a Student-t with covariance (xx, xy, yy) and `degrees` > 2.
+    static func landing(center: CGPoint, xx: Double, xy: Double, yy: Double, degrees: Double,
                         layout: KeyboardLayout) -> [String: Double] {
         guard center.x.isFinite, center.y.isFinite, xx.isFinite, xy.isFinite, yy.isFinite,
-              xx > 0, yy > 0, xx * yy > xy * xy else { return [:] }
-        let l11 = sqrt(xx), l21 = xy / l11, l22 = sqrt(max(0, yy - l21 * l21))
+              xx > 0, yy > 0, xx * yy > xy * xy, degrees.isFinite, degrees > 2 else { return [:] }
+        let scale = (degrees - 2) / degrees
+        let l11 = sqrt(xx * scale), l21 = xy * scale / l11, l22 = sqrt(max(0, yy * scale - l21 * l21))
         var shares: [String: Double] = [:]
         var total = 0.0
-        for i in -24...24 {
-            let a = 3.5 * Double(i) / 24
-            for j in -24...24 {
-                let b = 3.5 * Double(j) / 24
-                let weight = exp(-(a * a + b * b) / 2)
+        for i in -48...48 {
+            let a = 7 * Double(i) / 48
+            for j in -48...48 {
+                let b = 7 * Double(j) / 48
+                let weight = pow(1 + (a * a + b * b) / degrees, -(degrees / 2 + 1))
                 total += weight
                 let point = CGPoint(x: Double(center.x) + l11 * a, y: Double(center.y) + l21 * a + l22 * b)
                 if let letter = layout.hitTest(point)?.character { shares[letter, default: 0] += weight }

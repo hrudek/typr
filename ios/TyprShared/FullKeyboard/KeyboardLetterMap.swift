@@ -25,9 +25,6 @@ nonisolated enum KeyboardLetterMap {
         let finiteLabelMasks: [UInt32]
     }
 
-    /// Prepared once per physical key, not once per tap/key pair. All scale-matrix
-    /// inverses and normalizers are immutable throughout the search. No extra score
-    /// approximation: the independent frozen-score DP checks this representation too.
     struct FrozenKey {
         let frame: CGRect
         let pitchX: Double, pitchY: Double

@@ -64,10 +64,6 @@ nonisolated struct KeyboardBoundaryTouch: Equatable, Sendable {
         }
     }
 
-    /// Predictive Space density: uniform horizontal mass across the bar, the vertical marginal
-    /// of the learned Space posterior (the untrained prior without Space labels). Unlike a giant
-    /// circular key density this does not prefer the bar's centre over an ordinary
-    /// left/right thumb Space.
     static func spaceDensity(_ point: CGPoint, layout: KeyboardLayout,
                              calibration: SpatialTouchCalibration? = nil) -> Double? {
         guard point.x.isFinite, point.y.isFinite, let space = layout.key(.space) else { return nil }

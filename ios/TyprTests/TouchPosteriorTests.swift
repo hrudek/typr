@@ -2,8 +2,6 @@ import Foundation
 import XCTest
 @testable import Typr
 
-/// The Normal-Inverse-Wishart posterior predictive touch density. Golden values were checked
-/// against an independent Python computation (`ios/tools/keyboard_replay/tests/test_touch_posterior.py`).
 @MainActor
 final class TouchPosteriorTests: XCTestCase {
     private let layout = KeyboardLayout(width: 393)
@@ -57,7 +55,6 @@ final class TouchPosteriorTests: XCTestCase {
 
     func testUntrainedKeysUseThePriorPosterior() throws {
         let prior = SpatialTouchCalibration.prior
-        // κ₀ = 1, ν₀ = 10, Ψ₀ = 7 · .20² I: scale (κ+1)/(κ(ν−1)) Ψ₀ with 9 degrees of freedom.
         XCTAssertEqual(prior.sigmaX * prior.sigmaX, 2.0 / 9 * 7 * 0.04, accuracy: 1e-15)
         XCTAssertEqual(prior.degrees, 9)
         let x = 0.3, y = -0.2
@@ -72,7 +69,6 @@ final class TouchPosteriorTests: XCTestCase {
         XCTAssertNotEqual(unseen.sigmaX, prior.sigmaX, "taps on f teach q how steady the typist is")
         XCTAssertLessThan(unseen.sigmaX, prior.sigmaX)
         XCTAssertEqual(unseen.degrees, prior.degrees, "q has no taps of its own")
-        // A key with its own taps is sharper than one with only the pooled spread.
         XCTAssertLessThan(try XCTUnwrap(three.keys["f"]).sigmaX, unseen.sigmaX)
     }
 
@@ -128,7 +124,6 @@ final class TouchPosteriorTests: XCTestCase {
     }
 
     func testCorrelatedDensityMatchesItsRotatedDiagonalForm() {
-        // Scale eigenvalues .05 and .01 along axes rotated by 30°.
         let angle = Double.pi / 6, c = cos(angle), s = sin(angle)
         let xx = 0.05 * c * c + 0.01 * s * s, yy = 0.05 * s * s + 0.01 * c * c, xy = (0.05 - 0.01) * c * s
         let tilted = SpatialTouchCalibration.Key(offsetX: 0.1, offsetY: -0.1, sigmaX: sqrt(xx), sigmaY: sqrt(yy),
@@ -153,10 +148,16 @@ final class TouchPosteriorTests: XCTestCase {
         let calibration = SpatialTouchCalibration(keys: [
             "a": .init(offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2, degrees: .nan),
             "b": .init(offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2, degrees: 0.5),
+            "d": .init(offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2, degrees: 1e308),
+            "e": .init(offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2, degrees: 1_000),
             "c": .init(offsetX: 0, offsetY: 0, sigmaX: 1e-9, sigmaY: 1e9, covarianceXY: 5),
         ])
         XCTAssertNil(calibration.keys["a"])
         XCTAssertNil(calibration.keys["b"])
+        XCTAssertNil(calibration.keys["d"])
+        let e = try XCTUnwrap(calibration.keys["e"])
+        XCTAssertTrue(e.logDensityY(0).isFinite)
+        XCTAssertTrue(e.logDensity(x: 0, y: 0).isFinite)
         let c = try XCTUnwrap(calibration.keys["c"])
         XCTAssertTrue(c.logDensity(x: 1e6, y: -1e6).isFinite)
         XCTAssertTrue(c.logDensityY(1e6).isFinite)
@@ -177,7 +178,6 @@ final class TouchPosteriorTests: XCTestCase {
         let row = Double((tap.y - space.frame.midY) / pitchY)
         XCTAssertEqual(try XCTUnwrap(KeyboardBoundaryTouch.spaceDensity(tap, layout: layout)),
                        prior.logDensityY(row) - log(width), accuracy: 1e-12)
-        // The marginal integrates to one.
         var mass = 0.0
         for i in -4000...4000 { mass += exp(prior.logDensityY(Double(i) * 0.001)) * 0.001 }
         XCTAssertEqual(mass, 1, accuracy: 1e-4)

@@ -64,7 +64,6 @@ final class PersonalTypingModelTests: XCTestCase {
         XCTAssertEqual(key.offsetX, SpatialTouchCalibration.maxOffset)
         XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
         model.resetFastAim()
-        // A steady typist is not widened to a fixed floor.
         let steady = try XCTUnwrap(model.calibration(for: layout)?.keys["a"]?.sigmaX)
         XCTAssertLessThan(steady, 0.10)
         XCTAssertGreaterThan(steady, SpatialTouchCalibration.sigmaRange.lowerBound)
@@ -72,7 +71,6 @@ final class PersonalTypingModelTests: XCTestCase {
         for _ in 0..<150 {
             model.learn([try label(-0.9), try label(0.9)], layout: layout, source: .keep)
         }
-        // Nor is a wide one narrowed to a fixed ceiling.
         let wide = try XCTUnwrap(model.calibration(for: layout)?.keys["a"]?.sigmaX)
         XCTAssertGreaterThan(wide, 0.50)
         XCTAssertLessThan(wide, SpatialTouchCalibration.sigmaRange.upperBound)

@@ -1,7 +1,6 @@
 import Foundation
 import CoreGraphics
 
-/// `--touch-posterior`: the learned touch densities after fixed labels, for an independent check.
 @MainActor
 func touchPosteriorReport() throws -> String {
     let taps: [(Double, Double)] = [

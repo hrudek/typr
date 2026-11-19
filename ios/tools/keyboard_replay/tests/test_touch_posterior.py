@@ -58,7 +58,6 @@ def log_t(key, u, v):
     du, dv = u - key["offsetX"], v - key["offsetY"]
     distance = (key["yy"] * du * du - 2 * key["xy"] * du * dv + key["xx"] * dv * dv) / det
     dof = key["degrees"]
-    # Bivariate Student-t: Γ((ν+2)/2) / (Γ(ν/2) ν π) = 1 / (2π).
     return (math.lgamma(dof / 2 + 1) - math.lgamma(dof / 2) - math.log(dof * math.pi) - 0.5 * math.log(det)
             - (dof / 2 + 1) * math.log1p(distance / dof))
 
@@ -85,7 +84,6 @@ class TouchPosteriorTests(unittest.TestCase):
         f = posterior(stats, pooled)
         q = posterior(moments([]), pooled)
         if n:
-            # An unseen key takes the layout-wide centre with the pooled spread.
             centre = posterior(stats, spread([]))
             q["offsetX"], q["offsetY"] = centre["offsetX"], centre["offsetY"]
         return f, q

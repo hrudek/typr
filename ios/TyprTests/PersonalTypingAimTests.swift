@@ -71,10 +71,8 @@ final class PersonalTypingAimTests: XCTestCase {
         let signature = KeyboardLayoutSignature(grid)
         var layout = PersonalTypingModel.LayoutStats(signature: signature, lastUpdated: Date())
         layout.keys["a"] = .init(n: 20, varianceX: 0.08, varianceY: 0.06, covarianceXY: 0.03)
-        // The pooled prior's scatter is worth ν₀ − 3 = 7 taps of .20-pitch spread (iikb).
         XCTAssertEqual(layout.pooled.xx, (7 * 0.04 + 20 * 0.08) / 27, accuracy: 1e-12)
         XCTAssertEqual(layout.pooled.xy, 20 * 0.03 / 27, accuracy: 1e-12)
-        // κ = 21, ν = 30: predictive scale (κ + 1) / (κ (ν − 1)) · Ψ.
         XCTAssertEqual(layout.slowKey(layout.keys["a"]).covarianceXY,
                        (7 * layout.pooled.xy + 20 * 0.03) * 22 / (21 * 29), accuracy: 1e-12)
         XCTAssertEqual(layout.slowKey(layout.keys["a"]).degrees, 29)
