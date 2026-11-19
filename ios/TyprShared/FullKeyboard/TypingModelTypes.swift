@@ -99,8 +99,6 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     static let priorWeight = 10.0
     static let priorSpread = 0.20
     static let prior = posterior(Moments(), spread: .prior)
-    /// One-hand thumb use moves far-side aim by up to about half a key; the one-pitch
-    /// label gate and the 1.6-pitch decoder gate stay unchanged.
     static let maxOffset = 0.5
     static let sigmaRange: ClosedRange<Double> = 0.02...1.0
     static let degreesRange: ClosedRange<Double> = 3...1_000
