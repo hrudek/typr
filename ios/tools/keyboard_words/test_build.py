@@ -27,9 +27,11 @@ class WordCompilerTests(unittest.TestCase):
         self.assertIsNone(self.lookup(a, "strasse"))
 
     def test_filters_without_case_or_digraph_guessing(self):
-        data = compile_words("hello 10\nHello 20\nhi 30\ncan't 40\na-b 50\nfür 60\n".encode(), "en")
-        self.assertEqual(struct.unpack_from("<I", data, 8)[0], 1)
+        data = compile_words("hello 10\nHello 20\nhi 30\ncan't 40\na-b 50\nfür 60\na 70\n".encode(), "en")
+        self.assertEqual(struct.unpack_from("<I", data, 8)[0], 2)
         self.assertEqual(self.lookup(data, "hello"), 10)
+        self.assertEqual(self.lookup(data, "hi"), 30)
+        self.assertIsNone(self.lookup(data, "a"))
 
     def test_rejects_invalid_counts_and_large_inputs(self):
         for raw in [b"hello 0", b"hello -1", b"hello 4294967296", b"hello nope", b"bad"]:
@@ -41,8 +43,8 @@ class WordCompilerTests(unittest.TestCase):
     def test_committed_resources_integrity_and_forward_only_tree(self):
         root = Path(__file__).resolve().parents[2] / "TyprShared/FullKeyboard/WordData"
         expected = {
-            "de": "20bba113005c244e68b52a18c41d613e4a65b4f9f12c1e02f8cae475fd966624",
-            "en": "30560b21132ddae8b65d27d7f5f52b274feec31d7ddaa10083e3ff90cec37fae",
+            "de": "9f44e7e6d71f1f214528f2a140743b65c2e798fda2cfe88775a6738b13c290e8",
+            "en": "ca0cf23d3ef0bddf0f633a20aa82d05e667dd848f35cc773f0531609f5903ff8",
         }
         for language, digest in expected.items():
             data = (root / f"keyboard-{language}.words").read_bytes()
