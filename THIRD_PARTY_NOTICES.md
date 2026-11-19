@@ -345,7 +345,7 @@ per-key aggregates. MIT, Copyright (c) 2026 Bassim Shahidy; the same full MIT no
 
 The per-key aim memories port `KeyTouches` and `Drift` (memories of about 30 and 3 taps, the
 prequential weights with a 1% fixed share) and `Posterior.aiming` / `Posterior(blending:)` from the
-same `TouchModel.swift` at the same revision into `PersonalTypingModel.KeyAim` and
+same `TouchModel.swift` at iikb `e05a0ab8a670478d97765d26ffb8493ed5b7ab66` into `PersonalTypingModel.KeyAim` and
 `SpatialTouchCalibration.aiming` / `blending`. They replace Typr's earlier shared affine drift.
 Typr keeps its own all-taps statistics and does not adopt the `recent` tap display.
 

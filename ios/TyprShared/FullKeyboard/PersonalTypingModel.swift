@@ -117,7 +117,7 @@ final class PersonalTypingModel {
             let best = scores.max() ?? 0
             let odds = zip(weights, scores).map { $0.0 * exp($0.1 - best) }
             let total = odds.reduce(0, +)
-            weights = odds.map { (1 - Self.switching) * $0 / total + Self.switching / 3 }
+            if total.isFinite, total > 0 { weights = odds.map { (1 - Self.switching) * $0 / total + Self.switching / 3 } }
             lately.add(x: x, y: y, memory: Self.lately)
             now.add(x: x, y: y, memory: Self.now)
         }
