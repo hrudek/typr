@@ -130,7 +130,7 @@ extension KeyboardHitAreas {
     var detail: String {
         switch self {
         case .standard: "Only taps in the narrow gap between keys use your learned aim."
-        case .adaptive: "When a word ends, a tap near a key edge can count as the neighboring key if that makes a known word. A made-up word one key away from a known word can change too; Delete right after undoes it."
+        case .adaptive: "Each tap counts as the key you most likely meant, from where you usually tap and which letter fits the word."
         }
     }
 }

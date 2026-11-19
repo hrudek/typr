@@ -46,10 +46,11 @@ final class PersonalTypingModel {
         }
 
         var calibration: SpatialTouchCalibration.Key {
-            let shrink = Double(n) / Double(n + 20)
+            let center = Double(n) / (Double(n) + SpatialTouchCalibration.centerPrior)
+            let shrink = Double(n) / (Double(n) + SpatialTouchCalibration.spreadPrior)
             let prior = SpatialTouchCalibration.staticSigma * SpatialTouchCalibration.staticSigma
             let raw = SpatialTouchCalibration.Key(
-                offsetX: shrink * meanX, offsetY: shrink * meanY,
+                offsetX: center * meanX, offsetY: center * meanY,
                 sigmaX: sqrt(shrink * varianceX + (1 - shrink) * prior),
                 sigmaY: sqrt(shrink * varianceY + (1 - shrink) * prior),
                 covarianceXY: shrink * covarianceXY)
@@ -79,7 +80,8 @@ final class PersonalTypingModel {
         /// Physical (untempered) spread: the prior is the reference spread, not .35.
         var pooled: SpatialTouchCalibration.Key {
             let prior = SpatialTouchCalibration.referenceSpread * SpatialTouchCalibration.referenceSpread
-            var n = 20.0, xx = 20 * prior, yy = 20 * prior, xy = 0.0
+            let weight = SpatialTouchCalibration.spreadPrior
+            var n = weight, xx = weight * prior, yy = weight * prior, xy = 0.0
             for letter in keys.keys.sorted() {
                 guard let s = keys[letter], s.isValid else { continue }
                 let weight = Double(s.n)
@@ -92,8 +94,9 @@ final class PersonalTypingModel {
         func slowKey(_ stats: TouchStats?) -> SpatialTouchCalibration.Key {
             let prior = pooled
             guard let stats else { return prior }
-            let w = Double(stats.n) / Double(stats.n + 20)
-            return .init(offsetX: w * stats.meanX, offsetY: w * stats.meanY,
+            let c = Double(stats.n) / (Double(stats.n) + SpatialTouchCalibration.centerPrior)
+            let w = Double(stats.n) / (Double(stats.n) + SpatialTouchCalibration.spreadPrior)
+            return .init(offsetX: c * stats.meanX, offsetY: c * stats.meanY,
                          sigmaX: sqrt(w * stats.varianceX + (1 - w) * prior.sigmaX * prior.sigmaX),
                          sigmaY: sqrt(w * stats.varianceY + (1 - w) * prior.sigmaY * prior.sigmaY),
                          covarianceXY: w * stats.covarianceXY + (1 - w) * prior.covarianceXY)
@@ -295,7 +298,8 @@ final class PersonalTypingModel {
     private static func slowKey(_ letter: String, in stats: LayoutStats) -> SpatialTouchCalibration.Key {
         let value = stats.keys[letter]
         let pooled = physical(stats.slowKey(value))
-        guard value == nil, let global = stats.global, global.n >= 20 else { return pooled }
+        guard value == nil, let global = stats.global,
+              global.n >= SpatialTouchCalibration.readyLabels else { return pooled }
         let center = global.calibration
         return physical(.init(offsetX: center.offsetX, offsetY: center.offsetY, sigmaX: pooled.sigmaX,
                               sigmaY: pooled.sigmaY, covarianceXY: pooled.covarianceXY))
@@ -362,7 +366,8 @@ final class PersonalTypingModel {
                     // Prequential: the shared drift scores and learns this label against the
                     // slow model BEFORE the slow aggregates absorb it. It starts only once
                     // pooled inference is ready, so it always has a calibrated reference.
-                    if (stats.global?.n ?? 0) >= 20, let φ = TouchAimDrift.features(for: layout)[label.letter] {
+                    if (stats.global?.n ?? 0) >= SpatialTouchCalibration.readyLabels,
+                       let φ = TouchAimDrift.features(for: layout)[label.letter] {
                         fastDrift.update(x: x, y: y, slow: Self.slowKey(letter, in: stats), features: φ)
                     }
                     stats.keys[letter, default: TouchStats()].update(x: x, y: y)
@@ -410,23 +415,24 @@ final class PersonalTypingModel {
         // on layout discontinuities; learning a different layout also activates a fresh field.
         let drift = fastLayout == stats.signature.id ? fastDrift : TouchAimDrift()
         // Migration does not invent an ordered global stream from old per-key data.
-        // Until 20 new pooled labels, legacy keys retain their per-key threshold.
-        let pooledReady = (stats.global?.n ?? 0) >= 20
+        // Until the first pooled label, legacy keys retain their per-key threshold.
+        let pooledReady = (stats.global?.n ?? 0) >= SpatialTouchCalibration.readyLabels
         let features = pooledReady ? TouchAimDrift.features(for: layout) : [:]
         var keys: [Character: SpatialTouchCalibration.Key] = [:]
         for character in "abcdefghijklmnopqrstuvwxyz" {
             let letter = String(character)
             guard layout.key(.character(letter)) != nil,
-                  pooledReady || (stats.keys[letter]?.n ?? 0) >= 20 else { continue }
+                  pooledReady || (stats.keys[letter]?.n ?? 0) >= SpatialTouchCalibration.readyLabels else { continue }
             let slow = Self.slowKey(letter, in: stats)
             // The shared drift reaches every key immediately, including rare and unseen keys.
             keys[character] = Self.tempered(features[character].map { drift.prediction(slow: slow, features: $0) } ?? slow)
         }
         let space = stats.space.map { taps in
-            let w = Double(taps.n) / Double(taps.n + 20)
+            let c = Double(taps.n) / (Double(taps.n) + SpatialTouchCalibration.centerPrior)
+            let w = Double(taps.n) / (Double(taps.n) + SpatialTouchCalibration.spreadPrior)
             let prior = SpatialTouchCalibration.referenceSpread * SpatialTouchCalibration.referenceSpread
             let sigma = sqrt(w * taps.varianceY + (1 - w) * prior)
-            return Self.tempered(.init(offsetX: 0, offsetY: w * taps.meanY, sigmaX: sigma, sigmaY: sigma))
+            return Self.tempered(.init(offsetX: 0, offsetY: c * taps.meanY, sigmaX: sigma, sigmaY: sigma))
         }
         return keys.isEmpty ? nil : SpatialTouchCalibration(keys: keys, space: space)
     }

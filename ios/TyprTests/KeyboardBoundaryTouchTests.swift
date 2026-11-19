@@ -321,6 +321,25 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
         print("EVAL M6_settlement language_buckets=3 separator_modes=2 settled_pairs=6 premature_pairs=0 fabricated_spaces=0")
     }
 
+    /// Aim about as loose as the static density (σ ≈ .35 pitch) for every letter and Space.
+    private func loosenAim(_ ac: AutocorrectEngine, layout: KeyboardLayout) {
+        var labels: [TouchLabel] = []
+        for letter in "abcdefghijklmnopqrstuvwxyz" {
+            guard let key = layout.key(.character(String(letter))) else { continue }
+            let pitch = CGSize(width: key.frame.width + layout.metrics.gap, height: key.frame.height + layout.metrics.rowGap)
+            for dx in [-0.35, 0.35] { for dy in [-0.35, 0.35] {
+                labels.append(TouchLabel(point: CGPoint(x: key.frame.midX + dx * pitch.width,
+                                                        y: key.frame.midY + dy * pitch.height), letter: letter))
+            } }
+        }
+        ac.learning.learn(labels, layout: layout, source: .keep)
+        guard let space = layout.key(.space) else { return }
+        for index in 0..<20 {
+            let dy = (index % 2 == 0 ? -0.35 : 0.35) * (space.frame.height + layout.metrics.rowGap)
+            ac.learning.learnSpace(CGPoint(x: space.frame.midX, y: space.frame.midY + dy), layout: layout)
+        }
+    }
+
     func testSpatialRecoveryPickAndUndoNeverSupplyPersonalPairEndpoints() async throws {
         let sources = try helper.resources()
         let fixtures = [try splitTouch("greatvday", index: 5), try joinTouch("a out", aimed: "b")]
@@ -332,6 +351,9 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
                 let keyboard = FullKeyboardEngine(target: target, autocorrect: ac)
                 keyboard.width = grid.width
                 keyboard.configureForField()
+                // Labels go into aim from the first one now. The join reads a tap at the bar's top
+                // edge as b only for aim no tighter than the drawn keys, so learn a loose typist.
+                loosenAim(ac, layout: keyboard.layout)
                 for letter in "hello " { try tap(String(letter), keyboard: keyboard) }
                 var samples = touch.previous?.samples ?? []
                 if let space = touch.space { samples.append(space) }

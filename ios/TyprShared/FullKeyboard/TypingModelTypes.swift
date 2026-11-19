@@ -58,16 +58,19 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     let keys: [Character: Key]
     let space: Key?
     static let staticSigma = 0.35
-    /// Physical tap spread (pitches) that the static density and the decoder's prior weight
-    /// were tuned for: the fixed spatial evaluation's tune/holdout noise of .18/.22 pitch.
-    /// Learned spreads are tempered by (staticSigma / referenceSpread)² so that a typical
-    /// typist keeps the static density's calibration instead of overconfident evidence.
+    /// iikb's touch-model priors: a key's learned centre starts worth one tap, its spread ten
+    /// taps, and learned aim applies from the first trusted label.
+    static let centerPrior = 1.0
+    static let spreadPrior = 10.0
+    static let readyLabels = 1
+    /// Physical tap spread (pitches) of a typical typist: the prior of the pooled spread.
     static let referenceSpread = 0.20
-    static let temperature = (staticSigma / referenceSpread) * (staticSigma / referenceSpread)
+    /// Learned spreads count as learned (iikb's touch model is not tempered either).
+    static let temperature = 1.0
     /// One-hand thumb use moves far-side aim by up to about half a key; the one-pitch
     /// label gate and the 1.6-pitch decoder gate stay unchanged.
     static let maxOffset = 0.5
-    static let sigmaRange: ClosedRange<Double> = 0.22...0.50
+    static let sigmaRange: ClosedRange<Double> = 0.10...0.50
 
     init(keys: [Character: Key], space: Key? = nil) {
         self.keys = keys.reduce(into: [:]) { result, entry in

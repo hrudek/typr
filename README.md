@@ -10,7 +10,7 @@ An explicit engine or language choice never silently falls back to another.
 
 - The app records and transcribes; the keyboard sends commands and inserts text
   through an App Group. The keyboard needs Full Access but never accesses the
-  microphone, speech model or network.
+  microphone or speech model.
 - From a cold start, Dictate opens Typr to record, then returns to the host app.
   Host detection and return use private APIs with fallbacks. Transient surfaces
   such as share sheets require **Keep mic warm** instead.
