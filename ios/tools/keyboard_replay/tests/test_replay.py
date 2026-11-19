@@ -81,8 +81,6 @@ class ReplayTests(unittest.TestCase):
             self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
 
     def test_taps_and_sentence_context_choose_the_correction(self):
-        # Without learned aim, key-centre taps on k-f are `of` after `most` and `if` after `even`,
-        # and the two-letter j-n is `in`.
         export = self.fresh_fixture()
         start = next(i for i, w in enumerate(export["words"]) if w["meant"] == "most")
         export["words"] = export["words"][start:start + 5]

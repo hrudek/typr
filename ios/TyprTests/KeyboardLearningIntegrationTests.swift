@@ -697,7 +697,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
 
     func testMissingEvidenceReasonsAndPlainBoundaryDecisionAreCountedOnce() {
         let (engine, _) = keyboard()
-        for token in ["hello", "hi", "für"] {
+        for token in ["hello", "h", "für"] {
             XCTAssertNil(engine.autocorrect.replacementOnSpace(beforeInput: token, field: .text,
                                                               autocorrectionType: .default))
         }

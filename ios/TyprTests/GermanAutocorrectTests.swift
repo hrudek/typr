@@ -210,7 +210,6 @@ final class GermanAutocorrectTests: XCTestCase {
     }
 
     func testSpellingFallbackDoesNotDependOnWhichLanguageSuppliesFirst() {
-        // `work` is one adjacent-key edit, `wird` one distant edit: the cost decides, not the order.
         for preferred in SpatialWordDecoder.Language.allCases {
             let engine = makeBilingualEngine(englishGuesses: ["work"], germanGuesses: ["wird"])
             engine.preferredLanguage = preferred

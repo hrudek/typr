@@ -105,7 +105,8 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertEqual(truncated?.complete, false)
         XCTAssertNil(truncated?.automaticCandidate)
         XCTAssertEqual(truncated?.visits, 1)
-        XCTAssertNil(decoder.decode(evidence("hi", aimedAt: "hi"), languages: [.english]))
+        XCTAssertNotNil(decoder.decode(evidence("hi", aimedAt: "hi"), languages: [.english]))
+        XCTAssertNil(decoder.decode(evidence("h", aimedAt: "h"), languages: [.english]))
         let long = String(repeating: "a", count: 33)
         XCTAssertNil(decoder.decode(evidence(long, aimedAt: long), languages: [.english]))
     }
@@ -306,7 +307,7 @@ final class SpatialWordDecoderTests: XCTestCase {
 
     func testSuggestionDecodeCacheAndBoundaryLatencyAreIndependent() {
         let ac = engine()
-        for text in ["g", "ge"] {
+        for text in ["g", "h"] {
             ac.touchInput.clear()
             track(evidence(text, aimedAt: text), in: ac)
             _ = ac.suggestions(beforeInput: text, field: .text, autocorrectionType: .default)
@@ -683,7 +684,6 @@ final class SpatialWordDecoderTests: XCTestCase {
     }
 
     func testCandidatesFarFromTheTapStillCompete() throws {
-        // `k` is two key pitches from `h`: no distance gate, only the score, decides.
         let source = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 4_000_000_000), ("world", 1)])])
         let result = try XCTUnwrap(source.decode(evidence("kello", aimedAt: "kello"), languages: [.english]))
         XCTAssertTrue(result.complete)
@@ -961,7 +961,7 @@ final class SpatialWordDecoderTests: XCTestCase {
                     let key = calibration?.keys[letter] ?? .init(offsetX: 0, offsetY: 0, sigmaX: 0.35, sigmaY: 0.35)
                     let dx = Double(sample.point.x - frame.midX) / Double(frame.width + word.layout.metrics.gap) - key.offsetX
                     let dy = Double(sample.point.y - frame.midY) / Double(frame.height + word.layout.metrics.rowGap) - key.offsetY
-                    // Independent inverse/determinant reference, not logDensity(). Every key, no distance gate.
+                    // Independent inverse/determinant reference, not logDensity().
                     let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY, xy = key.covarianceXY
                     let det = xx * yy - xy * xy
                     row[letter] = -0.5 * (yy * dx * dx - 2 * xy * dx * dy + xx * dy * dy) / det
@@ -987,6 +987,11 @@ final class SpatialWordDecoderTests: XCTestCase {
                         let intended = Array(spelling)
                         let n = intended.count, m = scores.count
                         // Independent full matrix oracle, rather than the production trie/trails.
+                        let a = try XCTUnwrap(word.layout.key(.character("a"))).frame
+                        let bounds = word.layout.keys.reduce(CGRect.null) { $0.union($1.frame) }
+                        let uniform = -log(Double(bounds.width * bounds.height)
+                            / Double((a.width + word.layout.metrics.gap) * (a.height + word.layout.metrics.rowGap)))
+                        func extra(_ near: Double) -> Double { log(0.5 * exp(uniform) + 0.5 * exp(near)) }
                         var dp = Array(repeating: Array(repeating: [-Double.infinity, -Double.infinity], count: m + 1), count: n + 1)
                         dp[0][0][0] = 0
                         for i in 0...n {
@@ -998,9 +1003,12 @@ final class SpatialWordDecoderTests: XCTestCase {
                                     }
                                     if edits && used == 0 {
                                         if i < n { dp[i + 1][j][1] = max(dp[i + 1][j][1], value + log(0.01)) }
-                                        if j < m {
-                                            let stray = scores[j].values.max() ?? -.infinity
-                                            dp[i][j + 1][1] = max(dp[i][j + 1][1], value + stray + log(0.01))
+                                        if i < n, j + 1 < m, let near = scores[j][intended[i]],
+                                           let score = scores[j + 1][intended[i]] {
+                                            dp[i + 1][j + 2][1] = max(dp[i + 1][j + 2][1], value + extra(near) + score + log(0.01))
+                                        }
+                                        if i == n, n > 0, j == m - 1, let near = scores[j][intended[n - 1]] {
+                                            dp[n][m][1] = max(dp[n][m][1], value + extra(near) + log(0.01))
                                         }
                                         if i + 1 < n, j + 1 < m, intended[i] != intended[i + 1],
                                            let a = scores[j + 1][intended[i]], let b = scores[j][intended[i + 1]] {

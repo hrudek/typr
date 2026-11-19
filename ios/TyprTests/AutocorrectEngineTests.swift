@@ -16,7 +16,8 @@ final class AutocorrectEngineTests: XCTestCase {
         target = FixtureTextTarget()
         target.autocapitalizationType = UITextAutocapitalizationType.none
         let session = KeyboardLearningSession(defaults: defaults)
-        let autocorrect = AutocorrectEngine(checker: SystemTextChecker(), learning: session, spatialDecoder: nil)
+        let autocorrect = AutocorrectEngine(checker: StubChecker(valid: ["the", "well"], guesses: ["teh": ["the"]]),
+                                            learning: session, spatialDecoder: nil)
         engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
         engine.width = 393
         engine.clock = { [unowned self] in self.now }
@@ -67,8 +68,6 @@ final class AutocorrectEngineTests: XCTestCase {
     }
 
     func testFiftyWordAndContextCases() {
-        // Without word lists or taps: contractions, system guesses and casing; a stub checker keeps
-        // the guesses deterministic.
         let valid: Set<String> = ["the", "from", "form", "their", "there", "were", "well", "ill", "its", "lets",
                                   "running", "late", "tonight", "that", "and", "with", "receive", "keyboard", "iPhone"]
         let guesses = ["teh": ["the", "ten"], "taht": ["that"], "adn": ["and"], "wiht": ["with"],
@@ -82,7 +81,6 @@ final class AutocorrectEngineTests: XCTestCase {
             ("Kit", "Kit"),
         ])
 
-        // Contractions, transpositions, shortcuts, and casing that MUST auto-replace on space.
         let replacements: [(String, String)] = [
             ("i", "I"),
             ("im", "I'm"),
@@ -116,8 +114,6 @@ final class AutocorrectEngineTests: XCTestCase {
             XCTAssertEqual(actual?.replacement, expected, "expected \(typed) -> \(expected)")
         }
 
-        // Valid English words, ambiguous words, acronyms (an all-caps typo too), PascalCase, shorthand,
-        // and non-prose contexts that MUST stay untouched.
         let untouched: [(String, KeyboardFieldKind, UITextAutocorrectionType)] = [
             ("the", .text, .default),
             ("from", .text, .default),

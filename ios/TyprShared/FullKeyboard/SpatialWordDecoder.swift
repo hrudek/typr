@@ -173,6 +173,11 @@ final class SpatialWordDecoder {
         /// The literal's own letters with an apostrophe restored (`dont` -> `don't`).
         var addsApostrophe = false
 
+        /// P(taps | word) of the reading: touch densities and its edit's probability.
+        var tapLogLikelihood: Double {
+            spatialScore + (edit == .none ? 0 : SpatialWordDecoder.editLogProbability)
+        }
+
         /// Extending an exhausted tap prefix is a completion even when its prefix was noisy.
         var isCompletion: Bool {
             if case .missingLetter(let index) = edit { return index == alignment.count - 1 }
@@ -221,15 +226,16 @@ final class SpatialWordDecoder {
         /// Dictionary/casing, keeps, rejected pairs and field guards remain the caller's job.
         /// As in iikb's `Corrector.correction`: the likeliest whole word that beats the literal
         /// wins, without a fixed margin or an ambiguity gap, and the best word found so far counts
-        /// when the search budget ran out. A valid literal yields only to a word its taps fit better,
-        /// or, as iikb's `Corrector.contraction`, to its apostrophe spelling at `apostropheLogOdds`.
+        /// when the search budget ran out. A valid literal yields only to a word its taps, edit
+        /// included, fit better, or, as iikb's `Corrector.contraction`, to its apostrophe spelling at
+        /// `apostropheLogOdds`.
         func automaticDecision(literalIsValid: Bool, preferring isPreferred: ((Candidate) -> Bool)? = nil) -> AutoDecision {
             let candidates = ranked(preferring: isPreferred)
             guard let best = candidates.first(where: { !$0.isCompletion }) else {
                 return .refuse(candidates.isEmpty ? .noCandidate : .belowMargin)
             }
             guard best.score > literalScore else { return .refuse(.belowMargin) }
-            if literalIsValid && best.spatialScore <= literalSpatialScore
+            if literalIsValid && best.tapLogLikelihood <= literalSpatialScore
                 && !(best.addsApostrophe && best.score - literalScore >= Self.apostropheLogOdds) {
                 return .refuse(.editNeedsInvalidLiteral)
             }
@@ -242,6 +248,7 @@ final class SpatialWordDecoder {
     static let bundled = SpatialWordDecoder(bundle: .main)
     nonisolated static let searchBudget = 6_000
     nonisolated static let maxGenerated = 12_000
+    nonisolated static let editLogProbability = log(0.01)
     nonisolated static let minLetters = 2
     nonisolated static let maxLetters = 32
     nonisolated static let editSuggestionLimit = 2

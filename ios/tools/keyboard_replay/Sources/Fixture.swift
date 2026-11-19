@@ -121,8 +121,6 @@ func makeFixture(words data: WordData, to url: URL) async throws {
         throw ReplayError("The strip offers no `around` for the fixture's edge miss")
     }
     engine.acceptSuggestion(around)
-    // Key-centre taps the replay test reads again with an untrained touch model: the two-letter `jn`,
-    // and the same `kf` after `most` and after `even`. Return keeps each from teaching aim.
     word("most"); center("kf"); press(.space); press(.returnKey)
     word("even"); center("kf"); press(.space); press(.returnKey)
     center("jn"); press(.space); press(.returnKey)

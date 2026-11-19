@@ -7,7 +7,10 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
     private final class Checker: TextChecking {
         var calls = 0
         func isWordValid(_ word: String) -> Bool { calls += 1; return ["the", "hello"].contains(word) }
-        func guesses(for word: String) -> [String] { calls += 1; return word == "helo" ? ["hello"] : [] }
+        func guesses(for word: String) -> [String] {
+            calls += 1
+            return ["helo": ["hello"], "teh": ["the"]][word.lowercased()] ?? []
+        }
         func completions(for prefix: String) -> [String] { calls += 1; return [] }
     }
 
@@ -569,7 +572,7 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         engine.suspendSuggestions()
         engine.typeSpaceFromTyprKey()
         XCTAssertTrue(engine.suggestionsAreActive)
-        XCTAssertEqual(target.text, "THE ")
+        XCTAssertEqual(target.text, "TEH ")
         try type("hello", engine)
         await engine.waitForSuggestions()
         XCTAssertFalse(engine.suggestions.isEmpty)

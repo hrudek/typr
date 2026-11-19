@@ -269,7 +269,6 @@ final class AutocorrectEngine {
         return model.supports(german: german != nil, english: englishEnabled)
     }
 
-    /// The caret's sentence context from prepared packs for every selected language, or nil.
     private func sentenceContext(before beforeInput: String?,
                                  token: String?) -> (model: KeyboardContextModel, context: KeyboardContextModel.Context)? {
         guard isEnabled, let model = contextResources.model,
@@ -1217,8 +1216,6 @@ final class AutocorrectEngine {
         let spelling: (text: String, validated: Bool)
         if let guess = guesses.first(where: { $0.lowercased() == candidate.word }), german?.isValid(guess) == true {
             spelling = (Self.matchCase(of: token, onto: guess), true)
-        } else if candidate.language == .german, german?.isValid(swipeSpelling(candidate.word, language: .german)) == true {
-            spelling = (Self.matchCase(of: token, onto: swipeSpelling(candidate.word, language: .german)), true)
         } else if candidate.language == nil, englishEnabled, checker.isWordValid(plain) {
             spelling = (plain, true)
         } else {
@@ -1314,12 +1311,6 @@ final class AutocorrectEngine {
         return Decision(text: text, kind: kind, counter: counter, alignment: alignment)
     }
 
-    /// One correction contract, as iikb's `Corrector.correction`. Owner policy comes first: keeps,
-    /// shorthand, explicit text replacements, identifiers (camelCase stays, ALL-CAPS takes only another
-    /// spelling of its own letters, `DONT` -> `DON'T`) and contacts. Then the likeliest reading
-    /// by touch likelihood plus language probability in sentence context replaces the literal, which
-    /// is scored the same way; a valid literal yields only to a word its taps fit better. System
-    /// spelling supplies candidates only when the word lists or the touch evidence are unavailable.
     private func decide(_ token: String, evidence: KeyboardTouchWord?, forSuggestions: Bool,
                         context: KeyboardContextModel.WordContext?) -> Decision {
         let lower = token.lowercased()
@@ -1389,8 +1380,6 @@ final class AutocorrectEngine {
         return { $0.language == nil || $0.language == preferred || lexicon?.logPrior(for: $0.word) != nil }
     }
 
-    /// Other spellings of the typed letters the word lists cannot reach by taps: English
-    /// contractions without their apostrophe and German umlauts typed as digraphs.
     private func orthographicVariants(of token: String) -> [String] {
         let lower = token.lowercased()
         var variants: [String] = []
@@ -1401,10 +1390,6 @@ final class AutocorrectEngine {
         return variants
     }
 
-    /// Without word lists or touch evidence: the system's single-edit guesses and the valid
-    /// orthographic variants compete on keyboard edit cost alone. Ties go to the alphabetically
-    /// first spelling, so the order in which sources supply candidates never decides. Apostrophe
-    /// spellings of the typed letters come only from the contraction table, as on the scored path.
     private func spellingFallback(_ token: String, variantsOnly: Bool = false) -> String? {
         let lower = token.lowercased()
         var costs: [String: Double] = [:]
@@ -1430,8 +1415,6 @@ final class AutocorrectEngine {
         return costs.min { $0.value == $1.value ? $0.key < $1.key : $0.value < $1.value }?.key
     }
 
-    /// A variant as an enabled dictionary spells it (German nouns capitalized); contractions come
-    /// from Typr's own table.
     private func validSpelling(_ variant: String) -> String? {
         if variant.contains("'") || (englishEnabled && checker.isWordValid(variant)) { return variant }
         guard let german else { return nil }
@@ -1567,7 +1550,6 @@ final class AutocorrectEngine {
         "wanna", "gotta", "kinda", "sorta", "yeah", "yep", "nope", "nah", "hey", "yo",
     ]
 
-    /// English contractions typed without their apostrophe: spellings of the same taps.
     static let contractions: [String: String] = [
         "im": "I'm",
         "ive": "I've",

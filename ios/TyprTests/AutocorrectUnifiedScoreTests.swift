@@ -2,7 +2,6 @@ import UIKit
 import XCTest
 @testable import Typr
 
-/// Automatic correction by one score: touch likelihood plus language probability in sentence context.
 @MainActor
 final class AutocorrectUnifiedScoreTests: XCTestCase {
     private final class Checker: TextChecking {
@@ -24,7 +23,6 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
-    /// English, the bundled word lists and context packs, no learned touch model.
     private func keyboard(after context: String) throws -> (FullKeyboardEngine, FixtureTextTarget) {
         let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
         let autocorrect = AutocorrectEngine(checker: Checker(), learning: KeyboardLearningSession(defaults: defaults),
@@ -47,7 +45,6 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
         now += 0.45
     }
 
-    /// Taps on the key centres of `letters`, then Space; returns the committed text.
     private func commit(_ letters: String, after context: String) throws -> String {
         let (engine, target) = try keyboard(after: context)
         for letter in letters { tap(.character(String(letter)), engine) }
