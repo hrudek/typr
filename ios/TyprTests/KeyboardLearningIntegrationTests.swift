@@ -39,6 +39,18 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         for letter in text { tap(letter == " " ? .space : .character(String(letter)), engine) }
     }
 
+    func testSessionFromStateStartsThereAndStaysInMemory() {
+        let saved = KeyboardLearningSession()
+        saved.keep("kalvenor")
+        saved.rejectCorrection(typed: "teh", replacement: "the")
+        let session = KeyboardLearningSession(state: saved.model.state)
+        XCTAssertEqual(session.model.state, saved.model.state)
+        XCTAssertTrue(session.protections.isKept("Kalvenor"))
+        session.keep("brisolde")
+        session.flush()
+        XCTAssertFalse(session.isPersistent)
+    }
+
     func testUndoContextSessionAndDecayWithoutSessionBlacklist() throws {
         let session = KeyboardLearningSession()
         let (engine, target) = keyboard(session: session)

@@ -65,14 +65,10 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
     }
 
     /// Writes the export into a new folder in `folder` and returns the file.
-    func export(touchModel: PersonalTypingModel.State?, appBuild: String, into folder: URL,
+    func export(learning: PersonalTypingModel.State?, protectedWords: [String], appBuild: String, into folder: URL,
                 now: Date = Date()) throws -> URL {
-        var touch: PersonalTypingModel.State?
-        if let touchModel {
-            touch = PersonalTypingModel.State()
-            touch?.layouts = touchModel.layouts
-        }
-        let export = TypingLogExport(exportedAt: now, appBuild: appBuild, touchModel: touch, words: try words())
+        let export = TypingLogExport(exportedAt: now, appBuild: appBuild, learning: learning,
+                                     protectedWords: protectedWords, words: try words())
         let workspace = folder.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         let file = workspace.appendingPathComponent("typr-typing-log.json")

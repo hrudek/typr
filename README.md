@@ -37,7 +37,8 @@ An explicit engine or language choice never silently falls back to another.
 - While learning is on, the keyboard keeps a typing log on the iPhone: taps,
   corrections and the final word of the most recent 10,000 to 20,000 words, never
   from secure, URL or email fields. Keyboard › Words and privacy exports it as
-  JSON with the touch calibration, or deletes it.
+  JSON with the keyboard's learning and your personal words for the desktop
+  replay (`ios/tools/keyboard_replay`), or deletes it.
 
 ## Downloaded model preparation
 
