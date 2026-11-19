@@ -14,7 +14,7 @@ import Foundation
 /// - `end`: the separator that ended it (" ", ".", ",", "?", "!", "\n" or another character), or
 ///   `field`, `external` (host text or cursor change), `cursor` (space-bar trackpad), `dismiss`,
 ///   `swipe` or `prediction` when the user moved on otherwise.
-/// - `languages`: enabled word languages ("de", "en"); `hitAreas`: the hit-area setting.
+/// - `languages`: enabled word languages ("de", "en").
 /// - `layout`: the `KeyboardLayout` its tap points belong to.
 /// - `taps`: the taps standing in the word, in order; `literal`: their inserted text.
 /// - `commit`: what the keyboard did at the word's first boundary.
@@ -27,7 +27,6 @@ nonisolated struct TypingLogWord: Codable, Equatable, Sendable {
     var at: Date
     var end = ""
     var languages: [String]
-    var hitAreas: String
     var layout: TypingLogLayout?
     var taps: [TypingLogTap] = []
     var literal = ""
@@ -171,7 +170,6 @@ final class TypingLogRecorder {
     nonisolated static let maxCorrections = 32
 
     var languages: [String] = []
-    var hitAreas = "standard"
     private let write: (TypingLogWord) -> Void
     private let now: () -> Date
     private var open: Draft?
@@ -224,7 +222,7 @@ final class TypingLogRecorder {
         finish(open, end: text)
         open = nil
         guard token == text else { return }
-        var draft = Draft(word: TypingLogWord(at: now(), languages: languages, hitAreas: hitAreas), text: "", started: time)
+        var draft = Draft(word: TypingLogWord(at: now(), languages: languages), text: "", started: time)
         draft.append(text, point: point, key: key, layout: layout, time: time)
         open = draft
     }
@@ -306,7 +304,7 @@ final class TypingLogRecorder {
     func swiped(_ word: String, time: TimeInterval) {
         settle()
         finish(open, end: "swipe")
-        var draft = Draft(word: TypingLogWord(at: now(), languages: languages, hitAreas: hitAreas, swipe: true),
+        var draft = Draft(word: TypingLogWord(at: now(), languages: languages, swipe: true),
                           text: word, started: time)
         draft.commit(.init(kind: .swipe, text: word))
         open = draft

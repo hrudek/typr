@@ -51,23 +51,17 @@ class ReplayTests(unittest.TestCase):
 
     def test_fixture_reproduces_what_the_keyboard_committed(self):
         report = self.report()
-        self.assertEqual(report["exported"], 27)
-        self.assertEqual(report["replayed"], 21)
+        self.assertEqual(report["exported"], 32)
+        self.assertEqual(report["replayed"], 26)
         self.assertEqual(report["skipped"], {"learning state uncertain": 4, "swipe": 1, "tap without point": 1})
-        standard = report["reproduction"]["standard"]
-        self.assertEqual((standard["commitMatches"], standard["commits"], standard["picked"]), (18, 18, 1))
-        self.assertEqual((standard["literalMatches"], standard["literals"]), (20, 20))
-        adaptive = report["reproduction"]["adaptive"]
-        self.assertEqual((adaptive["commitMatches"], adaptive["commits"]), (1, 1))
+        reproduction = report["reproduction"]
+        self.assertEqual((reproduction["commitMatches"], reproduction["commits"], reproduction["picked"]), (24, 24, 1))
+        self.assertEqual((reproduction["literalMatches"], reproduction["literals"]), (26, 26))
 
-    def test_standard_reproduction_leads_the_report(self):
+    def test_reproduction_leads_the_report(self):
         lines = self.run_tool().stdout.splitlines()
-        self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 18/18 words, 100.0%")
+        self.assertEqual(lines[1], "Reproduction: committed word matches the iPhone for 24/24 words, 100.0%")
         self.assertEqual(lines[2], "  not compared: 0 fixed by system spelling, 1 picked from the strip")
-        self.assertTrue(lines[4].startswith("Reproduction (Adaptive)"))
-        lines = self.run_tool(export=self.only(lambda w: w["hitAreas"] == "adaptive")).stdout.splitlines()
-        self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 0/0 words, -")
-        self.assertEqual(lines[4], "Reproduction (Adaptive): committed word matches the iPhone for 1/1 words, 100.0%")
 
     def fresh_fixture(self) -> dict:
         fresh = self.dir / "fresh.json"
@@ -76,9 +70,9 @@ class ReplayTests(unittest.TestCase):
         return json.loads(fresh.read_text())
 
     def test_a_fresh_fixture_reproduces_with_the_current_keyboard_code(self):
-        for reproduction in self.report(export=self.fresh_fixture())["reproduction"].values():
-            self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
-            self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
+        reproduction = self.report(export=self.fresh_fixture())["reproduction"]
+        self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
+        self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
 
     def test_taps_and_sentence_context_choose_the_correction(self):
         export = self.fresh_fixture()
@@ -88,19 +82,28 @@ class ReplayTests(unittest.TestCase):
         for word in export["words"]:
             word["commit"]["text"] = word["literal"]
         report = self.report("--show-words", export=export)
-        self.assertEqual([line["replayed"]["standard"] for line in report["words"]], ["of", "if", "In"])
+        self.assertEqual([line["replayed"] for line in report["words"]], ["of", "if", "In"])
+
+    def test_an_edge_miss_types_the_likeliest_key_without_learned_taps(self):
+        # `arou` and a tap 2 points inside m, towards n: n is typed as the tap lands.
+        retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
+        self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
+        retyped["learning"]["layouts"] = {}
+        report = self.report(export=retyped)
+        self.assertEqual(report["reproduction"]["literalMatches"], 1)
+        self.assertEqual(report["score"]["known"]["wordErrors"], 0)
 
     def test_edits_replay_in_order_up_to_the_first_boundary(self):
-        # Adaptive `aroumd`: the last letter deleted and typed again.
-        retyped = self.only(lambda w: w["hitAreas"] == "adaptive")
+        # `around`: the last letter deleted and typed again.
+        retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
         self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
-        self.assertEqual(self.report(export=retyped)["reproduction"]["adaptive"]["commitMatches"], 1)
+        self.assertEqual(self.report(export=retyped)["reproduction"]["commitMatches"], 1)
         # `fine`, then the space deleted and the word retyped as `great`: the boundary saw `fine`.
         reopened = self.only(lambda w: w["meant"] == "great")
         self.assertEqual(reopened["words"][0]["commit"]["text"], "fine")
         report = self.report(export=reopened)
-        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 1)
-        self.assertEqual(report["variants"]["standard"]["known"]["wordErrors"], 1)
+        self.assertEqual(report["reproduction"]["commitMatches"], 1)
+        self.assertEqual(report["score"]["known"]["wordErrors"], 1)
         # Erased taps the log cannot place are not guessed.
         reopened["words"][0]["corrections"][1]["erased"] = []
         self.assertEqual(self.report(export=reopened)["skipped"], {"edits not replayable": 1})
@@ -111,7 +114,7 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(self.report(export=kept)["skipped"], {"learning state uncertain": 1})
         del kept["learning"]["kept"]["ive"]
         unkept = self.report("--show-words", export=kept)
-        self.assertEqual([line["replayed"]["standard"] for line in unkept["words"]], ["I've"])
+        self.assertEqual([line["replayed"] for line in unkept["words"]], ["I've"])
         # Kept before the log began: not counted as an unknown word.
         brisolde = self.only(lambda w: w["meant"] == "Brisolde")
         self.assertEqual(self.report(export=brisolde)["skipped"], {"learning state uncertain": 1})
@@ -123,22 +126,18 @@ class ReplayTests(unittest.TestCase):
         # The first `teh` was autocorrected, so it was not kept or rejected then, although the export
         # keeps it after the undo. The later `teh` cannot be dated and is not compared.
         first = self.report(export=self.only(lambda w: w["meant"] == "teh"))
-        self.assertEqual(first["reproduction"]["standard"]["commitMatches"], 1)
-        self.assertEqual(first["variants"]["standard"]["unknown"]["wordErrors"], 1)
+        self.assertEqual(first["reproduction"]["commitMatches"], 1)
+        self.assertEqual(first["score"]["unknown"]["wordErrors"], 1)
         later = self.report(export=self.only(lambda w: w["meant"] == "teh", 1))
         self.assertEqual(later["skipped"], {"learning state uncertain": 1})
 
-    def test_scores_both_settings_against_the_meant_word(self):
-        report = self.report()
+    def test_scores_against_the_meant_word(self):
+        scores = self.report()["score"]
         # Misses: `fine` before the user rewrote it as `great`, and the undone `teh` -> `the`.
         # Unknown: the two compounds, `I` (not in the lists) and the first `teh`.
-        for setting in ["standard", "adaptive"]:
-            scores = report["variants"][setting]
-            self.assertEqual((scores["known"]["wordErrors"], scores["known"]["letterErrors"]), (1, 5))
-            self.assertEqual((scores["unknown"]["wordErrors"], scores["unknown"]["letterErrors"]), (1, 2))
-            self.assertEqual((scores["known"]["words"], scores["unknown"]["words"]), (17, 4))
-        self.assertEqual(report["changes"], {"standard->adaptive": {"fixed": {"known": 0, "unknown": 0},
-                                                                    "broken": {"known": 0, "unknown": 0}}})
+        self.assertEqual((scores["known"]["wordErrors"], scores["known"]["letterErrors"]), (1, 5))
+        self.assertEqual((scores["unknown"]["wordErrors"], scores["unknown"]["letterErrors"]), (1, 2))
+        self.assertEqual((scores["known"]["words"], scores["unknown"]["words"]), (22, 4))
 
     def test_words_are_listed_only_on_request(self):
         export = copy.deepcopy(self.fixture)
@@ -147,15 +146,15 @@ class ReplayTests(unittest.TestCase):
         self.assertNotIn("words", self.report(export=export))
         self.assertNotIn("quiet", self.run_tool(export=export).stdout)
         report = self.report("--show-words", export=export)
-        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 17)
-        self.assertEqual([line["meant"] for line in report["words"]], ["quiet"])
+        self.assertEqual(report["reproduction"]["commitMatches"], 23)
+        self.assertEqual([line["meant"] for line in report["words"]], ["teh", "quiet", "great"])
 
     def test_spelling_corrections_and_unavailable_picks_are_not_compared(self):
         export = copy.deepcopy(self.fixture)
         word = next(w for w in export["words"] if w["meant"] == "don't")
         word["commit"]["correction"] = "spelling"
-        reproduction = self.report(export=export)["reproduction"]["standard"]
-        self.assertEqual((reproduction["systemSpelling"], reproduction["commits"]), (1, 17))
+        reproduction = self.report(export=export)["reproduction"]
+        self.assertEqual((reproduction["systemSpelling"], reproduction["commits"]), (1, 23))
         picked = self.only(lambda w: (w.get("commit") or {}).get("kind") == "pick")
         picked["words"][0]["corrections"][0]["to"] = "arbitrary"
         self.assertEqual(self.report(export=picked)["skipped"], {"pick not offered": 1})
@@ -200,7 +199,7 @@ class ReplayTests(unittest.TestCase):
         result = subprocess.run([self.binary, str(FIXTURE)], capture_output=True, text=True, cwd=empty,
                                 env={**os.environ, "TMPDIR": str(temporary)}, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Standard vs meant word", result.stdout)
+        self.assertIn("Vs meant word", result.stdout)
         self.assertEqual(list(empty.iterdir()), [])
         self.assertEqual(list(temporary.iterdir()), [])
         rejected = self.run_tool("--out", str(empty / "report.txt"), cwd=empty)

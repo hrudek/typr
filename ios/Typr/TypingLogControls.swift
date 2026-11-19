@@ -101,6 +101,6 @@ struct TypingLogControls: View {
 
     private var footer: String {
         let saved = model.wordCount.map { " \($0.formatted()) words saved." } ?? ""
-        return "While learning is on, Typr keeps your most recent 10,000 to 20,000 typed words with their taps and corrections on this iPhone, never from passwords, web addresses or email addresses. Export them as JSON, with what the keyboard learned and your personal words, to compare hit areas." + saved
+        return "While learning is on, Typr keeps your most recent 10,000 to 20,000 typed words with their taps and corrections on this iPhone, never from passwords, web addresses or email addresses. Export them as JSON, with what the keyboard learned and your personal words, to replay them on a computer." + saved
     }
 }

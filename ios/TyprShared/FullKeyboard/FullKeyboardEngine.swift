@@ -893,11 +893,12 @@ final class FullKeyboardEngine {
         var attributed = key
         // Rollover commits previous letters first; their didEdit already prepared this map.
         // Unreported context/model/config changes or invalidated held geometry stay literal.
-        if touch.hasUnambiguousPoint, touch.evidenceLayout == layout, !shift.isUppercase,
+        let current = suggestionOwnership
+        let shiftedStart = shift.state != .locked && current.token == nil
+        if touch.hasUnambiguousPoint, touch.evidenceLayout == layout, !shift.isUppercase || shiftedStart,
            !autocorrect.touchInput.attributionSuppressed,
-           !autocorrect.protectsAttribution(prefix: suggestionOwnership.token ?? "", letter: character),
-           autocorrect.isEnabled, autocorrect.learning.isLearningEnabled, let attribution {
-            let current = suggestionOwnership
+           !autocorrect.protectsAttribution(prefix: current.token ?? "", letter: character),
+           autocorrect.isEnabled, let attribution {
             if attribution.ownership == current {
                 let prefix = PersonalLexiconSnapshot.normalize(current.token ?? "")
                 attributed = attribution.map.attributedKey(at: touch.point, geometric: key, layout: layout,
@@ -1307,7 +1308,6 @@ final class FullKeyboardEngine {
         guard let typingLog else { return }
         guard typingLogAllowed else { typingLog.discard(); return }
         typingLog.languages = autocorrect.suggestionLanguages.map(\.rawValue).sorted()
-        typingLog.hitAreas = autocorrect.hitAreas.rawValue
         event(typingLog)
     }
 

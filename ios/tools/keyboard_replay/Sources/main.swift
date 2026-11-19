@@ -2,8 +2,8 @@ import Foundation
 
 let usage = """
 Usage: keyboard-replay EXPORT.json [--show-words] [--json]
-Replays a Typr typing log export through the keyboard's own engine and compares hit-area settings.
-  --show-words  list the words that changed between settings or did not reproduce (private text)
+Replays a Typr typing log export through the keyboard's own engine.
+  --show-words  list the words that did not reproduce or differ from the meant word (private text)
   --json        print the report as JSON
        keyboard-replay --make-fixture FILE
 Types the invented test text through the engine and writes it as an export to FILE.
@@ -63,17 +63,16 @@ func run(_ arguments: [String]) async throws {
 
     let replayer = try Replayer(words: words, export: export)
 
-    var results: [Result<(PreparedWord, [ReplayedWord]), SkipReason>] = []
+    var results: [Result<(PreparedWord, ReplayedWord), SkipReason>] = []
     var previous: [String] = []
     for word in export.words {
         let context = previous.joined()
-        var result = replayer.prepare(word).map { ($0, [ReplayedWord]()) }
-        for hitAreas in KeyboardHitAreas.allCases {
-            guard case .success((let prepared, let replays)) = result else { break }
-            result = try await replayer.replay(word, prepared, context: context, hitAreas: hitAreas)
-                .map { (prepared, replays + [$0]) }
+        switch replayer.prepare(word) {
+        case .success(let prepared):
+            results.append(try await replayer.replay(word, prepared, context: context).map { (prepared, $0) })
+        case .failure(let reason):
+            results.append(.failure(reason))
         }
-        results.append(result)
         if Replayer.separators.contains(word.end), !word.meant.isEmpty {
             previous = Array((previous + [word.meant + word.end]).suffix(3))
         } else {

@@ -337,6 +337,18 @@ nonisolated struct KeyboardContextModel: Sendable {
             + (1 - a) * (english ? en?.probability(key, after: context) ?? 0 : 0)
     }
 
+    /// The selected packs' next-word models after the context's previous word, for letter odds.
+    func keyMapContext(_ context: Context, german: Bool, english: Bool) -> KeyboardKeyMap.Context {
+        var followers: [SpatialWordDecoder.Language: KeyboardKeyMap.Context.Followers] = [:]
+        for (language, pack) in [(SpatialWordDecoder.Language.german, german ? de : nil), (.english, english ? en : nil)] {
+            guard let pack, context.canPredict, let previous = context.previous else { continue }
+            let distribution = pack.distribution(previous)
+            followers[language] = .init(lambda: distribution.lambda,
+                                        words: distribution.boosts.map { (pack.word($0.id), $0.probability) })
+        }
+        return .init(weightDE: context.state.weightDE, followers: followers)
+    }
+
     struct Context: Sendable {
         var state = State()
         var previous: String?
