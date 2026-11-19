@@ -232,10 +232,12 @@ final class TypingLogTests: XCTestCase {
     }
 
     func testRotationByAnotherProcessIsNotMistakenForTheSameFile() throws {
+        let layout = TypingLogLayout(KeyboardLayout(width: 393))
         let candidates = (1...64).flatMap { length in [" ", "\n"].map { end in
-            var entry = word(String(repeating: "a", count: length))
-            entry.end = end
-            return entry
+            let text = String(repeating: "a", count: length)
+            return TypingLogWord(at: wall, end: end, languages: ["en"], hitAreas: "standard", layout: layout,
+                                 taps: (0..<length).map { TypingLogTap(t: $0 * 100, x: 100, y: 150, key: "a", text: "a") },
+                                 literal: text, commit: .init(kind: .literal, text: text), meant: text)
         } }
         let sizes = try candidates.map { try TypingLogExport.encoder().encode($0).count + 1 }
         var match: (TypingLogWord, TypingLogWord, TypingLogWord)?
