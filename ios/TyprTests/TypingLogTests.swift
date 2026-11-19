@@ -59,12 +59,6 @@ final class TypingLogTests: XCTestCase {
         for character in text { tap(character == " " ? .space : .character(String(character))) }
     }
 
-    func testWordRecordsTheActiveHitAreasSetting() throws {
-        engine.autocorrect.hitAreas = .adaptive
-        type("hello w")
-        XCTAssertEqual(try XCTUnwrap(written.first).hitAreas, "adaptive")
-    }
-
     func testSettledWordRecordsTapsLayoutAndMeantWord() throws {
         type("hello w")
         XCTAssertEqual(written.count, 1)
@@ -73,7 +67,6 @@ final class TypingLogTests: XCTestCase {
         XCTAssertEqual(word.literal, "hello")
         XCTAssertEqual(word.end, " ")
         XCTAssertEqual(word.commit, .init(kind: .literal, text: "hello"))
-        XCTAssertEqual(word.hitAreas, "standard")
         XCTAssertEqual(word.languages, ["en"])
         XCTAssertEqual(word.taps.map(\.key), ["h", "e", "l", "l", "o"])
         XCTAssertEqual(word.taps.map(\.t), [0, 100, 200, 300, 400])
@@ -211,7 +204,7 @@ final class TypingLogTests: XCTestCase {
 
     private func word(_ meant: String) -> TypingLogWord {
         TypingLogWord(at: wall, end: " ", languages: ["en"],
-                      hitAreas: "standard", literal: meant, meant: meant)
+                      literal: meant, meant: meant)
     }
 
     func testStoreKeepsOnlyTheMostRecentSegments() throws {
@@ -256,7 +249,7 @@ final class TypingLogTests: XCTestCase {
         let layout = TypingLogLayout(KeyboardLayout(width: 393))
         let candidates = (1...64).flatMap { length in [" ", "\n"].map { end in
             let text = String(repeating: "a", count: length)
-            return TypingLogWord(at: wall, end: end, languages: ["en"], hitAreas: "standard", layout: layout,
+            return TypingLogWord(at: wall, end: end, languages: ["en"], layout: layout,
                                  taps: (0..<length).map { TypingLogTap(t: $0 * 100, x: 100, y: 150, key: "a", text: "a") },
                                  literal: text, commit: .init(kind: .literal, text: text), meant: text)
         } }

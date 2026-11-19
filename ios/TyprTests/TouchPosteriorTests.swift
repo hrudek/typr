@@ -99,12 +99,11 @@ final class TouchPosteriorTests: XCTestCase {
         let emissions = try XCTUnwrap(KeyboardLetterMap.emissions(for: word("f", at: (0.4, 0)), calibration: calibration))
         XCTAssertEqual(emissions.likelihoods[0][index("g")], expected, accuracy: 1e-12)
         let uniform = [Double](repeating: 1.0 / 26, count: KeyboardKeyMap.keyLimit)
-        let assignment = KeyboardKeyMap(layout: layout, prefix: "", calibration: calibration, priors: uniform,
-                                        policy: .adaptive)
+        let assignment = KeyboardKeyMap(layout: layout, prefix: "", calibration: calibration, priors: uniform)
         XCTAssertEqual(assignment.attributedKey(at: tap, geometric: f, layout: layout, prefix: ""), g,
                        "g's learned leftward aim outweighs f's untrained prior")
         let cold = KeyboardKeyMap(layout: layout, prefix: "", calibration: SpatialTouchCalibration(keys: ["f": SpatialTouchCalibration.prior, "g": SpatialTouchCalibration.prior]),
-                                  priors: uniform, policy: .adaptive)
+                                  priors: uniform)
         XCTAssertEqual(cold.attributedKey(at: tap, geometric: f, layout: layout, prefix: ""), f)
     }
 

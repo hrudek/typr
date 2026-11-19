@@ -1,7 +1,7 @@
 # Keyboard replay
 
 Replays the typing log from your iPhone through the keyboard's own engine and reports how often
-each hit-area setting commits the word you meant. Nothing leaves your computer. The only files
+it commits the word you meant. Nothing leaves your computer. The only files
 written are the build in its build folder; the replay itself keeps everything in memory and prints
 the report.
 
@@ -31,7 +31,7 @@ bin=$(ios/tools/keyboard_replay/build.sh)   # builds into ~/.cache/typr-keyboard
 "$bin" ~/typr-private/typr-typing-log.json
 ```
 
-Options: `--show-words` lists the words that changed between settings or did not reproduce
+Options: `--show-words` lists the words that did not reproduce or differ from the meant word
 (private text, keep it off screenshots and issues), `--json` prints the report as JSON,
 The report goes to the terminal only; to keep it, redirect it into your private folder, for
 example `"$bin" ~/typr-private/typr-typing-log.json > ~/typr-private/report.txt`. Rebuild after
@@ -43,19 +43,17 @@ Each word is replayed as you typed it up to its first space or punctuation: ever
 backspaces between them and a suggestion you picked. Later edits (undo, retyping after the space)
 are what you meant, not input.
 
-- **Reproduction** (first lines, Standard first): the replay should commit what your iPhone
-  committed under the same setting. The percentage tells how far to trust the rest. Words fixed by
-  system spelling or picked from the suggestion strip are counted, not compared.
+- **Reproduction** (first lines): the replay should commit what your iPhone committed. The
+  percentage tells how far to trust the rest. Words fixed by system spelling or picked from the
+  suggestion strip are counted, not compared. Words typed with an older Typr build may differ.
 - **Skipped**: swiped words, words with a tap the log has no point for (slides, accents, hold-123),
   layouts this build cannot rebuild, edits whose order the log does not tell, picks the replayed
   strip does not offer, and words whose learning state is uncertain: the export keeps, protects or
   rejects them, and their own log cannot tell whether that was already so when you typed them.
-- **Vs meant word**: for each setting, the share of words whose committed text differs from the
+- **Vs meant word**: the share of words whose committed text differs from the
   word you finally kept (word errors) and the edit distance per letter (letter errors). Known words
   are in the bundled German or English word list; unknown words are everything else, such as new
   names, compounds and abbreviations.
-- **standard->other**: words a setting gets right that Standard got wrong (fixed) and the reverse
-  (broken). Broken unknown words matter most: names and compounds must not get worse.
 
 The replay uses the learning state at export time, changed only where a word's own log proves it
 (an autocorrected word was not kept then). It has no system spelling dictionary, so it validates

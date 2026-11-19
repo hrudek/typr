@@ -142,7 +142,6 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
             applyPreview(preview)
         } else {
             engine.autocorrect.isEnabled = FullKeyboardSettings().autocorrect
-            engine.autocorrect.hitAreas = FullKeyboardSettings().hitAreas
             engine.swipeTypingEnabled = FullKeyboardSettings().swipeTyping
             engine.autocorrect.englishEnabled = TyprSettings().autocorrectEnglish
             engine.autocorrect.preferredLanguage = TyprSettings().autocorrectLanguageOrder[0]
@@ -218,11 +217,6 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
             engine.refreshSuggestions()
         }
         if wantsAutocorrect { engine.autocorrect.spatialDecoder?.prepareResources() }
-        let wantsHitAreas = FullKeyboardSettings().hitAreas
-        if engine.autocorrect.hitAreas != wantsHitAreas {
-            engine.autocorrect.hitAreas = wantsHitAreas
-            engine.refreshSuggestions()
-        }
         engine.swipeTypingEnabled = FullKeyboardSettings().swipeTyping
         let wantsEnglish = TyprSettings().autocorrectEnglish
         if engine.autocorrect.englishEnabled != wantsEnglish {

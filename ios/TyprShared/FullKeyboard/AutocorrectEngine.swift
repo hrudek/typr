@@ -179,7 +179,6 @@ final class AutocorrectEngine {
     let checker: TextChecking
     let learning: KeyboardLearningSession
     var isEnabled = true { didSet { invalidateDecode() } }
-    var hitAreas = KeyboardHitAreas.standard { didSet { if hitAreas != oldValue { invalidateDecode() } } }
     var englishEnabled = true { didSet {
         if oldValue != englishEnabled { discardFeedback() }
         invalidateDecode()
@@ -243,22 +242,25 @@ final class AutocorrectEngine {
     }
 
     /// Synchronous, checker-free attribution preparation, before any deferred ranking.
-    /// No adaptation without a trained model, enabled learning/autocorrect or all selected packs.
+    /// Needs autocorrect and every selected pack; without learning or labels the touch model is
+    /// the prior. A word starts at the field start, after whitespace or after prose punctuation.
     func keyMap(layout: KeyboardLayout, context: String?, permitsCorrection: Bool) -> KeyboardKeyMap? {
-        let policy = KeyboardKeyMap.Policy(hitAreas)
-        // A policy reading from the first letter maps a word's start after whitespace too.
-        let startsWord = policy.minimumPrefix == 0 && (context == "" || (context?.last.map(\.isWhitespace) ?? false))
-        guard isEnabled, learning.isLearningEnabled, permitsCorrection,
-              layout.layer == .letters, layout.field == .text,
+        let startsWord = context == "" || context?.last.map {
+            $0.isWhitespace || ($0.isPunctuation && !"@/#_-:'’".contains($0))
+        } == true
+        guard isEnabled, permitsCorrection, layout.layer == .letters, layout.field == .text,
               let token = Self.currentToken(in: context) ?? (startsWord ? "" : nil), token.utf8.count <= 256,
-              !protectedLexicon.contains(token),
-              (policy.minimumPrefix...31).contains(token.count),
-              token.dropFirst().allSatisfy({ $0.isLowercase }),
-              let calibration = learning.calibration(for: layout), !calibration.keys.isEmpty else { return nil }
+              !protectedLexicon.contains(token), token.count <= 31,
+              token.dropFirst().allSatisfy({ $0.isLowercase }) else { return nil }
         let prefix = PersonalLexiconSnapshot.normalize(token)
-        return KeyboardKeyMap.make(layout: layout, prefix: prefix, calibration: calibration,
+        let sentence = sentenceContext(before: context, token: token)
+        return KeyboardKeyMap.make(layout: layout, prefix: prefix,
+                                   calibration: learning.calibration(for: layout) ?? .init(keys: [:]),
                                    languages: suggestionLanguages, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
-                                   personal: learning.personalPriors.scan.completions, policy: policy)
+                                   personal: learning.isLearningEnabled ? learning.personalPriors.scan.completions : nil,
+                                   context: sentence.map {
+                                       $0.model.keyMapContext($0.context, german: german != nil, english: englishEnabled)
+                                   })
     }
 
     /// Cheap gate for after-separator corpus predictions: autocorrect on, prepared packs for

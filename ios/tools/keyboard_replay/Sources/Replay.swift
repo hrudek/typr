@@ -230,14 +230,12 @@ final class Replayer {
     }
 
     /// `context`: the text before the word in its field, as far as the log tells.
-    func replay(_ word: TypingLogWord, _ prepared: PreparedWord, context: String,
-                hitAreas: KeyboardHitAreas) async throws -> Result<ReplayedWord, SkipReason> {
+    func replay(_ word: TypingLogWord, _ prepared: PreparedWord, context: String) async throws -> Result<ReplayedWord, SkipReason> {
         guard let logged = word.layout, let layout = logged.keyboardLayout else { return .failure(.unknownLayout) }
         let languages = Set(word.languages.compactMap(Language.init(rawValue:)))
         let autocorrect = AutocorrectEngine(checker: english, learning: session(prepared.adjustment),
                                             spatialDecoder: decoder, contextResources: contextResources)
         autocorrect.loadProtectedLexicon(protected(unless: prepared.adjustment.unkept))
-        autocorrect.hitAreas = hitAreas
         autocorrect.englishEnabled = languages.contains(.english)
         autocorrect.german = languages.contains(.german) ? german : nil
         let target = ReplayTarget(text: context)

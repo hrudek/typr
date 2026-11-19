@@ -25,22 +25,6 @@ struct Split: Codable {
     }
 }
 
-struct Counts: Codable {
-    var known = 0
-    var unknown = 0
-
-    subscript(known isKnown: Bool) -> Int {
-        get { isKnown ? known : unknown }
-        set { if isKnown { known = newValue } else { unknown = newValue } }
-    }
-}
-
-/// Words the variant gets right where the baseline does not (`fixed`), and the reverse.
-struct Change: Codable {
-    var fixed = Counts()
-    var broken = Counts()
-}
-
 struct Reproduction: Codable {
     var literals = 0
     var literalMatches = 0
@@ -56,72 +40,46 @@ struct WordLine: Codable {
     var meant: String
     var known: Bool
     var logged: String
-    var replayed: [String: String]
+    var replayed: String
 }
 
 struct Report: Codable {
     var exported = 0
     var replayed = 0
     var skipped: [String: Int] = [:]
-    var reproduction: [String: Reproduction] = [:]
-    var variants: [String: Split] = [:]
-    var changes: [String: Change] = [:]
+    var reproduction = Reproduction()
+    var score = Split()
     var words: [WordLine]?
 
-    /// `results[i]`: the variants' replays of the word, in `KeyboardHitAreas.allCases` order.
-    /// `results[i]`: the word's preparation and its replays in `KeyboardHitAreas.allCases` order.
-    static func build(words logged: [TypingLogWord], results: [Result<(PreparedWord, [ReplayedWord]), SkipReason>],
+    /// `results[i]`: the preparation and replay of `logged[i]`, or why it was skipped.
+    static func build(words logged: [TypingLogWord], results: [Result<(PreparedWord, ReplayedWord), SkipReason>],
                       showWords: Bool) -> Report {
         var report = Report(exported: logged.count)
-        let variants = KeyboardHitAreas.allCases
-        let baseline = variants[0]
-        for variant in variants.dropFirst() { report.changes["\(baseline.rawValue)->\(variant.rawValue)"] = Change() }
         var lines: [WordLine] = []
         for (word, result) in zip(logged, results) {
-            let prepared: PreparedWord, replays: [ReplayedWord]
+            let prepared: PreparedWord, replay: ReplayedWord
             switch result {
-            case .success(let replayed): (prepared, replays) = replayed
+            case .success(let replayed): (prepared, replay) = replayed
             case .failure(let reason): report.skipped[reason.rawValue, default: 0] += 1; continue
             }
             report.replayed += 1
-            let known = prepared.known
             var reproduced = true
-            if let index = variants.firstIndex(where: { $0.rawValue == word.hitAreas }) {
-                let replay = replays[index]
-                var reproduction = report.reproduction[word.hitAreas, default: Reproduction()]
-                reproduction.literals += 1
-                if replay.literal == prepared.plan.literal { reproduction.literalMatches += 1 } else { reproduced = false }
-                if let commit = word.commit {
-                    if commit.correction == .spelling {
-                        reproduction.systemSpelling += 1
-                    } else if commit.kind == .pick {
-                        reproduction.picked += 1
-                    } else {
-                        reproduction.commits += 1
-                        if replay.committed == commit.text { reproduction.commitMatches += 1 } else { reproduced = false }
-                    }
-                }
-                report.reproduction[word.hitAreas] = reproduction
-            }
-            for (variant, replay) in zip(variants, replays) {
-                report.variants[variant.rawValue, default: Split()][known: known]
-                    .add(committed: replay.committed, meant: word.meant)
-            }
-            let baseRight = replays[0].committed == word.meant
-            for (variant, replay) in zip(variants, replays).dropFirst() {
-                let right = replay.committed == word.meant
-                let key = "\(baseline.rawValue)->\(variant.rawValue)"
-                if right != baseRight {
-                    var change = report.changes[key, default: Change()]
-                    if right { change.fixed[known: known] += 1 } else { change.broken[known: known] += 1 }
-                    report.changes[key] = change
+            report.reproduction.literals += 1
+            if replay.literal == prepared.plan.literal { report.reproduction.literalMatches += 1 } else { reproduced = false }
+            if let commit = word.commit {
+                if commit.correction == .spelling {
+                    report.reproduction.systemSpelling += 1
+                } else if commit.kind == .pick {
+                    report.reproduction.picked += 1
+                } else {
+                    report.reproduction.commits += 1
+                    if replay.committed == commit.text { report.reproduction.commitMatches += 1 } else { reproduced = false }
                 }
             }
-            let changed = Set(replays.map(\.committed)).count > 1
-            if showWords, changed || !reproduced {
-                lines.append(WordLine(meant: word.meant, known: known, logged: word.commit?.text ?? word.literal,
-                                      replayed: Dictionary(uniqueKeysWithValues: zip(variants.map(\.rawValue),
-                                                                                    replays.map(\.committed)))))
+            report.score[known: prepared.known].add(committed: replay.committed, meant: word.meant)
+            if showWords, !reproduced || replay.committed != word.meant {
+                lines.append(WordLine(meant: word.meant, known: prepared.known, logged: word.commit?.text ?? word.literal,
+                                      replayed: replay.committed))
             }
         }
         if showWords { report.words = lines }
@@ -130,31 +88,20 @@ struct Report: Codable {
 
     func text() -> String {
         var out = "Typing log replay: \(exported) words exported, \(replayed) replayed\n"
-        for setting in KeyboardHitAreas.allCases {
-            guard let r = reproduction[setting.rawValue] ?? (setting == .standard ? Reproduction() : nil) else { continue }
-            out += "Reproduction (\(setting.rawValue.capitalized)): committed word matches the iPhone for"
-            out += " \(r.commitMatches)/\(r.commits) words, \(Self.percent(r.commitMatches, r.commits))\n"
-            out += "  not compared: \(r.systemSpelling) fixed by system spelling, \(r.picked) picked from the strip\n"
-            out += "  letters at the first boundary match for \(r.literalMatches)/\(r.literals) words\n"
-        }
+        let r = reproduction
+        out += "Reproduction: committed word matches the iPhone for"
+        out += " \(r.commitMatches)/\(r.commits) words, \(Self.percent(r.commitMatches, r.commits))\n"
+        out += "  not compared: \(r.systemSpelling) fixed by system spelling, \(r.picked) picked from the strip\n"
+        out += "  letters at the first boundary match for \(r.literalMatches)/\(r.literals) words\n"
         if !skipped.isEmpty {
             out += "Skipped: " + skipped.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }
                 .joined(separator: ", ") + "\n"
         }
-        for variant in KeyboardHitAreas.allCases {
-            guard let split = variants[variant.rawValue] else { continue }
-            out += "\n\(variant.rawValue.capitalized) vs meant word:\n"
-            out += Self.line("known", split.known) + Self.line("unknown", split.unknown)
-        }
-        for (key, change) in changes.sorted(by: { $0.key < $1.key }) {
-            out += "\n\(key): fixed \(change.fixed.known) known, \(change.fixed.unknown) unknown;"
-            out += " broken \(change.broken.known) known, \(change.broken.unknown) unknown\n"
-        }
+        out += "\nVs meant word:\n" + Self.line("known", score.known) + Self.line("unknown", score.unknown)
         if let words {
-            out += "\nChanged or not reproduced (\(words.count)):\n"
+            out += "\nNot reproduced or not the meant word (\(words.count)):\n"
             for line in words {
-                let replays = KeyboardHitAreas.allCases.compactMap { v in line.replayed[v.rawValue].map { "\(v.rawValue) \($0)" } }
-                out += "  meant \(line.meant) | logged \(line.logged) | " + replays.joined(separator: " | ")
+                out += "  meant \(line.meant) | logged \(line.logged) | replayed \(line.replayed)"
                 out += line.known ? "\n" : " (unknown)\n"
             }
         }

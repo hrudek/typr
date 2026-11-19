@@ -8,6 +8,9 @@
         "and" : {
           "teh" : 1
         },
+        "around" : {
+          "most" : 1
+        },
         "fahre" : {
           "ich" : 1
         },
@@ -45,80 +48,88 @@
           "and" : 1
         }
       },
-      "updates" : 13
+      "updates" : 14
     },
     "counts" : {
       "and" : {
         "count" : 2,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "around" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "brisolde" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
+      },
+      "even" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "fahre" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "ich" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "ive" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "kalvenor" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "mit" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "morgen" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
+      },
+      "most" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "quiet" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "teh" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "the" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "was" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       },
       "zum" : {
         "count" : 1,
-        "lastUpdated" : "2026-11-19T07:29:46Z"
+        "lastUpdated" : "2026-11-19T16:32:23Z"
       }
     },
     "kept" : {
-      "brisolde" : "2026-11-19T07:29:46Z",
-      "ive" : "2026-11-19T07:29:46Z",
-      "teh" : "2026-11-19T07:29:46Z"
+      "brisolde" : "2026-11-19T16:32:23Z",
+      "ive" : "2026-11-19T16:32:23Z",
+      "teh" : "2026-11-19T16:32:23Z"
     },
     "layouts" : {
       "portrait-392-strip-no-globe" : {
         "global" : {
-          "covarianceXY" : 0.0017014971967106193,
-          "meanX" : 0.2337855511620301,
-          "meanY" : 0.06844380094183734,
+          "covarianceXY" : 0.001119372063738221,
+          "meanX" : 0.23015695004544146,
+          "meanY" : 0.070261082306,
           "n" : 256,
-          "varianceX" : 0.0066130979752359025,
-          "varianceY" : 0.001183390584199458
+          "varianceX" : 0.010108576919180686,
+          "varianceY" : 0.0012903274170308406
         },
         "keys" : {
           "a" : {
@@ -154,12 +165,12 @@
             "varianceY" : 0.0007834489686506878
           },
           "e" : {
-            "covarianceXY" : 0.0006020001085996583,
-            "meanX" : 0.20333662528328908,
-            "meanY" : 0.08143447617862079,
-            "n" : 89,
-            "varianceX" : 0.0032105112874186025,
-            "varianceY" : 0.0007634401863678839
+            "covarianceXY" : 0.0005963156054633203,
+            "meanX" : 0.2022608748332527,
+            "meanY" : 0.0797869469779125,
+            "n" : 91,
+            "varianceX" : 0.0032501461000901807,
+            "varianceY" : 0.0008420560294174352
           },
           "f" : {
             "covarianceXY" : 0.0006957851857697407,
@@ -218,28 +229,28 @@
             "varianceY" : 0.0007276542726274506
           },
           "m" : {
-            "covarianceXY" : 0.0006936381356865385,
-            "meanX" : 0.20134704262793818,
-            "meanY" : 0.07979850731211882,
-            "n" : 83,
-            "varianceX" : 0.0033537587092777746,
-            "varianceY" : 0.0007957783310657917
+            "covarianceXY" : 0.0006828955499130443,
+            "meanX" : 0.20135359275976353,
+            "meanY" : 0.08002995811645629,
+            "n" : 84,
+            "varianceX" : 0.003301358932411606,
+            "varianceY" : 0.0007867191715570817
           },
           "n" : {
-            "covarianceXY" : 0.0003401134462638206,
-            "meanX" : 0.2076141862028988,
-            "meanY" : 0.07745206666690756,
-            "n" : 85,
-            "varianceX" : 0.005133000275273467,
-            "varianceY" : 0.0008306868651992549
+            "covarianceXY" : 4.6672158177120296e-07,
+            "meanX" : 0.21000527788738207,
+            "meanY" : 0.07746682561415147,
+            "n" : 86,
+            "varianceX" : 0.009435576592696556,
+            "varianceY" : 0.0008177211060015127
           },
           "o" : {
-            "covarianceXY" : 0.0009060354457947737,
-            "meanX" : 0.20015728188643125,
-            "meanY" : 0.0785746587524599,
-            "n" : 84,
-            "varianceX" : 0.0038073530254280437,
-            "varianceY" : 0.0008294383450951149
+            "covarianceXY" : 0.0008639723191597997,
+            "meanX" : 0.19977110509744667,
+            "meanY" : 0.07972169171070217,
+            "n" : 85,
+            "varianceX" : 0.003757258482683809,
+            "varianceY" : 0.0008993665012125259
           },
           "p" : {
             "covarianceXY" : 0.0007317712809717464,
@@ -266,20 +277,20 @@
             "varianceY" : 0.000886856649895134
           },
           "s" : {
-            "covarianceXY" : 0.000728221464121702,
-            "meanX" : 0.20178007274157783,
-            "meanY" : 0.07947313864131979,
-            "n" : 82,
-            "varianceX" : 0.0033547181239644464,
-            "varianceY" : 0.0007629041433831564
+            "covarianceXY" : 0.0006892251768394373,
+            "meanX" : 0.20048163820158457,
+            "meanY" : 0.0798107592077361,
+            "n" : 83,
+            "varianceX" : 0.003408514385320297,
+            "varianceY" : 0.0007581649878954326
           },
           "t" : {
-            "covarianceXY" : 0.0008069863671339841,
-            "meanX" : 0.19759128641457574,
-            "meanY" : 0.07869920393583905,
-            "n" : 85,
-            "varianceX" : 0.0038515209302539197,
-            "varianceY" : 0.0007452347286772687
+            "covarianceXY" : 0.0007869245199379409,
+            "meanX" : 0.19807758660881675,
+            "meanY" : 0.07845594556985629,
+            "n" : 86,
+            "varianceX" : 0.003806239652090589,
+            "varianceY" : 0.0007373184378967844
           },
           "u" : {
             "covarianceXY" : 0.0016614545878239988,
@@ -290,12 +301,12 @@
             "varianceY" : 0.0008538222597147236
           },
           "v" : {
-            "covarianceXY" : 0.0007809282510417772,
-            "meanX" : 0.20207151301264428,
-            "meanY" : 0.07873047584287005,
-            "n" : 82,
-            "varianceX" : 0.0034047652097046986,
-            "varianceY" : 0.0007127396122064765
+            "covarianceXY" : 0.0007870990977025508,
+            "meanX" : 0.20243368718846538,
+            "meanY" : 0.07953570318488064,
+            "n" : 83,
+            "varianceX" : 0.003359829471721859,
+            "varianceY" : 0.0007424516933220018
           },
           "w" : {
             "covarianceXY" : 0.0006814948149198944,
@@ -330,7 +341,7 @@
             "varianceY" : 0.0007450514762352088
           }
         },
-        "lastUpdated" : "2026-11-19T07:29:46Z",
+        "lastUpdated" : "2026-11-19T16:32:23Z",
         "signature" : {
           "orientation" : "portrait",
           "showsGlobe" : false,
@@ -341,7 +352,7 @@
           "covarianceXY" : 0,
           "meanX" : 0,
           "meanY" : 0,
-          "n" : 17,
+          "n" : 19,
           "varianceX" : 0,
           "varianceY" : 0
         }
@@ -350,8 +361,8 @@
     "rejected" : [
       {
         "context" : "house was",
-        "globalRemaining" : 57,
-        "remaining" : 249,
+        "globalRemaining" : 55,
+        "remaining" : 247,
         "replacement" : "the",
         "typed" : "teh"
       }
@@ -373,7 +384,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -464,7 +474,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -548,7 +557,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -618,7 +626,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -688,7 +695,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -793,7 +799,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -863,7 +868,6 @@
 
       ],
       "end" : "\n",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -996,7 +1000,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1091,7 +1094,6 @@
         }
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1175,7 +1177,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1238,7 +1239,7 @@
     {
       "at" : "2026-09-21T14:13:31Z",
       "commit" : {
-        "correction" : "rule",
+        "correction" : "spatial",
         "kind" : "autocorrect",
         "text" : "the"
       },
@@ -1250,7 +1251,6 @@
         }
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1313,7 +1313,7 @@
     {
       "at" : "2026-09-21T14:13:32Z",
       "commit" : {
-        "correction" : "rule",
+        "correction" : "spatial",
         "kind" : "autocorrect",
         "text" : "don't"
       },
@@ -1321,7 +1321,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1398,7 +1397,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1468,7 +1466,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1538,7 +1535,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1619,7 +1615,6 @@
         }
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1703,7 +1698,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1787,7 +1781,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1858,7 +1851,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -1914,7 +1906,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -2054,7 +2045,6 @@
         }
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -2138,7 +2128,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -2292,8 +2281,7 @@
     {
       "at" : "2026-09-21T14:13:45Z",
       "commit" : {
-        "correction" : "spatial",
-        "kind" : "autocorrect",
+        "kind" : "literal",
         "text" : "around"
       },
       "corrections" : [
@@ -2311,7 +2299,6 @@
         }
       ],
       "end" : " ",
-      "hitAreas" : "adaptive",
       "languages" : [
         "en"
       ],
@@ -2344,7 +2331,7 @@
         "showsStrip" : true,
         "width" : 390
       },
-      "literal" : "aroumd",
+      "literal" : "around",
       "meant" : "around",
       "taps" : [
         {
@@ -2378,7 +2365,7 @@
         {
           "key" : "m",
           "t" : 640,
-          "text" : "m",
+          "text" : "n",
           "x" : 292.75,
           "y" : 169.5
         },
@@ -2406,7 +2393,6 @@
         }
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "en"
       ],
@@ -2474,7 +2460,7 @@
           "key" : "m",
           "t" : 640,
           "text" : "m",
-          "x" : 292.75,
+          "x" : 303.44,
           "y" : 169.5
         },
         {
@@ -2488,11 +2474,346 @@
     },
     {
       "at" : "2026-09-21T14:13:47Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "most"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "languages" : [
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 390
+      },
+      "literal" : "most",
+      "meant" : "most",
+      "taps" : [
+        {
+          "key" : "m",
+          "t" : 0,
+          "text" : "m",
+          "x" : 317.63,
+          "y" : 174.8
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 335.77,
+          "y" : 66.01
+        },
+        {
+          "key" : "s",
+          "t" : 320,
+          "text" : "s",
+          "x" : 84.65,
+          "y" : 119.16
+        },
+        {
+          "key" : "t",
+          "t" : 480,
+          "text" : "t",
+          "x" : 184.61,
+          "y" : 61.04
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:48Z",
+      "commit" : {
+        "correction" : "spatial",
+        "kind" : "autocorrect",
+        "text" : "kif"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "languages" : [
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 390
+      },
+      "literal" : "kf",
+      "meant" : "kif",
+      "taps" : [
+        {
+          "key" : "k",
+          "t" : 0,
+          "text" : "k",
+          "x" : 309.9,
+          "y" : 113.5
+        },
+        {
+          "key" : "f",
+          "t" : 160,
+          "text" : "f",
+          "x" : 156.7,
+          "y" : 113.5
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:49Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "even"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "languages" : [
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 390
+      },
+      "literal" : "even",
+      "meant" : "even",
+      "taps" : [
+        {
+          "key" : "e",
+          "t" : 0,
+          "text" : "e",
+          "x" : 103.48,
+          "y" : 60.42
+        },
+        {
+          "key" : "v",
+          "t" : 160,
+          "text" : "v",
+          "x" : 203.63,
+          "y" : 176.79
+        },
+        {
+          "key" : "e",
+          "t" : 320,
+          "text" : "e",
+          "x" : 107.9,
+          "y" : 57.77
+        },
+        {
+          "key" : "n",
+          "t" : 480,
+          "text" : "n",
+          "x" : 274.89,
+          "y" : 173.89
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:50Z",
+      "commit" : {
+        "correction" : "spatial",
+        "kind" : "autocorrect",
+        "text" : "kif"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "languages" : [
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 390
+      },
+      "literal" : "kf",
+      "meant" : "kif",
+      "taps" : [
+        {
+          "key" : "k",
+          "t" : 0,
+          "text" : "k",
+          "x" : 309.9,
+          "y" : 113.5
+        },
+        {
+          "key" : "f",
+          "t" : 160,
+          "text" : "f",
+          "x" : 156.7,
+          "y" : 113.5
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:50Z",
+      "commit" : {
+        "correction" : "spatial",
+        "kind" : "autocorrect",
+        "text" : "Jin"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "languages" : [
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 390
+      },
+      "literal" : "Jn",
+      "meant" : "Jin",
+      "taps" : [
+        {
+          "key" : "j",
+          "t" : 0,
+          "text" : "J",
+          "x" : 271.6,
+          "y" : 113.5
+        },
+        {
+          "key" : "n",
+          "t" : 160,
+          "text" : "n",
+          "x" : 271.6,
+          "y" : 169.5
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:51Z",
       "corrections" : [
 
       ],
       "end" : "dismiss",
-      "hitAreas" : "standard",
       "languages" : [
         "en"
       ],
@@ -2532,41 +2853,41 @@
           "key" : "t",
           "t" : 0,
           "text" : "t",
-          "x" : 183.58,
-          "y" : 62.8
+          "x" : 183.48,
+          "y" : 63.34
         },
         {
           "key" : "o",
           "t" : 160,
           "text" : "o",
-          "x" : 335.77,
-          "y" : 66.01
+          "x" : 333.74,
+          "y" : 63.24
         },
         {
           "key" : "d",
           "t" : 320,
           "text" : "d",
-          "x" : 122.95,
-          "y" : 119.16
+          "x" : 123.46,
+          "y" : 116.29
         },
         {
           "key" : "a",
           "t" : 480,
           "text" : "a",
-          "x" : 50.56,
-          "y" : 117.04
+          "x" : 48.64,
+          "y" : 116.97
         },
         {
           "key" : "y",
           "t" : 640,
           "text" : "y",
-          "x" : 218.38,
-          "y" : 60.42
+          "x" : 220.7,
+          "y" : 60.95
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:48Z",
+      "at" : "2026-09-21T14:13:52Z",
       "commit" : {
         "kind" : "swipe",
         "text" : "weather"
@@ -2575,7 +2896,6 @@
 
       ],
       "end" : " ",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"
@@ -2588,12 +2908,11 @@
       ]
     },
     {
-      "at" : "2026-09-21T14:13:48Z",
+      "at" : "2026-09-21T14:13:52Z",
       "corrections" : [
 
       ],
       "end" : "field",
-      "hitAreas" : "standard",
       "languages" : [
         "de",
         "en"

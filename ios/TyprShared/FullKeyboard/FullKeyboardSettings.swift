@@ -5,12 +5,6 @@ nonisolated enum KeyboardDesign: String, CaseIterable, Sendable {
     case mechanical
 }
 
-/// Which key a tap near a key edge types. Adaptive by default.
-nonisolated enum KeyboardHitAreas: String, CaseIterable, Sendable {
-    case standard
-    case adaptive
-}
-
 /// The full keyboard's switches in the shared App Group.
 @MainActor
 struct FullKeyboardSettings {
@@ -22,7 +16,6 @@ struct FullKeyboardSettings {
         static let periodKey = "settings.keyboardPeriodKey"
         static let numberRow = "settings.keyboardNumberRow"
         static let design = "settings.keyboardDesign"
-        static let hitAreas = "settings.keyboardHitAreas"
     }
 
     private let defaults: UserDefaults?
@@ -73,10 +66,5 @@ struct FullKeyboardSettings {
     var design: KeyboardDesign {
         get { defaults?.string(forKey: Key.design).flatMap(KeyboardDesign.init(rawValue:)) ?? .standard }
         nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.design) }
-    }
-
-    var hitAreas: KeyboardHitAreas {
-        get { defaults?.string(forKey: Key.hitAreas).flatMap(KeyboardHitAreas.init(rawValue:)) ?? .adaptive }
-        nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.hitAreas) }
     }
 }

@@ -729,19 +729,6 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertEqual(settings.design, .standard)
     }
 
-    func testHitAreasDefaultAdaptiveRoundTripsAndFallsBack() throws {
-        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = FullKeyboardSettings(defaults: defaults)
-
-        XCTAssertEqual(settings.hitAreas, .adaptive)
-        settings.hitAreas = .standard
-        XCTAssertEqual(FullKeyboardSettings(defaults: defaults).hitAreas, .standard)
-        defaults.set("wide", forKey: "settings.keyboardHitAreas")
-        XCTAssertEqual(settings.hitAreas, .adaptive)
-    }
-
     func testNumberRowIsOffByDefaultAndRoundTrips() throws {
         let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

@@ -97,24 +97,18 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     for _ in 0..<5 { press(.delete) }
     ["great", "Sonnenblumenfeld"].forEach(word)
 
-    // English only, on a narrower keyboard this typist hits far right of each key's center: an
-    // edge miss of n on m in `around`. Under Adaptive its last letter is deleted and typed again,
-    // under Standard the strip fixes it. The pick goes last: what it teaches the session's fast
-    // aim is not in the export.
     autocorrect.german = nil
     engine.width = 390
     teach(aim: 0.3)
     let m = engine.layout.key(.character("m"))!
-    autocorrect.hitAreas = .adaptive
     center("arou")
     press(CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY))
     center("d")
     press(.delete)
     center("d")
     press(.space)
-    autocorrect.hitAreas = .standard
     center("arou")
-    press(CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY))
+    press(CGPoint(x: m.frame.midX - 0.2 * m.frame.width, y: m.frame.midY))
     center("d")
     await engine.waitForSuggestions()
     guard let around = engine.suggestions.first(where: { $0.replacement == "around" }) else {
@@ -127,11 +121,11 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     type("today")
     engine.endTypingLogWord("dismiss")
 
-    var swiped = TypingLogWord(at: clockDate, languages: ["de", "en"], hitAreas: "standard", swipe: true)
+    var swiped = TypingLogWord(at: clockDate, languages: ["de", "en"], swipe: true)
     swiped.commit = .init(kind: .swipe, text: "weather")
     swiped.meant = "weather"
     swiped.end = " "
-    var accent = TypingLogWord(at: clockDate, languages: ["de", "en"], hitAreas: "standard")
+    var accent = TypingLogWord(at: clockDate, languages: ["de", "en"])
     accent.taps = [TypingLogTap(t: 0, x: 120, y: 160, key: "c", text: "c"), TypingLogTap(t: 150, key: "a", text: "á")]
     accent.literal = "cá"
     accent.meant = "cá"
