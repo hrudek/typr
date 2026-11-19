@@ -722,6 +722,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         accentCallout.show(nil)
         let layout = engine.layout
         if let key = engine.previewKey, let balloon = layout.balloon(for: key) {
+            callout.fontSize = layout.orientation.glyphs.balloonLetter
             callout.show(balloon, label: engine.displayLabel(for: key))
         } else {
             callout.show(nil, label: "")

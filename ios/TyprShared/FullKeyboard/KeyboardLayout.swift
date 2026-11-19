@@ -49,6 +49,54 @@ nonisolated enum KeyboardOrientation: String, Equatable, Sendable {
 
     /// Only the iPhone Duo open and sideways offers Apple's split keyboard.
     var allowsSplit: Bool { self == .wideLandscape }
+
+    var glyphs: KeyGlyphSizes {
+        switch self {
+        case .portrait: .portrait
+        case .landscape: .landscape
+        case .widePortrait: .widePortrait
+        case .wideLandscape, .splitLandscape: .wideLandscape
+        }
+    }
+}
+
+/// Point sizes of what the keys show, before the mechanical design's 0.93.
+nonisolated struct KeyGlyphSizes: Equatable, Sendable {
+    let letter: CGFloat
+    let capital: CGFloat
+    /// Punctuation on a key wider than a letter.
+    let widePunctuation: CGFloat
+    /// How far lowercase letters and punctuation sit above the key's centre.
+    let letterLift: CGFloat
+    /// Shift, delete and globe.
+    let symbol: CGFloat
+    let returnSymbol: CGFloat
+    /// Worded keys: 123, ABC, return.
+    let label: CGFloat
+    let balloonLetter: CGFloat
+
+    static let portrait = KeyGlyphSizes(
+        letter: 22.5, capital: 21, widePunctuation: 21, letterLift: 1,
+        symbol: 18, returnSymbol: 17.5, label: 15.5, balloonLetter: 33
+    )
+
+    static let landscape = KeyGlyphSizes(
+        letter: 19, capital: 18, widePunctuation: 19, letterLift: 0.5,
+        symbol: 16, returnSymbol: 15.5, label: 14.5, balloonLetter: 33
+    )
+
+    /// Apple's letters on the inner display are 28 pt upright and 28.5 pt sideways against 23 pt on other iPhones
+    /// (iikb docs/design.md, measured in the iOS 27.1 simulator); Typr keeps its 0.5 pt under Apple's and grows the
+    /// rest by the same share. The balloon keeps its 46 pt bubble, so its letter grows only as far as that holds.
+    static let widePortrait = KeyGlyphSizes(
+        letter: 27.5, capital: 25.5, widePunctuation: 25.5, letterLift: 1,
+        symbol: 22, returnSymbol: 21.5, label: 19, balloonLetter: 36
+    )
+
+    static let wideLandscape = KeyGlyphSizes(
+        letter: 28, capital: 26, widePunctuation: 26, letterLift: 1,
+        symbol: 22, returnSymbol: 21.5, label: 19, balloonLetter: 36
+    )
 }
 
 /// The bottom row's globe where iOS needs one: a key that switches keyboards, an inert spacer

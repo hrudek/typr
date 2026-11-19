@@ -1,4 +1,5 @@
 import CoreGraphics
+import UIKit
 import XCTest
 @testable import Typr
 
@@ -151,6 +152,55 @@ final class KeyboardPoseTests: XCTestCase {
             let joined = try XCTUnwrap(JoinedSpaceKeycap(layout: layout))
             XCTAssertEqual(joined.space, spaces[1].frame, "width \(width)")
             XCTAssertNotEqual(joined.space, spaces[0].frame, "the left space bar keeps its own keycap")
+        }
+    }
+
+    func testTheOuterDisplayKeepsTodaysIPhoneGlyphs() {
+        XCTAssertEqual(KeyboardOrientation(container: outerPortrait).glyphs, KeyGlyphSizes(
+            letter: 22.5, capital: 21, widePunctuation: 21, letterLift: 1,
+            symbol: 18, returnSymbol: 17.5, label: 15.5, balloonLetter: 33
+        ))
+        XCTAssertEqual(KeyboardOrientation(container: outerLandscape).glyphs, KeyGlyphSizes(
+            letter: 19, capital: 18, widePunctuation: 19, letterLift: 0.5,
+            symbol: 16, returnSymbol: 15.5, label: 14.5, balloonLetter: 33
+        ))
+    }
+
+    func testInnerDisplayGlyphsGrowWithTheKeysAsApplesDo() {
+        let phone = KeyboardOrientation.portrait.glyphs
+        let inner: [(KeyboardOrientation, ClosedRange<CGFloat>)] = [
+            (KeyboardOrientation(container: innerPortrait), 27...28),
+            (KeyboardOrientation(container: innerLandscape), 27.5...28.5),
+            (KeyboardOrientation(container: innerLandscape, split: true), 27.5...28.5),
+        ]
+        for (orientation, apple) in inner {
+            let glyphs = orientation.glyphs
+            XCTAssertTrue(apple.contains(glyphs.letter), "\(orientation) letters \(glyphs.letter)")
+            for (size, phoneSize) in [
+                (glyphs.capital, phone.capital), (glyphs.widePunctuation, phone.widePunctuation),
+                (glyphs.symbol, phone.symbol), (glyphs.returnSymbol, phone.returnSymbol), (glyphs.label, phone.label),
+            ] {
+                XCTAssertGreaterThan(size, phoneSize, "\(orientation)")
+                XCTAssertEqual(size / phoneSize, glyphs.letter / phone.letter, accuracy: 0.05, "\(orientation)")
+            }
+        }
+        XCTAssertEqual(KeyboardOrientation.splitLandscape.glyphs, KeyboardOrientation.wideLandscape.glyphs)
+    }
+
+    func testInnerDisplayGlyphsFitTheirKeys() {
+        let layouts = [
+            KeyboardLayout(width: innerPortrait.width, orientation: .widePortrait),
+            KeyboardLayout(width: 801, orientation: .wideLandscape),
+            KeyboardLayout(width: 801, orientation: .splitLandscape),
+        ]
+        for layout in layouts {
+            let glyphs = layout.orientation.glyphs
+            let key = layout.key(.character("w"))!.frame
+            let capital = ("W" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: glyphs.capital)])
+            XCTAssertLessThan(capital.width, key.width - 8, describe(layout))
+            XCTAssertLessThan(capital.height, key.height, describe(layout))
+            let balloon = ("W" as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: glyphs.balloonLetter, weight: .light)])
+            XCTAssertLessThanOrEqual(balloon.height, KeyBalloon.bubbleHeight, describe(layout))
         }
     }
 
