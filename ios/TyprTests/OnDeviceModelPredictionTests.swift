@@ -159,12 +159,17 @@ final class OnDeviceModelPredictionTests: XCTestCase {
     }
 
     func testOnDeviceWordsMergeIntoTheBar() async throws {
+        let counted = try await countedBar()
         let model = FakeSystemModel { _ in ["see", "Visit"] }
         let (engine, target) = try keyboard(model)
         await type(sentence, engine, target)
         await settle(engine)
         XCTAssertEqual(model.contexts, [sentence], "Only the text before the caret")
-        XCTAssertEqual(Array(bar(engine).prefix(2)), ["Visit", "see"])
+        let shown = bar(engine)
+        XCTAssertEqual(shown.count, 3)
+        XCTAssertEqual(shown[1], "see", "Likeliest model word in the centre")
+        XCTAssertEqual(shown[0], counted[1], "Then the likeliest count word")
+        XCTAssertEqual(shown[2].lowercased(), "visit")
     }
 
     func testRefusalTimeoutAndUnusableWordsKeepCountPredictions() async throws {

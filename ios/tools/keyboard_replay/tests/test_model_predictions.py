@@ -96,7 +96,7 @@ class ModelPredictionTests(unittest.TestCase):
     def test_on_device_words_merge_into_the_bar(self):
         answered = self.report["onDevice"]["answered"]
         self.assertEqual(answered["contexts"], ["I would like to "])
-        self.assertEqual(answered["bar"], ["Visit", "see", "the"], "Model words first, likeliest in the centre")
+        self.assertEqual(answered["bar"], ["the", "see", "Visit"], "Model and count words alternate, model first")
 
 
 if __name__ == "__main__":
