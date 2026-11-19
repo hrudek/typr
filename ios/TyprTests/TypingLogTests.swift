@@ -163,6 +163,7 @@ final class TypingLogTests: XCTestCase {
         for index in 1...8 { store.append(word("w\(index)")) }
         store.waitForWrites()
         XCTAssertEqual(try store.words().map(\.meant), ["w4", "w5", "w6", "w7", "w8"])
+        XCTAssertEqual(try store.wordCount(), 5)
         let reopened = TypingLogStore(directory: directory, segmentWords: 3)
         reopened.append(word("w9"))
         reopened.append(word("w10"))

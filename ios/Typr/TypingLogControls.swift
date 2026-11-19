@@ -50,12 +50,14 @@ final class TypingLogSettingsModel {
 
     func delete() {
         guard let store else { return }
-        do {
-            try store.delete()
-            problem = nil
-            wordCount = 0
-        } catch {
-            problem = "The typing log could not be deleted. Try again."
+        Task {
+            let result = await Task.detached { try store.delete() }.result
+            switch result {
+            case .success:
+                problem = nil
+                wordCount = 0
+            case .failure: problem = "The typing log could not be deleted. Try again."
+            }
         }
     }
 }

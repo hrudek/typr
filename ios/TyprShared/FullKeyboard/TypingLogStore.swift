@@ -35,7 +35,13 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
         try queue.sync { try withLock { try readWords() } }
     }
 
-    func wordCount() throws -> Int { try words().count }
+    func wordCount() throws -> Int {
+        try queue.sync {
+            try withLock {
+                try [Self.previousName, Self.currentName].reduce(0) { $0 + (try countLines(directory.appendingPathComponent($1))) }
+            }
+        }
+    }
 
     func delete() throws {
         try queue.sync {
