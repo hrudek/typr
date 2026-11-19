@@ -58,7 +58,7 @@ nonisolated struct UsageHeat: Codable, Equatable, Sendable {
     var updatedAt: Date
     var id: String { "g\(geometryVersion)-\(layout.id)" }
     var isValid: Bool {
-        geometryVersion == 1 && ["portrait", "landscape"].contains(layout.orientation)
+        geometryVersion == 1 && KeyboardOrientation(rawValue: layout.orientation) != nil
             && (8...4096).contains(layout.widthBucket) && layout.widthBucket % 8 == 0
             && cells.count == Self.columns * Self.rows && cells.allSatisfy { $0 <= UsageTotals.ceiling }
             && UsageTotals.validDate(updatedAt)

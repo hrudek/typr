@@ -22,6 +22,8 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     /// Fixtures force light or dark and portrait or landscape; the keyboard follows its field.
     var appearanceOverride: Bool? { didSet { applyAppearance() } }
     var orientationOverride: KeyboardOrientation? { didSet { setNeedsLayout() } }
+    /// The size of the display the keyboard is on (the settings preview: its page), which picks the geometry.
+    var containerSize: CGSize? { didSet { if containerSize != oldValue { setNeedsLayout() } } }
     /// Haptics need Full Access.
     var allowsHaptics: () -> Bool = { false }
     /// Draws a stand-in backdrop where there is no system keyboard behind the view.
@@ -174,7 +176,9 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     var orientation: KeyboardOrientation {
-        orientationOverride ?? Self.orientation(for: traitCollection)
+        orientationOverride
+            ?? containerSize.map(KeyboardOrientation.init(container:))
+            ?? Self.orientation(for: traitCollection)
     }
 
     var preferredHeight: CGFloat {
@@ -398,9 +402,8 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let isLandscape = orientation == .landscape
         engine.orientation = orientation
-        engine.horizontalInset = isLandscape ? max(safeAreaInsets.left, safeAreaInsets.right) : 0
+        engine.horizontalInset = orientation.isLandscape ? max(safeAreaInsets.left, safeAreaInsets.right) : 0
         engine.width = bounds.width
         let layout = engine.layout
 

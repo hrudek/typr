@@ -9,10 +9,7 @@ nonisolated struct KeyboardLayoutSignature: Hashable, Codable, Sendable {
     let showsGlobe: Bool
 
     init(_ layout: KeyboardLayout) {
-        switch layout.orientation {
-        case .portrait: orientation = "portrait"
-        case .landscape: orientation = "landscape"
-        }
+        orientation = layout.orientation.rawValue
         widthBucket = Int((layout.width / 8).rounded()) * 8
         showsStrip = layout.showsStrip
         showsGlobe = layout.showsGlobe

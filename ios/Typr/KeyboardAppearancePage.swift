@@ -3,7 +3,6 @@ import UIKit
 
 struct KeyboardAppearancePage: View {
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var design = FullKeyboardSettings().design
     @State private var hideSuggestionBar = TyprSettings().hideSuggestionBar
@@ -33,7 +32,7 @@ struct KeyboardAppearancePage: View {
         return screen?.traitCollection.userInterfaceStyle != .light
     }
 
-    private var preview: KeyboardAppearancePreview.Settings {
+    private func preview(container: CGSize) -> KeyboardAppearancePreview.Settings {
         KeyboardAppearancePreview.Settings(
             design: design,
             showsSuggestionBar: !hideSuggestionBar,
@@ -41,7 +40,7 @@ struct KeyboardAppearancePage: View {
             bottomRow: BottomRow(order: draggedOrder ?? bottomRow.order, periodKey: bottomRow.periodKey),
             numberRow: numberRow,
             isDark: Self.snapshotIsDark() ?? systemIsDark,
-            orientation: verticalSizeClass == .compact ? .landscape : .portrait
+            container: container
         )
     }
 
@@ -63,7 +62,10 @@ struct KeyboardAppearancePage: View {
                 .frame(maxWidth: .infinity)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                dockedPreview(in: page.size)
+                dockedPreview(in: page.size, container: CGSize(
+                    width: page.size.width + page.safeAreaInsets.leading + page.safeAreaInsets.trailing,
+                    height: page.size.height + page.safeAreaInsets.top + page.safeAreaInsets.bottom
+                ))
             }
         }
         .background(TyprTheme.bgDeep.ignoresSafeArea())
@@ -79,8 +81,8 @@ struct KeyboardAppearancePage: View {
         Color(uiColor: FullKeyboardPalette(isDark: isDark).backdrop)
     }
 
-    private func dockedPreview(in page: CGSize) -> some View {
-        let settings = preview
+    private func dockedPreview(in page: CGSize, container: CGSize) -> some View {
+        let settings = preview(container: container)
         let height = KeyboardLayout.height(
             for: settings.orientation, showsStrip: settings.showsSuggestionBar, numberRow: settings.numberRow
         )
@@ -184,7 +186,10 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         var bottomRow: BottomRow
         var numberRow: Bool
         var isDark: Bool
-        var orientation: KeyboardOrientation
+        /// The page with its bars: the display the preview stands in for.
+        var container: CGSize
+
+        var orientation: KeyboardOrientation { KeyboardOrientation(container: container) }
 
         var accessibilityLabel: String {
             let globe = switch globeKey {
@@ -236,7 +241,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         view.model.numberRow = settings.numberRow
         view.applyPreview(FullKeyboardView.Preview(design: settings.design, showsSuggestionBar: settings.showsSuggestionBar))
         view.appearanceOverride = settings.isDark
-        view.orientationOverride = settings.orientation
+        view.containerSize = settings.container
     }
 }
 
