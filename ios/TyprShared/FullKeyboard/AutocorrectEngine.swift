@@ -1208,7 +1208,9 @@ final class AutocorrectEngine {
 
     private func spatialSpelling(_ candidate: SpatialWordDecoder.Candidate, token: String) -> (text: String, validated: Bool) {
         let plain = Self.matchCase(of: token, onto: candidate.word)
-        if candidate.addsApostrophe { return (plain, true) }
+        if candidate.isVariant, let spelled = validSpelling(candidate.word) {
+            return (Self.matchCase(of: token, onto: spelled), true)
+        }
         if candidate.language == .english { return (plain, checker.isWordValid(plain)) }
         let guesses = germanGuesses(for: token)
         if let cached = spellingCache?.spatial[candidate.word] { return cached }

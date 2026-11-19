@@ -170,8 +170,8 @@ final class SpatialWordDecoder {
         let edit: Edit
         /// Candidate letter -> observed tap; missing letters have no tap.
         let alignment: [Int?]
-        /// The literal's own letters with an apostrophe restored (`dont` -> `don't`).
-        var addsApostrophe = false
+        /// Another spelling of the literal's own letters (`dont` -> `don't`, `fuer` -> `für`).
+        var isVariant = false
 
         /// P(taps | word) of the reading: touch densities and its edit's probability.
         var tapLogLikelihood: Double {
@@ -236,7 +236,7 @@ final class SpatialWordDecoder {
             }
             guard best.score > literalScore else { return .refuse(.belowMargin) }
             if literalIsValid && best.tapLogLikelihood <= literalSpatialScore
-                && !(best.addsApostrophe && best.score - literalScore >= Self.apostropheLogOdds) {
+                && !(best.isVariant && best.word.contains("'") && best.score - literalScore >= Self.apostropheLogOdds) {
                 return .refuse(.editNeedsInvalidLiteral)
             }
             return .replace(best)

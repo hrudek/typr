@@ -23,11 +23,18 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
-    private func keyboard(after context: String) throws -> (FullKeyboardEngine, FixtureTextTarget) {
+    private final class GermanChecker: TextChecking {
+        func isWordValid(_ word: String) -> Bool { ["für", "ich", "bin"].contains(word.lowercased()) }
+        func guesses(for word: String) -> [String] { [] }
+        func completions(for prefix: String) -> [String] { [] }
+    }
+
+    private func keyboard(after context: String, german: Bool = false) throws -> (FullKeyboardEngine, FixtureTextTarget) {
         let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
         let autocorrect = AutocorrectEngine(checker: Checker(), learning: KeyboardLearningSession(defaults: defaults),
                                             spatialDecoder: SpatialWordDecoder(lexicons: lexicons),
                                             contextResources: .init(model: try XCTUnwrap(BundledKeyboardData.contextModel)))
+        if german { autocorrect.german = GermanAutocorrect(checker: GermanChecker()) }
         let target = FixtureTextTarget(text: context)
         target.autocapitalizationType = UITextAutocapitalizationType.none
         let engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
@@ -45,8 +52,8 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
         now += 0.45
     }
 
-    private func commit(_ letters: String, after context: String) throws -> String {
-        let (engine, target) = try keyboard(after: context)
+    private func commit(_ letters: String, after context: String, german: Bool = false) throws -> String {
+        let (engine, target) = try keyboard(after: context, german: german)
         for letter in letters { tap(.character(String(letter)), engine) }
         tap(.space, engine)
         return target.text
@@ -65,6 +72,11 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
     func testSameTapsInADifferentSentenceChangeTheCorrection() throws {
         XCTAssertEqual(try commit("kf", after: "even "), "even if ")
         XCTAssertEqual(try commit("kf", after: "most "), "most of ")
+    }
+
+    func testSpellingsOfTheTypedLettersNeedNoSystemGuess() throws {
+        XCTAssertEqual(try commit("dont", after: "and "), "and don't ")
+        XCTAssertEqual(try commit("fuer", after: "ich bin ", german: true), "ich bin für ")
     }
 
     func testOwnerProtectionsOutrankTheScore() throws {

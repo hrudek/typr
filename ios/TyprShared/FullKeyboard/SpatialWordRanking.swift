@@ -285,7 +285,7 @@ nonisolated final class SpatialWordRanking {
                              score: literalSpatial + Double(spelling.steps) * Self.transliterationPenalty
                                 + Self.priorWeight * prior + personal.bonus(for: key) + lift(variant),
                              spatialScore: literalSpatial, edit: .none, alignment: [],
-                             addsApostrophe: variant.contains("'")))
+                             isVariant: true))
         }
         var frontier = Frontier()
         // A subtree's best terminal prior and the snapshot's largest bonus tighten
