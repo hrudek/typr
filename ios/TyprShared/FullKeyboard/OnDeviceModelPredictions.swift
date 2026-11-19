@@ -3,7 +3,7 @@ import Foundation
 import FoundationModels
 #endif
 
-/// The on-device language model behind model predictions; tests use a fake.
+/// The on-device language model behind model predictions.
 @MainActor
 protocol OnDeviceNextWordModel: AnyObject, Sendable {
     var isAvailable: Bool { get }
@@ -16,7 +16,6 @@ protocol OnDeviceNextWordModel: AnyObject, Sendable {
 
 /// Next words from the on-device model; asks nothing while the model is unavailable.
 nonisolated struct OnDeviceModelPredictions: ModelPredictionProvider {
-    /// Cold model loads take longer; prewarming on appearance covers the first request.
     static let timeout: Duration = .seconds(1)
     let model: any OnDeviceNextWordModel
 

@@ -354,7 +354,6 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         applyModelPredictions()
     }
 
-    /// Re-checked with the settings: availability and the enabled languages can change.
     private func applyModelPredictions() {
         let source = ModelPredictionSource.choose(hasCloud: cloudPredictions != nil, onDevice: onDeviceModel,
                                                   languages: engine.autocorrect.suggestionLanguages)

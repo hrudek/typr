@@ -58,7 +58,6 @@ actor FakeModel: ModelPredictionProvider {
     }
 }
 
-/// An on-device model that is available or not, supports some languages, answers or refuses.
 @MainActor
 final class FakeOnDeviceModel: OnDeviceNextWordModel {
     struct Refusal: Error {}

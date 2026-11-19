@@ -12,7 +12,6 @@ final class OnDeviceModelPredictionTests: XCTestCase {
 
     private struct Refusal: Error {}
 
-    /// Stands in for the system model: available or not, some languages, answers, refuses or waits.
     private final class FakeSystemModel: OnDeviceNextWordModel {
         enum Mode { case answer, refuse, hold }
         let isAvailable: Bool
