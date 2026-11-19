@@ -23,25 +23,28 @@ nonisolated enum KeyboardOrientation: String, Equatable, Sendable {
     case widePortrait
     /// The same display sideways, 951 × 669 pt.
     case wideLandscape
+    /// `wideLandscape` with Settings › Appearance › Split keyboard on: two halves at the edges, the fold between them.
+    case splitLandscape
 
     /// iPhones are at most 440 pt across and the iPhone Duo's outer display 466 pt; its inner display is 669 pt.
     static let wideShortSide: CGFloat = 540
 
     /// The geometry for a display (or a page standing in for one) of this size. Size only, never the device
     /// model, idiom or interface orientation: iOS gives keyboard extensions no hinge state, and Apple's own
-    /// keyboard lays out a half-open iPhone Duo like an open one.
-    init(container: CGSize) {
+    /// keyboard lays out a half-open iPhone Duo like an open one. `split` is the Split keyboard setting, which only
+    /// the open iPhone Duo held sideways follows.
+    init(container: CGSize, split: Bool = false) {
         let isLandscape = container.width > container.height
         let isWide = min(container.width, container.height) >= Self.wideShortSide
         self = switch (isWide, isLandscape) {
         case (false, false): .portrait
         case (false, true): .landscape
         case (true, false): .widePortrait
-        case (true, true): .wideLandscape
+        case (true, true): split ? .splitLandscape : .wideLandscape
         }
     }
 
-    var isLandscape: Bool { self == .landscape || self == .wideLandscape }
+    var isLandscape: Bool { self == .landscape || self == .wideLandscape || self == .splitLandscape }
 
     /// Only the iPhone Duo open and sideways offers Apple's split keyboard.
     var allowsSplit: Bool { self == .wideLandscape }
@@ -145,6 +148,8 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
     let cornerRadius: CGFloat
     /// The number row's key height; zero without one.
     var numberRowHeight: CGFloat = 0
+    /// The room between the halves of the split keyboard; zero for one board.
+    var splitGap: CGFloat = 0
 
     /// Matches iOS 26 portrait keyboard geometry inside the system's +17 pt Liquid Glass crown:
     /// 35 pt strip area + 218 pt of keys (4 × 45 pt + 3 × 11 pt + 5 pt) = 253 pt extension height.
@@ -182,6 +187,26 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
     /// wider keyboards widen the side insets instead, so the keys stay centred and in thumb reach.
     static let maxWideLetterWidth: CGFloat = 58
 
+    /// How much of the keyboard's width each split half may take, so a thumb reaches across it.
+    static let splitHalfShare: CGFloat = 0.4
+    /// Split letters are never narrower than the outer display's (39.9 pt across 466 pt).
+    static let minSplitLetterWidth: CGFloat = 40
+
+    /// The inner display sideways, split: `wideLandscape`'s rows at the phone's key gap, the keys as wide as the left
+    /// half's widest row (shift to b, 6.5 key pitches) allows within `splitHalfShare`, the rest the gap between halves.
+    private static func splitLandscape(innerWidth: CGFloat?) -> KeyboardMetrics {
+        var metrics = KeyboardMetrics(
+            side: 9, gap: 6, rowGap: 13, keyHeight: 39,
+            stripTop: 0, stripHeight: 33, stripBottom: 6,
+            keysTop: 0, keysBottom: 4, cornerRadius: 8.5
+        )
+        guard let innerWidth else { return metrics }
+        let pitch = (splitHalfShare * innerWidth - metrics.side + metrics.gap) / 6.5
+        let letter = min(maxWideLetterWidth, max(minSplitLetterWidth, pitch - metrics.gap))
+        metrics.splitGap = max(0, innerWidth - 10 * letter - 9 * metrics.gap - 2 * metrics.side)
+        return metrics
+    }
+
     /// Height of a panel's header row (recording, feedback), with or without the suggestion bar.
     static let headerHeight: CGFloat = 33
 
@@ -203,7 +228,8 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
         KeyboardMetrics(
             side: side, gap: gap, rowGap: rowGap, keyHeight: keyHeight,
             stripTop: 0, stripHeight: 0, stripBottom: 0,
-            keysTop: orientation.isLandscape ? 4 : 6, keysBottom: keysBottom, cornerRadius: cornerRadius
+            keysTop: orientation.isLandscape ? 4 : 6, keysBottom: keysBottom, cornerRadius: cornerRadius,
+            splitGap: splitGap
         )
     }
 
@@ -215,6 +241,8 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
             return KeyboardMetrics.widePortrait.centringLetters(in: innerWidth)
         case .wideLandscape:
             return KeyboardMetrics.wideLandscape.centringLetters(in: innerWidth)
+        case .splitLandscape:
+            return splitLandscape(innerWidth: innerWidth)
         case .portrait:
             guard let innerWidth else { return .portrait }
             let side: CGFloat = if innerWidth >= 390 {
@@ -240,7 +268,7 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
             side: side, gap: gap, rowGap: rowGap, keyHeight: keyHeight,
             stripTop: stripTop, stripHeight: stripHeight, stripBottom: stripBottom,
             keysTop: keysTop, keysBottom: keysBottom, cornerRadius: cornerRadius,
-            numberRowHeight: numberRowHeight
+            numberRowHeight: numberRowHeight, splitGap: splitGap
         )
     }
 
@@ -398,7 +426,12 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     // MARK: - Building
 
     static func letterWidth(innerWidth: CGFloat, metrics: KeyboardMetrics) -> CGFloat {
-        (innerWidth - 2 * metrics.side - 9 * metrics.gap) / 10
+        (innerWidth - metrics.splitGap - 2 * metrics.side - 9 * metrics.gap) / 10
+    }
+
+    /// How many of a row's keys the split keyboard's left half takes, as in touch typing: q–t, a–g, z–b, 1–5.
+    static func leftHalfCount(_ count: Int) -> Int {
+        count >= 7 ? 5 : (count + 1) / 2
     }
 
     static let numberRowCharacters = "1234567890".map(String.init)
@@ -432,8 +465,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         aroundSpace: [BottomKey],
         inset: CGFloat
     ) -> [KeyboardKey] {
-        let innerWidth = width - 2 * inset
-        let lw = letterWidth(innerWidth: innerWidth, metrics: m)
+        let lw = letterWidth(innerWidth: width - 2 * inset, metrics: m)
+        let boardWidth = width - 2 * inset - m.splitGap
         let modW = lw * modifierWidthRatio
         let rows = characterRows(for: layer)
         let left = inset + m.side
@@ -462,15 +495,16 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
 
         func addCharacters(_ chars: [String], row: Int, startX: CGFloat, keyWidth: CGFloat) {
             var x = startX
-            for ch in chars {
-                add(.character(ch), row: row, x: x, w: keyWidth, label: ch)
+            for (index, ch) in chars.enumerated() {
+                let shift = index < leftHalfCount(chars.count) ? 0 : m.splitGap
+                add(.character(ch), row: row, x: x + shift, w: keyWidth, label: ch)
                 x += keyWidth + m.gap
             }
         }
 
         func centredStart(count: Int, keyWidth: CGFloat) -> CGFloat {
             let total = CGFloat(count) * keyWidth + CGFloat(count - 1) * m.gap
-            return inset + (innerWidth - total) / 2
+            return inset + (boardWidth - total) / 2
         }
 
         if showsNumberRow {
@@ -499,7 +533,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             // Apple's punctuation row: five wide keys aligned to the s..k columns between modifiers.
             let edgeGap = 1.5 * (lw + m.gap) - modW
             let count = CGFloat(middle.count)
-            let middleW = (innerWidth - 2 * m.side - 2 * modW - 2 * edgeGap - (count - 1) * m.gap) / count
+            let middleW = (boardWidth - 2 * m.side - 2 * modW - 2 * edgeGap - (count - 1) * m.gap) / count
             addCharacters(middle, row: shiftRow, startX: left + modW + edgeGap, keyWidth: middleW)
         }
         add(.delete, row: shiftRow, x: right - modW, w: modW, label: "delete")
@@ -540,16 +574,25 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         trailing += aroundSpace[spaceIndex...].compactMap(arrangedKey)
         trailing.append((.returnKey, returnW, "return"))
 
-        let fixed = (leading + trailing).reduce(0) { $0 + $1.1 }
-        let itemCount = CGFloat(leading.count + trailing.count + 1)
-        let spaceW = max(lw, (right - left) - fixed - (itemCount - 1) * m.gap)
         var x = left
         for (kind, w, label) in leading {
             add(kind, row: spaceRow, x: x, w: w, label: label)
             x += w + m.gap
         }
-        add(.space, row: spaceRow, x: x, w: spaceW, label: "space")
-        x += spaceW + m.gap
+        let trailingWidth = trailing.reduce(0) { $0 + $1.1 } + CGFloat(trailing.count) * m.gap
+        if m.splitGap > 0 {
+            let pitch = lw + m.gap
+            let leftSpaceEnd = max(left + 5 * pitch - m.gap, x + 2 * pitch)
+            add(.space, row: spaceRow, x: x, w: leftSpaceEnd - x, label: "space")
+            let rightSpaceEnd = right - trailingWidth
+            let rightSpaceStart = min(left + 5 * pitch + m.splitGap, rightSpaceEnd - 2 * pitch)
+            add(.space, row: spaceRow, x: rightSpaceStart, w: rightSpaceEnd - rightSpaceStart, label: "space")
+            x = rightSpaceEnd + m.gap
+        } else {
+            let spaceW = max(lw, right - x - trailingWidth)
+            add(.space, row: spaceRow, x: x, w: spaceW, label: "space")
+            x += spaceW + m.gap
+        }
         for (kind, w, label) in trailing {
             add(kind, row: spaceRow, x: x, w: w, label: label)
             x += w + m.gap

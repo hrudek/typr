@@ -15,6 +15,7 @@ struct FullKeyboardSettings {
         static let bottomRowOrder = "settings.keyboardBottomRowOrder"
         static let periodKey = "settings.keyboardPeriodKey"
         static let numberRow = "settings.keyboardNumberRow"
+        static let splitKeyboard = "settings.keyboardSplit"
         static let design = "settings.keyboardDesign"
     }
 
@@ -61,6 +62,12 @@ struct FullKeyboardSettings {
     var numberRow: Bool {
         get { defaults?.object(forKey: Key.numberRow) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.numberRow) }
+    }
+
+    /// Two halves under the thumbs on the iPhone Duo open and sideways. Off by default.
+    var splitKeyboard: Bool {
+        get { defaults?.object(forKey: Key.splitKeyboard) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.splitKeyboard) }
     }
 
     var design: KeyboardDesign {

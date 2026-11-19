@@ -134,8 +134,9 @@ struct JoinedSpaceKeycap {
     static let lineWidth: CGFloat = 2.0 / 3.0
 
     init?(layout: KeyboardLayout) {
-        guard let space = layout.key(.space), let typr = layout.key(.typr),
-              abs(typr.frame.minX - space.frame.maxX - layout.metrics.gap) < 0.01 else { return nil }
+        guard let typr = layout.key(.typr), let space = layout.keys.first(where: {
+            $0.kind == .space && abs(typr.frame.minX - $0.frame.maxX - layout.metrics.gap) < 0.01
+        }) else { return nil }
         self.space = space.frame
         self.typr = typr.frame
         radius = layout.metrics.cornerRadius

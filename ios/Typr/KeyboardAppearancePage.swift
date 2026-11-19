@@ -9,12 +9,14 @@ struct KeyboardAppearancePage: View {
     @State private var globeKey = FullKeyboardSettings().globeKey
     @State private var bottomRow = FullKeyboardSettings().bottomRow
     @State private var numberRow = FullKeyboardSettings().numberRow
+    @State private var splitKeyboard = FullKeyboardSettings().splitKeyboard
     @State private var draggedOrder: [BottomKey]?
     @State private var window: WindowReader.Window?
 
     static let globeKeyFooter = "Only on iPhones with no globe under the keyboard. Spacer keeps 123 off the corner and does nothing when tapped."
     static let switchingKeyboardsHint = "With Spacer or Hidden, hold 123 in the full keyboard or space in the dictation bar to switch keyboards."
     static let bottomRowFooter = "Drag to change the order around the space bar."
+    static let splitKeyboardFooter = "Only when iPhone Duo is open and sideways."
 
     /// `settings-keyboard-appearance-light` and `-dark` fix the preview's appearance for screenshots.
     static func snapshotIsDark(arguments: [String] = ProcessInfo.processInfo.arguments) -> Bool? {
@@ -35,7 +37,8 @@ struct KeyboardAppearancePage: View {
             numberRow: numberRow,
             // The app is always dark; the keyboard follows the system like it does in most apps.
             isDark: Self.snapshotIsDark() ?? window?.systemIsDark ?? true,
-            container: container
+            container: container,
+            splitKeyboard: splitKeyboard
         )
     }
 
@@ -85,6 +88,17 @@ struct KeyboardAppearancePage: View {
         return min(1, max(0, room) / keyboardHeight)
     }
 
+    /// The width iOS gives a third-party keyboard, centred on the display: on the iPhone Duo narrower than the display
+    /// (iikb's measurements in the iOS 27.1 simulator), elsewhere the whole width.
+    static func keyboardWidth(display: CGSize) -> CGFloat {
+        switch (display.width, display.height) {
+        case (466, 678): 452
+        case (678, 466): 528
+        case (951, 669): 801
+        default: display.width
+        }
+    }
+
     /// The bottom edge of an active fold running across the page: the iPhone Duo partly open and held upright.
     private static func horizontalFoldBottom(_ page: GeometryProxy) -> CGFloat? {
         guard #available(iOS 27.1, *) else { return nil }
@@ -102,7 +116,7 @@ struct KeyboardAppearancePage: View {
         )
         let scale = Self.previewScale(keyboardHeight: height, page: page, foldBottom: foldBottom)
         return KeyboardAppearancePreview(settings: settings)
-            .frame(width: page.width, height: height)
+            .frame(width: min(page.width, Self.keyboardWidth(display: container)), height: height)
             .scaleEffect(scale, anchor: .bottom)
             .frame(width: page.width, height: height * scale, alignment: .bottom)
             .allowsHitTesting(false)
@@ -137,6 +151,14 @@ struct KeyboardAppearancePage: View {
             SettingsSection(title: "Top row") {
                 SettingsToggle(title: "Number row", detail: "1 to 0 above the letters. The keyboard grows taller.", isOn: $numberRow)
                     .onChange(of: numberRow) { _, shown in FullKeyboardSettings().numberRow = shown }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                SettingsSection(title: "Split") {
+                    SettingsToggle(title: "Split keyboard", detail: "Half the keys under each thumb.", isOn: $splitKeyboard)
+                        .onChange(of: splitKeyboard) { _, split in FullKeyboardSettings().splitKeyboard = split }
+                }
+                SettingsFooter(Self.splitKeyboardFooter)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -187,6 +209,7 @@ struct KeyboardAppearancePage: View {
         globeKey = FullKeyboardSettings().globeKey
         bottomRow = FullKeyboardSettings().bottomRow
         numberRow = FullKeyboardSettings().numberRow
+        splitKeyboard = FullKeyboardSettings().splitKeyboard
     }
 }
 
@@ -260,8 +283,9 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         var isDark: Bool
         /// The window the page is in: the display the preview stands in for.
         var container: CGSize
+        var splitKeyboard = false
 
-        var orientation: KeyboardOrientation { KeyboardOrientation(container: container) }
+        var orientation: KeyboardOrientation { KeyboardOrientation(container: container, split: splitKeyboard) }
 
         var accessibilityLabel: String {
             let globe = switch globeKey {
@@ -272,7 +296,8 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
             return ["Full keyboard preview", design.title, globe,
                     "period \(bottomRow.periodKey ? "on" : "off")",
                     "number row \(numberRow ? "on" : "off")",
-                    "suggestions \(showsSuggestionBar ? "shown" : "hidden")"].joined(separator: ", ")
+                    orientation == .splitLandscape ? "split" : nil,
+                    "suggestions \(showsSuggestionBar ? "shown" : "hidden")"].compactMap { $0 }.joined(separator: ", ")
         }
     }
 
@@ -293,6 +318,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         model.globeKey = settings.globeKey
         model.bottomRow = settings.bottomRow
         model.numberRow = settings.numberRow
+        model.splitKeyboard = settings.splitKeyboard
         let learning = KeyboardLearningSession(store: nil, defaults: nil, allowsPersistence: { false })
         let view = FullKeyboardView(
             model: model,
@@ -311,6 +337,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         view.model.globeKey = settings.globeKey
         view.model.bottomRow = settings.bottomRow
         view.model.numberRow = settings.numberRow
+        view.model.splitKeyboard = settings.splitKeyboard
         view.applyPreview(FullKeyboardView.Preview(design: settings.design, showsSuggestionBar: settings.showsSuggestionBar))
         view.appearanceOverride = settings.isDark
         view.containerSize = settings.container

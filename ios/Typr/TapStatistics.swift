@@ -128,6 +128,7 @@ extension KeyboardLayoutSignature {
         let pose = switch KeyboardOrientation(rawValue: orientation) {
         case .widePortrait: "Wide portrait"
         case .wideLandscape: "Wide landscape"
+        case .splitLandscape: "Split landscape"
         default: orientation.capitalized
         }
         return "\(pose) · \(widthBucket) pt · \(showsStrip ? "suggestions" : "no suggestions") · \(showsGlobe ? "globe" : "no globe")"

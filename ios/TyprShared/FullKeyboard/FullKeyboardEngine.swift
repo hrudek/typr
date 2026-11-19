@@ -1190,7 +1190,9 @@ final class FullKeyboardEngine {
     /// Prose fields with an enabled word language and loaded word lists. Elsewhere (URL, email,
     /// passwords, no languages) sliding over letters keeps its old meaning.
     private var swipeIsAvailable: Bool {
+        // FUTO's encoder reads swipes on one joined QWERTY board; the split halves' gap would bend every path.
         guard swipeTypingEnabled, field == .text, layerState.layer == .letters, activeAccentMenu == nil,
+              layout.orientation != .splitLandscape,
               !autocorrect.suggestionLanguages.isEmpty,
               autocorrect.spatialDecoder?.isResourceLoading == false,
               autocorrect.spatialDecoder?.resourceSnapshot.isEmpty == false else { return false }

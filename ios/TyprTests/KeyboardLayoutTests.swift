@@ -49,7 +49,8 @@ final class KeyboardLayoutTests: XCTestCase {
                 XCTAssertNil(joined, "Do not cover URL/email punctuation")
                 continue
             }
-            guard let joined, let space = layout.key(.space), let typr = layout.key(.typr) else {
+            // Split layouts have a space bar in each half; Typr sits beside the right one.
+            guard let joined, let space = layout.keys.last(where: { $0.kind == .space }), let typr = layout.key(.typr) else {
                 XCTFail("Adjacent space and Typr must share a background")
                 continue
             }
@@ -576,6 +577,9 @@ final class KeyboardLayoutTests: XCTestCase {
             KeyboardLayout(width: 669, orientation: .widePortrait, layer: .symbols, field: .url),
             KeyboardLayout(width: 801, orientation: .wideLandscape, layer: .numbers),
             KeyboardLayout(width: 951, orientation: .wideLandscape, field: .email),
+            KeyboardLayout(width: 801, orientation: .splitLandscape),
+            KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .numbers, field: .url),
+            KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .symbols, field: .email),
         ]
     }
 
@@ -750,6 +754,20 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertTrue(FullKeyboardSettings(defaults: defaults).numberRow)
         settings.numberRow = false
         XCTAssertFalse(FullKeyboardSettings(defaults: defaults).numberRow)
+    }
+
+    func testSplitKeyboardIsOffByDefaultAndRoundTrips() throws {
+        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = FullKeyboardSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.splitKeyboard)
+        settings.splitKeyboard = true
+        XCTAssertTrue(FullKeyboardSettings(defaults: defaults).splitKeyboard)
+        XCTAssertEqual(defaults.object(forKey: "settings.keyboardSplit") as? Bool, true)
+        settings.splitKeyboard = false
+        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).splitKeyboard)
     }
 
     func testBottomRowDefaultsToSpaceThenTyprAndRoundTrips() throws {
