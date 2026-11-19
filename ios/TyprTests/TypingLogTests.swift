@@ -130,7 +130,6 @@ final class TypingLogTests: XCTestCase {
         TypingLogRecorder(write: { [unowned self] in self.written.append($0) }, now: { [unowned self] in self.wall })
     }
 
-    /// Feeds the recorder what the engine reports for each typed character.
     private func record(_ text: String, into log: TypingLogRecorder, field: inout String) {
         let layout = KeyboardLayout(width: 393)
         for character in text.map(String.init) {
