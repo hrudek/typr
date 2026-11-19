@@ -3,7 +3,6 @@ import UIKit
 import XCTest
 @testable import Typr
 
-/// Every tap is read as the likeliest reachable letter, from the first letter, without stored labels.
 @MainActor
 final class KeyboardAdaptiveAssignmentTests: XCTestCase {
     private typealias Language = SpatialWordDecoder.Language
@@ -39,13 +38,11 @@ final class KeyboardAdaptiveAssignmentTests: XCTestCase {
     private func type(_ text: String, _ engine: FullKeyboardEngine) {
         for letter in text { tap(center(key(letter, engine)), engine) }
     }
-    /// Two points inside m, towards n.
-    private func edgeOfM(_ engine: FullKeyboardEngine) -> CGPoint {
+    private func insideMTowardN(_ engine: FullKeyboardEngine) -> CGPoint {
         let m = key("m", engine)
         return CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY)
     }
-    /// The top edge of g, under t: reaches t across the row.
-    private func underT(_ engine: FullKeyboardEngine) -> CGPoint {
+    private func topEdgeOfGUnderT(_ engine: FullKeyboardEngine) -> CGPoint {
         let g = key("g", engine), t = key("t", engine)
         return CGPoint(x: (g.frame.midX + t.frame.midX) / 2, y: g.hitFrame.minY + 1)
     }
@@ -64,8 +61,8 @@ final class KeyboardAdaptiveAssignmentTests: XCTestCase {
             }
             engine.refreshSuggestions()
             type("arou", engine)
-            XCTAssertEqual(engine.layout.hitTest(edgeOfM(engine))?.character, "m")
-            tap(edgeOfM(engine), engine)
+            XCTAssertEqual(engine.layout.hitTest(insideMTowardN(engine))?.character, "m")
+            tap(insideMTowardN(engine), engine)
             type("d", engine)
             XCTAssertEqual(target.text, "around", setup)
         }
@@ -75,12 +72,12 @@ final class KeyboardAdaptiveAssignmentTests: XCTestCase {
         let (engine, target) = try keyboard()
         type("arou", engine)
         label("f", engine) // New learning generation, no refresh before the tap.
-        tap(edgeOfM(engine), engine)
+        tap(insideMTowardN(engine), engine)
         XCTAssertEqual(target.text, "aroum")
         let map = try XCTUnwrap(engine.autocorrect.keyMap(layout: engine.layout, context: "arou", permitsCorrection: true))
         let m = key("m", engine)
-        XCTAssertEqual(map.attributedKey(at: edgeOfM(engine), geometric: m, layout: engine.layout, prefix: "arouz"), m)
-        XCTAssertEqual(map.attributedKey(at: edgeOfM(engine), geometric: m, layout: KeyboardLayout(width: 440),
+        XCTAssertEqual(map.attributedKey(at: insideMTowardN(engine), geometric: m, layout: engine.layout, prefix: "arouz"), m)
+        XCTAssertEqual(map.attributedKey(at: insideMTowardN(engine), geometric: m, layout: KeyboardLayout(width: 440),
                                          prefix: "arou"), m)
     }
 
@@ -92,14 +89,14 @@ final class KeyboardAdaptiveAssignmentTests: XCTestCase {
         let (engine, target) = try keyboard()
         type("zqxw", engine)
         XCTAssertNotNil(engine.autocorrect.keyMap(layout: engine.layout, context: target.text, permitsCorrection: true))
-        tap(edgeOfM(engine), engine)
+        tap(insideMTowardN(engine), engine)
         XCTAssertEqual(target.text, "zqxwm", "without word odds the nearer key wins")
     }
 
     func testFirstLetterAcrossRowsAtFieldStartAfterSpaceAndAfterPunctuation() throws {
         for start in ["", "ok ", "ok,", "ok."] {
             let (engine, target) = try keyboard(start)
-            let point = underT(engine)
+            let point = topEdgeOfGUnderT(engine)
             XCTAssertEqual(engine.layout.hitTest(point)?.character, "g")
             XCTAssertTrue(engine.layout.reaches(point, letter: "t"))
             tap(point, engine)
@@ -111,7 +108,7 @@ final class KeyboardAdaptiveAssignmentTests: XCTestCase {
         for start in ["", "Ok. "] {
             let (engine, target) = try keyboard(start, autocapitalization: .sentences, context: true)
             XCTAssertTrue(engine.isUppercase)
-            tap(underT(engine), engine)
+            tap(topEdgeOfGUnderT(engine), engine)
             XCTAssertEqual(target.text, start + "T", start)
         }
         let (engine, target) = try keyboard("wher")

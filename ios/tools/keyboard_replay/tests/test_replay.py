@@ -85,7 +85,6 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual([line["replayed"] for line in report["words"]], ["of", "if", "In"])
 
     def test_an_edge_miss_types_the_likeliest_key_without_learned_taps(self):
-        # `arou` and a tap 2 points inside m, towards n: n is typed as the tap lands.
         retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
         self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
         retyped["learning"]["layouts"] = {}
@@ -94,7 +93,6 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(report["score"]["known"]["wordErrors"], 0)
 
     def test_edits_replay_in_order_up_to_the_first_boundary(self):
-        # `around`: the last letter deleted and typed again.
         retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
         self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
         self.assertEqual(self.report(export=retyped)["reproduction"]["commitMatches"], 1)

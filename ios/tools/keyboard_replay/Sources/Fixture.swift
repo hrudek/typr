@@ -97,10 +97,6 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     for _ in 0..<5 { press(.delete) }
     ["great", "Sonnenblumenfeld"].forEach(word)
 
-    // English only, on a narrower keyboard this typist hits far right of each key's center: an
-    // edge miss of n on m in `around` types n; its last letter is deleted and typed again. Then a
-    // miss left of m's center, too far from n to type it, which the strip fixes. The pick goes
-    // last: what it teaches the session's fast aim is not in the export.
     autocorrect.german = nil
     engine.width = 390
     teach(aim: 0.3)
