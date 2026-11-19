@@ -34,6 +34,38 @@ func touchPosteriorReport() throws -> String {
                 "fDensity": densities(f) as [Any], "qDensity": densities(q) as [Any]]
     }
 
+    func grip() throws -> [String: Any] {
+        let layout = KeyboardLayout(width: 393), other = KeyboardLayout(width: 430)
+        func label(_ letter: Character, _ x: Double, _ y: Double, on layout: KeyboardLayout = layout) -> TouchLabel {
+            TouchLabel(point: point((x, y), on: layout.key(.character(String(letter)))!, in: layout), letter: letter)
+        }
+        let letters = "abcdefghijklmnopqrstuvwxyz"
+        let model = PersonalTypingModel()
+        for i in 0..<40 {
+            model.learn(letters.map { label($0, Double(i % 5 - 2) * 0.035, Double(i % 3 - 1) * 0.05) },
+                        layout: layout, source: .keep)
+        }
+        model.learn([label("e", 0, 0, on: other)], layout: other, source: .keep)
+        func offsets() -> [String: [Double]] {
+            let keys = model.calibration(for: layout)!.keys
+            return Dictionary(uniqueKeysWithValues: letters.map { (String($0), [keys[$0]!.offsetX, keys[$0]!.offsetY]) })
+        }
+        let otherBefore = model.calibration(for: other)
+        let before = offsets()
+        for _ in 0..<3 { model.learn([label("e", 0.3, 0.15)], layout: layout, source: .keep) }
+        let displaced = offsets()
+        let aim = model.state.layouts[KeyboardLayoutSignature(layout).id]!.aims!["e"]!
+        let reloaded = PersonalTypingModel(state: try JSONDecoder().decode(
+            PersonalTypingModel.State.self, from: JSONEncoder().encode(model.state)))
+        let next = label("e", 0.25, 0.1)
+        model.learn([next], layout: layout, source: .keep)
+        reloaded.learn([next], layout: layout, source: .keep)
+        let scores = [model, reloaded].map { $0.calibration(for: layout)!.keys["e"]!.logDensity(x: 0.2, y: 0.1) }
+        for _ in 0..<4 { model.learn([label("e", 0, 0)], layout: layout, source: .keep) }
+        return ["before": before, "displaced": displaced, "recovered": offsets(), "weights": aim.weights,
+                "nextScore": scores, "otherLayoutUnchanged": model.calibration(for: other) == otherBefore]
+    }
+
     let malformed = SpatialTouchCalibration(keys: [
         "a": .init(offsetX: 0, offsetY: 0, sigmaX: 0.2, sigmaY: 0.2, degrees: .nan),
         "b": .init(offsetX: 0, offsetY: 0, sigmaX: 1e-9, sigmaY: 1e9, covarianceXY: 5),
@@ -43,6 +75,7 @@ func touchPosteriorReport() throws -> String {
         "taps": taps.map { [$0.0, $0.1] }, "probes": probes.map { [$0.0, $0.1] },
         "cases": [0, 1, 3, 10].map { layoutCase(width: 393, labels: $0) },
         "scaled": [0, 1, 3, 10].map { layoutCase(width: 786, labels: $0) },
+        "grip": try grip(),
         "malformed": ["droppedNaNDegrees": malformed.keys["a"] == nil,
                       "clamped": b.map(describe) as Any,
                       "farDensity": b?.logDensity(x: 1e6, y: -1e6) as Any],

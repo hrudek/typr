@@ -65,7 +65,7 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         }
     }
 
-    func testAimSnapshotIsFrozenAndLearningOrResetDropsOldResultWithoutPollChurn() async throws {
+    func testAimSnapshotIsFrozenAndLearningDropsOldResultWithoutPollChurn() async throws {
         let session = KeyboardLearningSession()
         let gate = Gate()
         let worker = KeyboardSuggestionWorker(rank: { await gate.rank($0) })
@@ -101,14 +101,11 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         await waitForJob(gate, count: 2)
         let second = await gate.request(at: 1)
         XCTAssertEqual(second.ownership.learning, session.generation)
-        session.resetFastAim()
+        train(0)
         XCTAssertNotEqual(second.ownership.learning, session.generation)
-        let resetGeneration = session.generation
-        for _ in 0..<100 {
-            session.resetFastAim()
-            _ = session.calibration(for: engine.layout)
-        }
-        XCTAssertEqual(session.generation, resetGeneration, "No-op resets/read-only snapshots cannot churn ownership")
+        let learnedGeneration = session.generation
+        for _ in 0..<100 { _ = session.calibration(for: engine.layout) }
+        XCTAssertEqual(session.generation, learnedGeneration, "Read-only snapshots cannot churn ownership")
         await gate.release()
         await engine.waitForSuggestions()
         XCTAssertEqual(checker.calls, calls)
@@ -117,10 +114,10 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         await gate.release()
         await engine.waitForSuggestions()
         XCTAssertEqual(engine.suggestions.last?.replacement, "The")
-        print("EVAL M114_aimOwnership frozen=true staleLearnDropped=true staleResetDropped=true noOpResets=100 generationStable=true")
+        print("EVAL M114_aimOwnership frozen=true staleLearnDropped=true snapshotReads=100 generationStable=true")
     }
 
-    func testManualChoiceKeepsFastAimButEvidenceDiscardResetsItOnce() async throws {
+    func testManualChoiceLearnsAimAndEmptyDiscardsKeepOwnership() async throws {
         let (engine, target, _) = keyboard()
         try type("teh", engine)
         await engine.waitForSuggestions()
@@ -128,13 +125,12 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         engine.acceptSuggestion(choice)
         XCTAssertEqual(target.text, "The ")
         let session = engine.autocorrect.learning
+        let id = KeyboardLayoutSignature(engine.layout).id
+        XCTAssertFalse(session.model.state.layouts[id]?.aims?.isEmpty ?? true, "Applied manual choice taught its keys' aim")
         let trained = session.generation
-        session.resetFastAim()
-        XCTAssertGreaterThan(session.generation, trained, "Applied manual choice retained its trusted fast state")
-        let reset = session.generation
         engine.discardTouchEvidence()
         engine.discardTouchEvidence()
-        XCTAssertEqual(session.generation, reset, "Repeated empty discards do not refresh learning ownership")
+        XCTAssertEqual(session.generation, trained, "Repeated empty discards do not refresh learning ownership")
         await engine.waitForSuggestions()
     }
 

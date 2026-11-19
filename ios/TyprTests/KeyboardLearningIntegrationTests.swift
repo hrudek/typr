@@ -91,7 +91,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         print("EVAL R2_3_literal undo_kept=0 restored_kept=0 fresh_settled_kept=1 post_decay_auto=0")
     }
 
-    func testFastAimSurvivesManualFeedbackAndExternalContextChanges() throws {
+    func testAimMemoriesSurviveManualFeedbackAndExternalContextChanges() throws {
         let session = KeyboardLearningSession()
         let (engine, _) = keyboard(session: session)
         let grid = engine.layout
@@ -99,12 +99,15 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         let label = TouchLabel(point: CGPoint(x: key.frame.midX + 0.2 * (key.frame.width + grid.metrics.gap),
                                               y: key.frame.midY), letter: "e")
         session.learn(Array(repeating: label, count: 40), layout: grid, source: .keep)
+        XCTAssertGreaterThan(try XCTUnwrap(session.calibration(for: grid)?.keys["e"]).offsetX, 0.15)
         type("hello", engine)
         engine.acceptSuggestion(.init(displayText: "hello", replacement: "hello", kind: .keepLiteral))
-        let slow = PersonalTypingModel(state: session.model.state).calibration(for: grid)
-        XCTAssertNotEqual(session.calibration(for: grid), slow, "manual feedback must not immediately erase its own fast updates")
+        let afterFeedback = session.calibration(for: grid)
+        XCTAssertNotNil(session.model.state.layouts[KeyboardLayoutSignature(grid).id]?.aims?["e"])
+        XCTAssertEqual(PersonalTypingModel(state: session.model.state).calibration(for: grid), afterFeedback,
+                       "how you aim lately lives in the saved state")
         engine.textDidChange()
-        XCTAssertNotEqual(session.calibration(for: grid), slow, "a field or host change keeps how you aim lately")
+        XCTAssertEqual(session.calibration(for: grid), afterFeedback, "a field or host change keeps how you aim lately")
     }
 
     func testValidLiteralSettlesOnlyWhenIntactAndNextLetterStarts() {

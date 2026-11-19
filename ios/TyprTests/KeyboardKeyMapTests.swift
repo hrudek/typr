@@ -411,7 +411,7 @@ final class KeyboardKeyMapTests: XCTestCase {
         XCTAssertEqual(intact.space?.key.kind, .space, "attribution reset must not discard #123's real Space")
         tap(center(engine.layout.key(.space)!), engine)
         type("wher", engine)
-        train(engine) // Previous centre-tapped trusted words legitimately changed fast aim.
+        train(engine) // Previous centre-tapped trusted words legitimately changed the aim memories.
         tap(gap("e"), engine)
         XCTAssertTrue(target.text.hasSuffix(" where"))
         XCTAssertNil(engine.autocorrect.touchInput.boundaryEvidence(beforeInput: target.text))

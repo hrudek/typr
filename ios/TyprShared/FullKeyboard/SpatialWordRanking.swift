@@ -5,7 +5,7 @@ import CoreGraphics
 /// Resources and input snapshots are immutable Sendable values; no checker or learning owner enters here.
 // Search/trail ideas previously translated from AVGVSTVS96/iikb Decoder.swift (MIT),
 // 08df5aa1e698d8587b6dcaef53f5e555ba1fac2a; extracted from Typr unchanged for P1.
-// P7 adds frozen full-covariance/affine-aim densities (TouchModel.swift ideas at
+// P7 adds frozen full-covariance/aim densities (TouchModel.swift ideas at
 // 09a2e9cdfbe851adff6c4646333c0a3f74ba8765, MIT © 2026 Bassim Shahidy) and
 // Typr-specific admissible length/next-child bounds; both serial owners use this core.
 nonisolated final class SpatialWordRanking {

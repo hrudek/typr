@@ -57,14 +57,16 @@ final class PersonalTypingModelTests: XCTestCase {
         // iikb's priors: the first trusted label already counts, its centre worth one tap.
         model.learn([try label(0.4)], layout: layout, source: .keep)
         var key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
-        XCTAssertEqual(key.offsetX, 0.2, accuracy: 1e-12, "no fast drift before the first pooled label")
+        let stats = try XCTUnwrap(model.state.layouts[KeyboardLayoutSignature(layout).id])
+        XCTAssertEqual(stats.allTapsKey("a").offsetX, 0.2, accuracy: 1e-12)
+        // Lately and now centre on the tap with the all-taps mean as a one-tap prior: (0.2 + 0.4) / 2.
+        XCTAssertEqual(key.offsetX, (0.2 + 0.3 + 0.3) / 3, accuracy: 1e-12)
         XCTAssertTrue(SpatialTouchCalibration.scaleRange(degrees: key.degrees).contains(key.sigmaX))
         model.learn(Array(repeating: try label(0.9), count: 300), layout: layout, source: .keep)
         key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
         XCTAssertEqual(key.offsetX, SpatialTouchCalibration.maxOffset)
         XCTAssertTrue(SpatialTouchCalibration.scaleRange(degrees: key.degrees).contains(key.sigmaX))
-        model.resetFastAim()
-        let steady = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
+        let steady = try XCTUnwrap(model.state.layouts[KeyboardLayoutSignature(layout).id]?.allTapsKey("a"))
         XCTAssertEqual(steady.sigmaX, SpatialTouchCalibration.scaleRange(degrees: steady.degrees).lowerBound,
                        accuracy: 1e-12)
         model.reset()

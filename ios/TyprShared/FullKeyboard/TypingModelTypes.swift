@@ -93,6 +93,33 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
                    sigmaX: sqrt(xx), sigmaY: sqrt(yy), covarianceXY: xy, degrees: degrees)
     }
 
+    /// `key`'s spread around a recent centre (`count` taps at `x`, `y`), with `key`'s mean as a
+    /// one-tap prior; `kappa` is `key`'s own centre weight.
+    static func aiming(_ key: Key, kappa: Double, count: Double, x: Double, y: Double) -> Key {
+        let k = centerPrior + count
+        let rescale = (k + 1) / k * kappa / (kappa + 1)
+        return Key(offsetX: (key.offsetX + count * x) / k, offsetY: (key.offsetY + count * y) / k,
+                   sigmaX: key.sigmaX * rescale.squareRoot(), sigmaY: key.sigmaY * rescale.squareRoot(),
+                   covarianceXY: key.covarianceXY * rescale, degrees: key.degrees)
+    }
+
+    /// One key with the weighted mean and spread of keys sharing their degrees of freedom,
+    /// widened by how far their means disagree.
+    static func blending(_ keys: [Key], weights: [Double]) -> Key {
+        let x = zip(keys, weights).reduce(0) { $0 + $1.1 * $1.0.offsetX }
+        let y = zip(keys, weights).reduce(0) { $0 + $1.1 * $1.0.offsetY }
+        let degrees = keys[0].degrees, toScale = (degrees - 2) / degrees
+        var xx = 0.0, xy = 0.0, yy = 0.0
+        for (key, weight) in zip(keys, weights) {
+            let dx = key.offsetX - x, dy = key.offsetY - y
+            xx += weight * (key.sigmaX * key.sigmaX + toScale * dx * dx)
+            xy += weight * (key.covarianceXY + toScale * dx * dy)
+            yy += weight * (key.sigmaY * key.sigmaY + toScale * dy * dy)
+        }
+        return Key(offsetX: x, offsetY: y, sigmaX: xx.squareRoot(), sigmaY: yy.squareRoot(),
+                   covarianceXY: xy, degrees: degrees)
+    }
+
     let keys: [Character: Key]
     let space: Key?
     static let centerPrior = 1.0

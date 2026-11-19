@@ -62,6 +62,45 @@ def log_t(key, u, v):
             - (dof / 2 + 1) * math.log1p(distance / dof))
 
 
+def aiming(key, kappa, drift):
+    count, x, y = drift
+    k = CENTER_PRIOR + count
+    rescale = (k + 1) / k * kappa / (kappa + 1)
+    return {"offsetX": (key["offsetX"] + count * x) / k, "offsetY": (key["offsetY"] + count * y) / k,
+            "degrees": key["degrees"], "xx": key["xx"] * rescale, "xy": key["xy"] * rescale,
+            "yy": key["yy"] * rescale}
+
+
+def blend(keys, weights):
+    mx = sum(w * k["offsetX"] for k, w in zip(keys, weights))
+    my = sum(w * k["offsetY"] for k, w in zip(keys, weights))
+    to_scale = (keys[0]["degrees"] - 2) / keys[0]["degrees"]
+    return {"offsetX": mx, "offsetY": my, "degrees": keys[0]["degrees"],
+            **{name: sum(w * (k[name] + to_scale * (k[a] - m1) * (k[b] - m2)) for k, w in zip(keys, weights))
+               for name, a, b, m1, m2 in [("xx", "offsetX", "offsetX", mx, mx), ("xy", "offsetX", "offsetY", mx, my),
+                                          ("yy", "offsetY", "offsetY", my, my)]}}
+
+
+def aimed(taps):
+    """iikb KeyTouches: all taps, ~30 and ~3 taps, weighted by how well each predicted every tap."""
+    weights, lately, now = [1 / 3] * 3, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
+
+    def memories(n):
+        stats = moments(taps[:n])
+        everything = posterior(stats, spread([stats] if n else []))
+        return [everything] + [aiming(everything, CENTER_PRIOR + n, d) for d in (lately, now)]
+
+    def add(drift, x, y, memory):
+        count = drift[0] * (1 - 1 / memory) + 1
+        return count, drift[1] + (x - drift[1]) / count, drift[2] + (y - drift[2]) / count
+
+    for i, (x, y) in enumerate(taps):
+        odds = [w * math.exp(log_t(m, x, y)) for w, m in zip(weights, memories(i))]
+        weights = [0.99 * o / sum(odds) + 0.01 / 3 for o in odds]
+        lately, now = add(lately, x, y, 30), add(now, x, y, 3)
+    return blend(memories(len(taps)), weights)
+
+
 class TouchPosteriorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -81,7 +120,7 @@ class TouchPosteriorTests(unittest.TestCase):
     def expected(self, n):
         stats = moments([tuple(t) for t in self.report["taps"][:n]])
         pooled = spread([stats] if n else [])
-        f = posterior(stats, pooled)
+        f = aimed([tuple(t) for t in self.report["taps"][:n]])
         q = posterior(moments([]), pooled)
         if n:
             centre = posterior(stats, spread([]))
@@ -105,6 +144,20 @@ class TouchPosteriorTests(unittest.TestCase):
                     self.assertAlmostEqual(actual, log_t(f, *probe), places=9)
                 for probe, actual in zip(self.report["probes"], case["qDensity"]):
                     self.assertAlmostEqual(actual, log_t(q, *probe), places=9)
+
+    def test_displaced_taps_move_only_that_key_and_recover(self):
+        grip = self.report["grip"]
+        before, displaced, recovered = grip["before"], grip["displaced"], grip["recovered"]
+        self.assertGreater(displaced["e"][0] - before["e"][0], 0.08)
+        self.assertGreater(displaced["e"][1] - before["e"][1], 0.04)
+        self.assertGreater(grip["weights"][2], grip["weights"][0], "now predicted the repeated miss best")
+        for letter, offset in displaced.items():
+            if letter != "e":
+                self.assertAlmostEqual(offset[0], before[letter][0], places=12, msg=letter)
+                self.assertAlmostEqual(offset[1], before[letter][1], places=12, msg=letter)
+        self.assertLess(abs(recovered["e"][0] - before["e"][0]), 0.25 * (displaced["e"][0] - before["e"][0]))
+        self.assertEqual(grip["nextScore"][0], grip["nextScore"][1], "a reloaded model scores the next tap the same")
+        self.assertTrue(grip["otherLayoutUnchanged"])
 
     def test_untrained_keys_use_the_prior_not_a_wider_fallback(self):
         prior = self.report["cases"][0]["f"]
