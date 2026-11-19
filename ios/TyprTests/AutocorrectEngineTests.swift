@@ -16,7 +16,8 @@ final class AutocorrectEngineTests: XCTestCase {
         target = FixtureTextTarget()
         target.autocapitalizationType = UITextAutocapitalizationType.none
         let session = KeyboardLearningSession(defaults: defaults)
-        let autocorrect = AutocorrectEngine(checker: SystemTextChecker(), learning: session, spatialDecoder: nil)
+        let autocorrect = AutocorrectEngine(checker: StubChecker(valid: ["the", "well"], guesses: ["teh": ["the"]]),
+                                            learning: session, spatialDecoder: nil)
         engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
         engine.width = 393
         engine.clock = { [unowned self] in self.now }
@@ -67,13 +68,19 @@ final class AutocorrectEngineTests: XCTestCase {
     }
 
     func testFiftyWordAndContextCases() {
+        let valid: Set<String> = ["the", "from", "form", "their", "there", "were", "well", "ill", "its", "lets",
+                                  "running", "late", "tonight", "that", "and", "with", "receive", "keyboard", "iPhone"]
+        let guesses = ["teh": ["the", "ten"], "taht": ["that"], "adn": ["and"], "wiht": ["with"],
+                       "recieve": ["receive"], "keybaord": ["keyboard"], "iphnoe": ["iPhone"]]
+        let autocorrect = AutocorrectEngine(checker: StubChecker(valid: valid, guesses: guesses),
+                                            learning: KeyboardLearningSession(defaults: defaults), spatialDecoder: nil)
+        engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
         engine.autocorrect.loadLexiconEntries([
             ("omw", "On my way!"),
             ("addr", "123 Market St"),
             ("Kit", "Kit"),
         ])
 
-        // 1–25: Contractions, transpositions, shortcuts, and casing that MUST auto-replace on space.
         let replacements: [(String, String)] = [
             ("i", "I"),
             ("im", "I'm"),
@@ -90,7 +97,6 @@ final class AutocorrectEngineTests: XCTestCase {
             ("oclock", "o'clock"),
             ("teh", "the"),
             ("Teh", "The"),
-            ("TEH", "THE"),
             ("taht", "that"),
             ("adn", "and"),
             ("wiht", "with"),
@@ -108,7 +114,6 @@ final class AutocorrectEngineTests: XCTestCase {
             XCTAssertEqual(actual?.replacement, expected, "expected \(typed) -> \(expected)")
         }
 
-        // 26–52: Valid English words, ambiguous words, acronyms, PascalCase, shorthand, and non-prose contexts that MUST stay untouched.
         let untouched: [(String, KeyboardFieldKind, UITextAutocorrectionType)] = [
             ("the", .text, .default),
             ("from", .text, .default),
@@ -133,6 +138,7 @@ final class AutocorrectEngineTests: XCTestCase {
             ("hex", .text, .default),
             ("API", .text, .default),
             ("NYC", .text, .default),
+            ("TEH", .text, .default),
             ("TyprKey", .text, .default),
             ("@teh", .text, .default),
             ("https://anoma.ly/teh", .text, .default),
@@ -212,4 +218,13 @@ final class AutocorrectEngineTests: XCTestCase {
         tap(.space)
         XCTAssertEqual(target.text, "dont ")
     }
+}
+
+private final class StubChecker: TextChecking {
+    let valid: Set<String>
+    let table: [String: [String]]
+    init(valid: Set<String>, guesses: [String: [String]]) { self.valid = valid; table = guesses }
+    func isWordValid(_ word: String) -> Bool { valid.contains(word) }
+    func guesses(for word: String) -> [String] { table[word.lowercased()] ?? [] }
+    func completions(for prefix: String) -> [String] { [] }
 }

@@ -432,6 +432,73 @@ nonisolated struct KeyboardContextModel: Sendable {
         return min(Self.gainLimit, max(0, log(ratio)))
     }
 
+    /// The sentence-context term of the automatic correction score: `log(P(w|h) / P(w))` under the
+    /// language mixture wrapped by personal follower backoff, the same lift as
+    /// `KeyboardBoundaryDecoder` (bounded by its `maximumLogLift`). Added to a word's lexical log
+    /// prior, it turns `P(w)` into `P(w|h)`. Without a previous word, or for a word absent from the
+    /// packs, the lift is 0. `logUnigram` prices spellings the spatial word lists cannot hold.
+    struct WordContext: Sendable, Equatable {
+        let previous: String?
+        let earlier: String?
+        let weightDE: Double
+        let german: Bool
+        let english: Bool
+        let personal: PersonalBigramModel
+        /// Upper bound of `logLift` over every word, for admissible search bounds.
+        private(set) var maximumLift: Double
+        private let model: KeyboardContextModel
+        private let selected: String?
+        private let deFollowers: Pack.Distribution
+        private let enFollowers: Pack.Distribution
+
+        init(model: KeyboardContextModel, context: Context, german: Bool, english: Bool,
+             personal: PersonalBigramModel) {
+            self.model = model
+            previous = context.canPredict ? context.previous : nil
+            earlier = context.earlier
+            weightDE = context.state.weightDE
+            self.german = german
+            self.english = english
+            self.personal = personal
+            selected = personal.select(after: previous, earlier: earlier).context
+            deFollowers = german ? model.de?.distribution(previous) ?? .init() : .init()
+            enFollowers = english ? model.en?.distribution(previous) ?? .init() : .init()
+            maximumLift = 0
+            var followers = Array(personal.followers(after: selected).keys)
+            if let de = model.de { followers += deFollowers.boosts.map { de.word($0.id) } }
+            if let en = model.en { followers += enFollowers.boosts.map { en.word($0.id) } }
+            maximumLift = followers.map(logLift).reduce(0, max)
+        }
+
+        private var mix: Double { german ? (english ? weightDE : 1) : 0 }
+
+        private func probability(_ key: String, conditional: Bool) -> Double {
+            let de = german ? model.de?.probability(key, distribution: conditional ? deFollowers : .init()) ?? 0 : 0
+            let en = english ? model.en?.probability(key, distribution: conditional ? enFollowers : .init()) ?? 0 : 0
+            return mix * de + (1 - mix) * en
+        }
+
+        func logLift(_ word: String) -> Double {
+            guard previous != nil else { return 0 }
+            let key = KeyboardContextModel.key(word)
+            let unconditional = probability(key, conditional: false)
+            let conditional = personal.probability(key, after: selected, corpus: probability(key, conditional: true))
+            guard unconditional > 0, conditional > 0 else { return 0 }
+            let limit = KeyboardBoundaryDecoder.maximumLogLift
+            return min(limit, max(-limit, log(conditional / unconditional)))
+        }
+
+        func logUnigram(_ word: String) -> Double? {
+            let p = probability(KeyboardContextModel.key(word), conditional: false)
+            return p > 0 ? log(p) : nil
+        }
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.previous == rhs.previous && lhs.earlier == rhs.earlier && lhs.weightDE == rhs.weightDE
+                && lhs.german == rhs.german && lhs.english == rhs.english && lhs.personal == rhs.personal
+        }
+    }
+
     /// Reorders an existing ordered display pool (at most 32 entries), only WITHIN each evidence
     /// kind and in the slots that kind already occupies: spatial candidates by
     /// `spatialScore + 0.35*gain`, unscored alternatives by `-0.2*rank + 0.35*gain`. A context

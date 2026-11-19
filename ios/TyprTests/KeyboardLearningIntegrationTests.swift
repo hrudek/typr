@@ -7,7 +7,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
     private final class Checker: TextChecking {
         var valid: Set<String>
         var answers: [String: [String]]
-        init(valid: Set<String> = ["hello", "world", "the"], answers: [String: [String]] = [:]) {
+        init(valid: Set<String> = ["hello", "world", "the"], answers: [String: [String]] = ["teh": ["the"]]) {
             self.valid = valid
             self.answers = answers
         }
@@ -331,7 +331,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
 
     func testRewritesThatAreNotNearbySubstitutionsTeachNothing() {
         for (typed, checker, counter) in [
-            ("teh", Checker(), KeyboardDiagnostics.Counter.autoRule),
+            ("teh", Checker(), KeyboardDiagnostics.Counter.autoSpellingFallback),
             ("helo", Checker(answers: ["helo": ["hello"]]), .autoSpellingFallback)
         ] {
             let (engine, _) = keyboard(checker: checker)
@@ -353,11 +353,11 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertFalse(session.model.lexicon.isKept("teh"))
         XCTAssertTrue(session.model.lexicon.isRejected(typed: "teh", replacement: "the"))
         XCTAssertTrue(session.model.lexicon.counts.isEmpty)
-        XCTAssertEqual(session.diagnostics[.undoRule], 1)
+        XCTAssertEqual(session.diagnostics[.undoSpelling], 1)
         tap(.space, engine)
         type("teh ", engine)
         XCTAssertEqual(target.text, "teh teh ")
-        XCTAssertEqual(session.diagnostics[.autoRule], 1)
+        XCTAssertEqual(session.diagnostics[.autoSpellingFallback], 1)
     }
 
     func testContractionUndoPersistsRejectedPairAcrossReloadWithoutKeep() throws {
@@ -384,7 +384,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         type("dont ", next)
         XCTAssertEqual(nextTarget.text, "dont ")
         XCTAssertEqual(reloaded.diagnostics[.refusedProtected], 1)
-        XCTAssertEqual(reloaded.diagnostics[.autoRule], 1, "Reload must not repeat the correction")
+        XCTAssertEqual(reloaded.diagnostics[.autoSpellingFallback], 1, "Reload must not repeat the correction")
     }
 
     func testPhraseTextReplacementUndoSuppressesOnlyForCurrentSession() throws {
@@ -656,8 +656,6 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
     }
 
     func testSpellingCompletionRefusesBelowMarginWithoutTapEvidence() {
-        // `hell` is a contraction homograph and is refused before spelling search.
-        // Use an unprotected prefix so this exercises automatic's suffix refusal.
         let ac = AutocorrectEngine(checker: Checker(answers: ["worl": ["world"]]), spatialDecoder: nil)
         XCTAssertNil(ac.replacementOnSpace(beforeInput: "worl", field: .text, autocorrectionType: .default))
         XCTAssertEqual(ac.learning.diagnostics[.boundaries], 1)
@@ -667,17 +665,8 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertEqual(ac.learning.diagnostics[.autoSpellingFallback], 0)
     }
 
-    func testContractionHomographRefusesBeforeSpellingCompletion() {
-        let ac = AutocorrectEngine(checker: Checker(answers: ["hell": ["hello"]]), spatialDecoder: nil)
-        XCTAssertNil(ac.replacementOnSpace(beforeInput: "hell", field: .text, autocorrectionType: .default))
-        XCTAssertEqual(ac.learning.diagnostics[.refusedLiteralValid], 1)
-        XCTAssertEqual(ac.learning.diagnostics[.refusedBelowMargin], 0)
-        XCTAssertEqual(ac.learning.diagnostics[.unchanged], 1)
-        XCTAssertEqual(ac.learning.diagnostics[.autoSpellingFallback], 0)
-    }
-
     func testEvidenceLengthGatePrecedesTrackerPresence() {
-        for word in ["hi", String(repeating: "a", count: 33)] {
+        for word in ["h", String(repeating: "a", count: 33)] {
             let (engine, _) = keyboard()
             type(word, engine)
             XCTAssertNotNil(engine.autocorrect.touchInput.evidence(beforeInput: word))
@@ -708,7 +697,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
 
     func testMissingEvidenceReasonsAndPlainBoundaryDecisionAreCountedOnce() {
         let (engine, _) = keyboard()
-        for token in ["hello", "hi", "für"] {
+        for token in ["hello", "h", "für"] {
             XCTAssertNil(engine.autocorrect.replacementOnSpace(beforeInput: token, field: .text,
                                                               autocorrectionType: .default))
         }

@@ -69,13 +69,26 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 0/0 words, -")
         self.assertEqual(lines[4], "Reproduction (Adaptive): committed word matches the iPhone for 1/1 words, 100.0%")
 
-    def test_a_fresh_fixture_reproduces_with_the_current_keyboard_code(self):
+    def fresh_fixture(self) -> dict:
         fresh = self.dir / "fresh.json"
         made = subprocess.run([self.binary, "--make-fixture", str(fresh)], capture_output=True, text=True, timeout=60)
         self.assertEqual(made.returncode, 0, made.stderr)
-        for reproduction in self.report(export=json.loads(fresh.read_text()))["reproduction"].values():
+        return json.loads(fresh.read_text())
+
+    def test_a_fresh_fixture_reproduces_with_the_current_keyboard_code(self):
+        for reproduction in self.report(export=self.fresh_fixture())["reproduction"].values():
             self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
             self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
+
+    def test_taps_and_sentence_context_choose_the_correction(self):
+        export = self.fresh_fixture()
+        start = next(i for i, w in enumerate(export["words"]) if w["meant"] == "most")
+        export["words"] = export["words"][start:start + 5]
+        export["learning"]["layouts"] = {}
+        for word in export["words"]:
+            word["commit"]["text"] = word["literal"]
+        report = self.report("--show-words", export=export)
+        self.assertEqual([line["replayed"]["standard"] for line in report["words"]], ["of", "if", "In"])
 
     def test_edits_replay_in_order_up_to_the_first_boundary(self):
         # Adaptive `aroumd`: the last letter deleted and typed again.

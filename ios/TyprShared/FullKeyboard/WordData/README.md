@@ -14,7 +14,7 @@ Attribution: **Hermit Dave / FrequencyWords**, German and English frequency list
 - Content license declaration: https://github.com/hermitdave/FrequencyWords/blob/525f9b560de45753a5ea01069454e72e9aa541c6/README.md#license
 - Corpus: https://opus.nlpl.eu/OpenSubtitles2018.php and https://www.opensubtitles.org/
 - Typr modifications: NFC normalization; retain lowercase letters only (a–z for
-  English, also ä/ö/ü/ß for German), lengths 3–32; sum duplicate counts; compile
+  English, also ä/ö/ü/ß for German), lengths 2–32; sum duplicate counts; compile
   into a forward-only, breadth-first trie. No invented spellings or capitalization.
 - The derived resources remain CC BY-SA 4.0. Their editable upstream inputs,
   exact hashes and the complete transformation are available through the links
@@ -23,8 +23,8 @@ Attribution: **Hermit Dave / FrequencyWords**, German and English frequency list
 
 | Resource | Words | Bytes | SHA-256 |
 | --- | ---: | ---: | --- |
-| keyboard-de.words | 49,027 | 1,651,128 | `20bba113005c244e68b52a18c41d613e4a65b4f9f12c1e02f8cae475fd966624` |
-| keyboard-en.words | 46,277 | 1,292,256 | `30560b21132ddae8b65d27d7f5f52b274feec31d7ddaa10083e3ff90cec37fae` |
+| keyboard-de.words | 49,311 | 1,651,680 | `9f44e7e6d71f1f214528f2a140743b65c2e798fda2cfe88775a6738b13c290e8` |
+| keyboard-en.words | 46,691 | 1,293,108 | `ca0cf23d3ef0bddf0f633a20aa82d05e667dd848f35cc773f0531609f5903ff8` |
 
 ## Reproduce offline
 

@@ -27,7 +27,8 @@ nonisolated final class SpatialWordRanking {
     static let editSuggestionLimit = SpatialWordDecoder.editSuggestionLimit
     /// Full P(taps | word) × P(word), as iikb's decoder scores words.
     private static let priorWeight = 1.0
-    private static let editPenalty = log(0.01)
+    private static let editPenalty = SpatialWordDecoder.editLogProbability
+    private static let transliterationPenalty = log(0.5)
     private static let boundSlack = 1e-10
     private static let corpusMemoLimit = 4_096
     private let lexicons: [Language: SpatialWordLexicon]
@@ -170,20 +171,30 @@ nonisolated final class SpatialWordRanking {
     func decode(_ word: KeyboardTouchWord, languages: Set<Language>,
                 budget: Int = SpatialWordDecoder.searchBudget,
                 calibration: SpatialTouchCalibration? = nil,
-                personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true) -> Result? {
+                personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true,
+                context: KeyboardContextModel.WordContext? = nil, variants: [String] = []) -> Result? {
         if case .result(let result) = decodeDetailed(word, languages: languages, budget: budget,
                                                     calibration: calibration, personal: personal,
-                                                    allowsEdits: allowsEdits) { return result }
+                                                    allowsEdits: allowsEdits, context: context,
+                                                    variants: variants) { return result }
         return nil
     }
 
+    /// Every reading is scored by one contract: touch log likelihood, edit penalties, lexical log
+    /// prior, personal bonus and the sentence-context lift of `context`; the literal (also an OOV
+    /// literal, at the floor prior) is scored the same way. `variants` are other spellings of the
+    /// literal's own letters (apostrophes, umlaut digraphs): same taps, one `log .5` per
+    /// transliteration step, priced by the word lists or else the context packs. An extra tap is,
+    /// with even odds, a second touch on the next letter's key (the last letter's after the word)
+    /// or a stray uniform over the keyboard (iikb's stray density), in key-pitch units.
     func decodeDetailed(_ word: KeyboardTouchWord, languages: Set<Language>,
                         budget: Int = SpatialWordDecoder.searchBudget,
                         calibration: SpatialTouchCalibration? = nil,
-                        personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true) -> Outcome {
+                        personal: PersonalLexiconSnapshot = .empty, allowsEdits: Bool = true,
+                        context: KeyboardContextModel.WordContext? = nil, variants: [String] = []) -> Outcome {
         let literal = word.text.lowercased()
         let count = word.samples.count
-        guard (3...Self.maxLetters).contains(count), literal.count == count,
+        guard (SpatialWordDecoder.minLetters...Self.maxLetters).contains(count), literal.count == count,
               word.layout.layer == .letters, word.layout.field == .text, !languages.isEmpty else {
             return .unavailable(.evidence)
         }
@@ -207,12 +218,12 @@ nonisolated final class SpatialWordRanking {
         let literalPrior = sources.map { _, source in
             source.logPrior(for: literal) ?? log(1 / source.total)
         }.max() ?? 0
-        let literalScore = literalSpatial + Self.priorWeight * literalPrior + personal.bonus(for: literal)
-        // Stray density: the tap's best gated key density, without assigning a letter.
-        // Thus an extra tap contributes bestScores[i] to spatialScore, plus log(.01)
-        // to total score. It is deliberately not a free deletion.
+        func lift(_ word: String) -> Double { context?.logLift(word) ?? 0 }
+        let maxLift = context?.maximumLift ?? 0
+        let literalScore = literalSpatial + Self.priorWeight * literalPrior + personal.bonus(for: literal) + lift(literal)
+        guard let stray = Self.strayLogDensity(word.layout) else { return .unavailable(.evidence) }
         var suffix = [Double](repeating: 0, count: count + 1)
-        for index in (0..<count).reversed() { suffix[index] = suffix[index + 1] + bestScores[index] }
+        for index in (0..<count).reversed() { suffix[index] = suffix[index + 1] + max(bestScores[index], stray) }
         var found: [String: Candidate] = [:]
         var threshold = literalScore
         // Suggestion-only structural retrieval below an absent literal, down to one edit
@@ -257,10 +268,24 @@ nonisolated final class SpatialWordRanking {
             if allowsEdits && !likelihoods[0][labels[0]].isFinite && !likelihoods[1][labels[0]].isFinite
                 && (labels.count < 2 || !likelihoods[0][labels[1]].isFinite) { continue }
             guard let reading = Self.reading(labels: labels, likelihoods: likelihoods,
-                                            stray: bestScores, allowsEdits: allowsEdits) else { continue }
+                                            stray: stray, allowsEdits: allowsEdits) else { continue }
             retain(Candidate(word: entry.word, language: nil,
-                             score: reading.spatial + reading.penalty + Self.priorWeight * floorPrior + entry.bonus,
+                             score: reading.spatial + reading.penalty + Self.priorWeight * floorPrior + entry.bonus
+                                + lift(entry.word),
                              spatialScore: reading.spatial, edit: reading.edit, alignment: reading.alignment))
+        }
+        for variant in variants {
+            guard let spelling = Self.transliteration(of: variant), spelling.letters == literal,
+                  variant.lowercased() != literal else { continue }
+            let key = variant.lowercased()
+            let lexical = sources.compactMap { language, source in source.logPrior(for: key).map { (language, $0) } }
+                .max { $0.1 < $1.1 }
+            let prior = lexical?.1 ?? context?.logUnigram(variant) ?? floorPrior
+            retain(Candidate(word: variant, language: lexical?.0,
+                             score: literalSpatial + Double(spelling.steps) * Self.transliterationPenalty
+                                + Self.priorWeight * prior + personal.bonus(for: key) + lift(variant),
+                             spatialScore: literalSpatial, edit: .none, alignment: [],
+                             isVariant: true))
         }
         var frontier = Frontier()
         // A subtree's best terminal prior and the snapshot's largest bonus tighten
@@ -268,7 +293,8 @@ nonisolated final class SpatialWordRanking {
         // stray taps and may be POSITIVE; future edit penalties are nonpositive.
         let maxBonus = personal.scan.maxBonus
         for source in sources.indices {
-            let bound = suffix[0] + Self.priorWeight * sources[source].1.bestLogPrior(at: 0) + maxBonus + Self.boundSlack
+            let bound = suffix[0] + Self.priorWeight * sources[source].1.bestLogPrior(at: 0) + maxBonus + maxLift
+                + Self.boundSlack
             frontier.push(State(source: source, node: 0, tap: 0, depth: 0, trail: -1,
                                 spatial: 0, penalty: 0, edit: .none, bound: bound),
                           letters: [], essential: bound >= threshold)
@@ -294,7 +320,7 @@ nonisolated final class SpatialWordRanking {
                 let (spelling, alignment) = frontier.spelling(state.trail)
                 retain(Candidate(word: spelling, language: language,
                                  score: state.spatial + state.penalty + Self.priorWeight * log(node.count / source.total)
-                                    + personal.bonus(for: spelling),
+                                    + personal.bonus(for: spelling) + lift(spelling),
                                  spatialScore: state.spatial, edit: state.edit, alignment: alignment))
             }
             let canEdit = allowsEdits && state.edit == .none
@@ -306,12 +332,12 @@ nonisolated final class SpatialWordRanking {
                 if usesLegacySearch {
                     // Original expression retained for same-run baseline timing/work.
                     bound = spatial + penalty + suffix[tap] + Self.priorWeight * source.bestLogPrior(at: node)
-                        + maxBonus + Self.boundSlack
+                        + maxBonus + maxLift + Self.boundSlack
                 } else {
                     guard source.canFinish(at: node, remaining: count - tap,
                                            editAvailable: allowsEdits && edit == .none) else { return }
                     let fixed = spatial + penalty + Self.priorWeight * source.bestLogPrior(at: node)
-                        + maxBonus + Self.boundSlack
+                        + maxBonus + maxLift + Self.boundSlack
                     let loose = fixed + suffix[tap]
                     // Most proposals already fail the cheap bound; do not look ahead on them.
                     guard loose >= threshold || loose + (edit == .none ? Self.editPenalty : 0) >= belowThreshold else { return }
@@ -332,9 +358,10 @@ nonisolated final class SpatialWordRanking {
                                     trail: state.trail, spatial: spatial, penalty: penalty,
                                     edit: edit, bound: bound), letters: letters, essential: essential)
             }
-            if canEdit, state.tap < count {
-                enqueue(node: state.node, tap: state.tap + 1, letters: [],
-                        spatial: state.spatial + bestScores[state.tap], edit: .extraTap(at: state.tap))
+            if canEdit, state.tap == count - 1 {
+                let near = state.depth > 0 ? likelihoods[state.tap][node.label] : -.infinity
+                enqueue(node: state.node, tap: count, letters: [],
+                        spatial: state.spatial + Self.extraTap(stray, near: near), edit: .extraTap(at: state.tap))
             }
             guard state.depth < Self.maxLetters else { continue }
             var labels: Set<Int> = []
@@ -351,8 +378,17 @@ nonisolated final class SpatialWordRanking {
                     enqueue(node: child, tap: state.tap, letters: [(item.label, nil)],
                             spatial: state.spatial, edit: .missingLetter(at: state.depth))
                 }
+                if canEdit, state.tap + 1 < count {
+                    enqueue(node: child, tap: state.tap + 2, letters: [(item.label, state.tap + 1)],
+                            spatial: state.spatial + Self.extraTap(stray, near: likelihoods[state.tap][item.label])
+                                + likelihoods[state.tap + 1][item.label],
+                            edit: .extraTap(at: state.tap))
+                }
                 if canEdit, state.tap + 1 < count, state.depth + 2 <= Self.maxLetters,
-                   likelihoods[state.tap + 1][item.label].isFinite {
+                   likelihoods[state.tap + 1][item.label].isFinite,
+                   usesLegacySearch || state.spatial + likelihoods[state.tap + 1][item.label] + bestScores[state.tap]
+                    + suffix[state.tap + 2] + Self.editPenalty + Self.priorWeight * source.bestLogPrior(at: child)
+                    + maxBonus + maxLift + Self.boundSlack >= min(threshold, belowThreshold) {
                     var grandLabels: Set<Int> = []
                     for grandchild in item.children {
                         guard let next = source.node(grandchild), grandLabels.insert(next.label).inserted else {
@@ -377,6 +413,35 @@ nonisolated final class SpatialWordRanking {
                               editSuggestions: below.values.filter { found[$0.word] == nil }.sorted(by: Self.precedes)))
     }
 
+    private static func strayLogDensity(_ layout: KeyboardLayout) -> Double? {
+        guard let key = layout.key(.character("a"))?.frame else { return nil }
+        let bounds = layout.keys.reduce(CGRect.null) { $0.union($1.frame) }
+        let pitch = Double((key.width + layout.metrics.gap) * (key.height + layout.metrics.rowGap))
+        let area = Double(bounds.width * bounds.height) / pitch
+        return area.isFinite && area > 0 ? -log(area) : nil
+    }
+
+    private static func extraTap(_ stray: Double, near: Double) -> Double {
+        let top = max(stray, near)
+        return top + log(0.5 * exp(stray - top) + 0.5 * exp(near - top))
+    }
+
+    static func transliteration(of spelling: String) -> (letters: String, steps: Int)? {
+        var letters = "", steps = 0
+        for character in spelling.lowercased() {
+            switch character {
+            case "'", "’": steps += 1
+            case "ä": letters += "ae"; steps += 1
+            case "ö": letters += "oe"; steps += 1
+            case "ü": letters += "ue"; steps += 1
+            case "ß": letters += "ss"; steps += 1
+            case "a"..."z": letters.append(character)
+            default: return nil
+            }
+        }
+        return (letters, steps)
+    }
+
     private struct Reading {
         let spatial: Double
         let penalty: Double
@@ -386,13 +451,13 @@ nonisolated final class SpatialWordRanking {
 
     /// Fixed-word one-edit alignment DP, expanded into its O(n) possible edit locations.
     /// Spatial substitutions remain allowed at every aligned position, as in the trie.
-    private static func reading(labels: [Int], likelihoods: [[Double]], stray: [Double],
+    private static func reading(labels: [Int], likelihoods: [[Double]], stray: Double,
                                 allowsEdits: Bool) -> Reading? {
         let n = labels.count
         let m = likelihoods.count
         var best: Reading?
         func consider(_ alignment: [Int?], _ edit: Edit, extra: Int? = nil) {
-            var spatial = extra.map { stray[$0] } ?? 0
+            var spatial = extra.map { extraTap(stray, near: likelihoods[$0][labels[min($0, n - 1)]]) } ?? 0
             for index in labels.indices {
                 if let tap = alignment[index] { spatial += likelihoods[tap][labels[index]] }
             }

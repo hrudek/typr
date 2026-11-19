@@ -107,7 +107,8 @@ final class KeyboardSuggestionEvaluationTests: XCTestCase {
                     let result = try await ranked(request, worker: worker)
                     if let evidence = request.evidence {
                         let expectedOutcome = synchronous.spatialDecoder?.decodeDetailed(evidence,
-                            languages: request.languages, calibration: request.calibration, personal: request.personal)
+                            languages: request.languages, calibration: request.calibration, personal: request.personal,
+                            context: request.context, variants: request.variants)
                         XCTAssertEqual(result.outcome, expectedOutcome, "Every score, alignment, cap and candidate must match")
                         if case .result(let decoded)? = result.outcome {
                             XCTAssertLessThanOrEqual(decoded.visits, Decoder.searchBudget)

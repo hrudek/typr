@@ -276,6 +276,6 @@ final class KeyboardTouchInputTests: XCTestCase {
 @MainActor
 private final class TouchEvidenceChecker: TextChecking {
     func isWordValid(_ word: String) -> Bool { ["cat", "well"].contains(word.lowercased()) }
-    func guesses(for word: String) -> [String] { [] }
+    func guesses(for word: String) -> [String] { word == "teh" ? ["the"] : [] }
     func completions(for prefix: String) -> [String] { [] }
 }

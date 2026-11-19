@@ -105,7 +105,8 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertEqual(truncated?.complete, false)
         XCTAssertNil(truncated?.automaticCandidate)
         XCTAssertEqual(truncated?.visits, 1)
-        XCTAssertNil(decoder.decode(evidence("hi", aimedAt: "hi"), languages: [.english]))
+        XCTAssertNotNil(decoder.decode(evidence("hi", aimedAt: "hi"), languages: [.english]))
+        XCTAssertNil(decoder.decode(evidence("h", aimedAt: "h"), languages: [.english]))
         let long = String(repeating: "a", count: 33)
         XCTAssertNil(decoder.decode(evidence(long, aimedAt: long), languages: [.english]))
     }
@@ -270,7 +271,6 @@ final class SpatialWordDecoderTests: XCTestCase {
         let word = evidence("helo", aimedAt: "helo")
         let result = try XCTUnwrap(source.decode(word, languages: [.english]))
         XCTAssertEqual(result.candidates.first?.word, "help")
-        XCTAssertFalse(result.geometryPrefersAlternative)
         XCTAssertEqual(result.automaticCandidate?.word, "help")
         let ac = AutocorrectEngine(checker: SpatialChecker(valid: ["hello", "help"], guesses: ["hello"]),
                                    spatialDecoder: source)
@@ -307,7 +307,7 @@ final class SpatialWordDecoderTests: XCTestCase {
 
     func testSuggestionDecodeCacheAndBoundaryLatencyAreIndependent() {
         let ac = engine()
-        for text in ["g", "ge"] {
+        for text in ["g", "h"] {
             ac.touchInput.clear()
             track(evidence(text, aimedAt: text), in: ac)
             _ = ac.suggestions(beforeInput: text, field: .text, autocorrectionType: .default)
@@ -507,12 +507,7 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertEqual(replacement(ac), "Explicit replacement", "Explicit replacement outranks inferred protections")
     }
 
-    func testDeterministicRuleAndCapsGuardsPrecedeSpatialDecoding() {
-        let rule = engine(valid: ["the"])
-        track(evidence("teh", aimedAt: "teh"), in: rule)
-        XCTAssertEqual(replacement(rule, "teh"), "the")
-        XCTAssertEqual(rule.learning.diagnostics[.autoRule], 1)
-        XCTAssertEqual(rule.learning.diagnostics[.autoSpatialSameLength], 0)
+    func testCapsGuardsPrecedeSpatialDecoding() {
         for token in ["GELLO", "gEllo"] { // Acronym and internal capital, no lexicon entry.
             let ac = engine()
             track(evidence(token, aimedAt: "hello"), in: ac)
@@ -649,7 +644,6 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertEqual(result.suggestions.map(\.word), ["hello"])
         XCTAssertLessThan(try XCTUnwrap(result.editSuggestions.first).score, result.literalScore)
         XCTAssertNil(result.automaticCandidate)
-        XCTAssertFalse(result.geometryPrefersAlternative)
         let staticResult = try XCTUnwrap(conservative.decode(word, languages: [.english], allowsEdits: false))
         XCTAssertTrue(staticResult.editSuggestions.isEmpty)
         let valid = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 50), ("helo", 1)])])
@@ -689,7 +683,52 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertNil(SpatialWordLexicon(data: duplicate))
     }
 
-    func testPolicyRefusalsAndGeometryOnlyVeto() {
+    func testCandidatesFarFromTheTapStillCompete() throws {
+        let source = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 4_000_000_000), ("world", 1)])])
+        let result = try XCTUnwrap(source.decode(evidence("kello", aimedAt: "kello"), languages: [.english]))
+        XCTAssertTrue(result.complete)
+        XCTAssertEqual(result.automaticCandidate?.word, "hello")
+    }
+
+    func testSentenceContextAddsItsLiftToEveryReading() throws {
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
+        let source = SpatialWordDecoder(lexicons: lexicons)
+        let word = evidence("kf", aimedAt: "kf")
+        let plain = try XCTUnwrap(source.decode(word, languages: [.english]))
+        for sentence in ["even ", "most "] {
+            let context = KeyboardContextModel.WordContext(model: model, context: model.context(before: sentence, currentToken: nil),
+                                                           german: false, english: true, personal: .init())
+            let scored = try XCTUnwrap(source.decode(word, languages: [.english], context: context))
+            XCTAssertTrue(scored.complete, sentence)
+            XCTAssertEqual(scored.literalScore, plain.literalScore + context.logLift("kf"), accuracy: 1e-10)
+            let shared = scored.candidates.compactMap { candidate in
+                plain.candidates.first { $0.word == candidate.word }.map { (candidate, $0) }
+            }
+            XCTAssertFalse(shared.isEmpty, sentence)
+            for (candidate, unscored) in shared {
+                XCTAssertEqual(candidate.score, unscored.score + context.logLift(candidate.word), accuracy: 1e-10)
+                XCTAssertLessThanOrEqual(context.logLift(candidate.word), context.maximumLift)
+            }
+            XCTAssertEqual(scored.candidates.map(\.score), scored.candidates.map(\.score).sorted(by: >))
+            XCTAssertLessThanOrEqual(scored.visits, SpatialWordDecoder.searchBudget)
+            XCTAssertLessThanOrEqual(scored.generated, SpatialWordDecoder.maxGenerated)
+        }
+    }
+
+    func testOrthographicVariantOrderDoesNotChangeTheResult() throws {
+        let lexicons = try XCTUnwrap(BundledKeyboardData.lexicons)
+        let source = SpatialWordDecoder(lexicons: lexicons)
+        let word = evidence("gruesse", aimedAt: "gruesse")
+        let variants = GermanAutocorrect.variants(of: "gruesse")
+        XCTAssertGreaterThan(variants.count, 1)
+        let forward = try XCTUnwrap(source.decode(word, languages: [.german, .english], variants: variants))
+        let backward = try XCTUnwrap(source.decode(word, languages: [.german, .english], variants: variants.reversed()))
+        XCTAssertEqual(forward, backward)
+        XCTAssertEqual(forward.automaticCandidate?.word, "grüße")
+    }
+
+    func testPolicyRefusals() {
         typealias Decoder = SpatialWordDecoder
         func candidate(_ word: String, score: Double, spatial: Double, edit: Decoder.Edit = .none) -> Decoder.Candidate {
             .init(word: word, language: .english, score: score, spatialScore: spatial,
@@ -722,15 +761,12 @@ final class SpatialWordDecoderTests: XCTestCase {
                                             literalInLexicon: false, complete: true, visits: 1, generated: 1,
                                             editSuggestions: [candidate("hello", score: -1, spatial: 0, edit: .missingLetter(at: 1))])
         XCTAssertEqual(refusal(suggestionOnly), .noCandidate)
-        XCTAssertFalse(suggestionOnly.geometryPrefersAlternative)
         let edited = candidate("hello", score: 4, spatial: -1, edit: .transposition(at: 1))
         XCTAssertEqual(refusal(result([edited]), valid: true), .editNeedsInvalidLiteral)
         XCTAssertNil(refusal(result([edited])))
         // A valid literal yields only to taps that fit the other word better.
         XCTAssertEqual(refusal(result([candidate("hello", score: 4, spatial: 0)]), valid: true), .editNeedsInvalidLiteral)
         XCTAssertNil(refusal(result([candidate("hello", score: 4, spatial: 0.1)]), valid: true))
-        XCTAssertFalse(result([candidate("hello", score: 4, spatial: -0.01)]).geometryPrefersAlternative)
-        XCTAssertTrue(result([candidate("hello", score: 4, spatial: 0)]).geometryPrefersAlternative)
     }
 
     func testPreferredLanguageBreaksCloseCallsAndTheLiteralMustBeBeaten() {
@@ -925,16 +961,12 @@ final class SpatialWordDecoderTests: XCTestCase {
                     let key = calibration?.keys[letter] ?? .init(offsetX: 0, offsetY: 0, sigmaX: 0.35, sigmaY: 0.35)
                     let dx = Double(sample.point.x - frame.midX) / Double(frame.width + word.layout.metrics.gap) - key.offsetX
                     let dy = Double(sample.point.y - frame.midY) / Double(frame.height + word.layout.metrics.rowGap) - key.offsetY
-                    if dx * dx + dy * dy <= 1.6 * 1.6 {
-                        // Independent inverse/determinant reference, not logDensity().
-                        let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY, xy = key.covarianceXY
-                        let det = xx * yy - xy * xy
-                        row[letter] = -0.5 * (yy * dx * dx - 2 * xy * dx * dy + xx * dy * dy) / det
-                            - log(2 * Double.pi * sqrt(det))
-                    }
+                    let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY, xy = key.covarianceXY
+                    let det = xx * yy - xy * xy
+                    row[letter] = -0.5 * (yy * dx * dx - 2 * xy * dx * dy + xx * dy * dy) / det
+                        - log(2 * Double.pi * sqrt(det))
                 }
-                let best = try XCTUnwrap(row.values.max())
-                scores.append(row.filter { $0.value >= best - 6 })
+                scores.append(row)
             }
             for edits in [false, true] {
                 let result = try XCTUnwrap(decoder.decode(word, languages: [.english, .german], calibration: calibration, allowsEdits: edits))
@@ -954,6 +986,11 @@ final class SpatialWordDecoderTests: XCTestCase {
                         let intended = Array(spelling)
                         let n = intended.count, m = scores.count
                         // Independent full matrix oracle, rather than the production trie/trails.
+                        let a = try XCTUnwrap(word.layout.key(.character("a"))).frame
+                        let bounds = word.layout.keys.reduce(CGRect.null) { $0.union($1.frame) }
+                        let uniform = -log(Double(bounds.width * bounds.height)
+                            / Double((a.width + word.layout.metrics.gap) * (a.height + word.layout.metrics.rowGap)))
+                        func extra(_ near: Double) -> Double { log(0.5 * exp(uniform) + 0.5 * exp(near)) }
                         var dp = Array(repeating: Array(repeating: [-Double.infinity, -Double.infinity], count: m + 1), count: n + 1)
                         dp[0][0][0] = 0
                         for i in 0...n {
@@ -965,9 +1002,12 @@ final class SpatialWordDecoderTests: XCTestCase {
                                     }
                                     if edits && used == 0 {
                                         if i < n { dp[i + 1][j][1] = max(dp[i + 1][j][1], value + log(0.01)) }
-                                        if j < m {
-                                            let stray = scores[j].values.max() ?? -.infinity
-                                            dp[i][j + 1][1] = max(dp[i][j + 1][1], value + stray + log(0.01))
+                                        if i < n, j + 1 < m, let near = scores[j][intended[i]],
+                                           let score = scores[j + 1][intended[i]] {
+                                            dp[i + 1][j + 2][1] = max(dp[i + 1][j + 2][1], value + extra(near) + score + log(0.01))
+                                        }
+                                        if i == n, n > 0, j == m - 1, let near = scores[j][intended[n - 1]] {
+                                            dp[n][m][1] = max(dp[n][m][1], value + extra(near) + log(0.01))
                                         }
                                         if i + 1 < n, j + 1 < m, intended[i] != intended[i + 1],
                                            let a = scores[j + 1][intended[i]], let b = scores[j][intended[i + 1]] {
@@ -1189,7 +1229,7 @@ final class SpatialWordDecoderTests: XCTestCase {
         if case .unavailable(.resource) = missing.decodeDetailed(evidence("hello", aimedAt: "hello"), languages: [.english]) {} else {
             XCTFail("missing selected resource must be diagnosed")
         }
-        if case .unavailable(.evidence) = missing.decodeDetailed(evidence("hi", aimedAt: "hi"), languages: [.english]) {} else {
+        if case .unavailable(.evidence) = missing.decodeDetailed(evidence("h", aimedAt: "h"), languages: [.english]) {} else {
             XCTFail("short evidence must be diagnosed")
         }
         let word = evidence("gello", aimedAt: "hello")

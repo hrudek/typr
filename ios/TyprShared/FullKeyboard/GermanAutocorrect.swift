@@ -1,7 +1,5 @@
 import UIKit
 
-/// Typr: German layer for `AutocorrectEngine` (umlaut digraphs, ß, German typo fixes).
-/// All German logic lives here so the upstream engine file only carries small hooks.
 @MainActor
 final class GermanAutocorrect {
     /// `nil` when the device has no German dictionary; only the built-in table works then.
@@ -60,52 +58,6 @@ final class GermanAutocorrect {
         ("ae", "ä"), ("oe", "ö"), ("ue", "ü"), ("ss", "ß"),
     ]
 
-    /// Returns the German spelling for a token typed with `ae/oe/ue/ss`, or nil.
-    func umlautReplacement(for token: String, englishValid: Bool) -> String? {
-        guard token.count >= 3, !token.contains("'"), !englishValid else { return nil }
-        let lower = token.lowercased()
-        guard Self.digraphs.contains(where: { lower.contains($0.ascii) }) else { return nil }
-        let title = lower.prefix(1).uppercased() + lower.dropFirst()
-        // `masse` is valid as `Masse`; do not chase `Maße` (nor Mauer/Steuer/names).
-        if isValid(token) || isValid(lower) || isValid(title) { return nil }
-
-        if let hit = Self.commonUmlautWords[lower] {
-            return AutocorrectEngine.matchCase(of: token, onto: hit)
-        }
-        guard checker != nil else { return nil }
-
-        let variants = Self.variants(of: lower)
-        var accepted: [(variant: String, spelled: String)] = []
-        for variant in variants {
-            if isValid(variant) {
-                accepted.append((variant, variant))
-            } else {
-                let capitalised = variant.prefix(1).uppercased() + variant.dropFirst()
-                if isValid(capitalised) { accepted.append((variant, capitalised)) }
-            }
-        }
-        guard !accepted.isEmpty else { return nil }
-
-        let ranked = guesses(for: token).map { $0.lowercased() }
-        var chosen: (variant: String, spelled: String)?
-        var bestRank = Int.max
-        for item in accepted {
-            if let rank = ranked.firstIndex(of: item.variant), rank < bestRank {
-                bestRank = rank
-                chosen = item
-            }
-        }
-        if chosen == nil {
-            chosen = accepted.max { substitutions($0.variant, lower) < substitutions($1.variant, lower) }
-        }
-        guard let chosen else { return nil }
-        return AutocorrectEngine.matchCase(of: token, onto: chosen.spelled)
-    }
-
-    private func substitutions(_ variant: String, _ original: String) -> Int {
-        original.count - variant.count
-    }
-
     /// Every combination of replacing each digraph occurrence (at most 4 occurrences), minus the identity.
     static func variants(of lower: String) -> [String] {
         var parts: [[String]] = []
@@ -162,28 +114,4 @@ final class GermanAutocorrect {
 
     /// Keys whose ASCII form is never a valid German or English word.
     static let blockedEnglishFixes: Set<String> = ["im"]
-
-    static let commonUmlautWords: [String: String] = [
-        "fuer": "für", "ueber": "über", "moechte": "möchte", "moechten": "möchten",
-        "wuerde": "würde", "wuerden": "würden", "koennen": "können", "koennte": "könnte",
-        "koennten": "könnten", "muessen": "müssen", "muesste": "müsste", "schoen": "schön",
-        "waere": "wäre", "waeren": "wären", "haette": "hätte", "haetten": "hätten",
-        "spaeter": "später", "natuerlich": "natürlich", "zurueck": "zurück",
-        "gruesse": "Grüße", "gruss": "Gruß", "fuenf": "fünf", "zwoelf": "zwölf",
-        "aendern": "ändern", "aenderung": "Änderung", "oeffnen": "öffnen",
-        "moeglich": "möglich", "unmoeglich": "unmöglich", "taeglich": "täglich",
-        "naechste": "nächste", "naechsten": "nächsten", "frueh": "früh",
-        "frueher": "früher", "schluessel": "Schlüssel", "maedchen": "Mädchen",
-        "maerz": "März", "muenchen": "München", "oesterreich": "Österreich",
-        "koeln": "Köln", "strasse": "straße", "heiss": "heiß", "weiss": "weiß",
-        "fuesse": "Füße", "schliessen": "schließen", "gefuehl": "Gefühl",
-        "gefaehrlich": "gefährlich", "waehrend": "während", "waehlen": "wählen",
-        "traeumen": "träumen", "buero": "Büro", "buecher": "Bücher", "tuer": "Tür",
-        "faellt": "fällt", "faehig": "fähig", "faehrt": "fährt", "glueck": "Glück",
-        "gluecklich": "glücklich", "hoeren": "hören", "hoert": "hört", "kuerze": "Kürze",
-        "laecheln": "lächeln", "loesen": "lösen", "loesung": "Lösung", "pruefen": "prüfen",
-        "ruecken": "rücken", "saetze": "Sätze", "tschuess": "tschüss", "uebung": "Übung",
-        "ueberall": "überall", "ueberhaupt": "überhaupt", "verstaendlich": "verständlich",
-        "vorschlaege": "Vorschläge", "wuensche": "Wünsche", "zaehlen": "zählen",
-    ]
 }

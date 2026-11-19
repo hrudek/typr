@@ -27,7 +27,7 @@ def compile_words(raw: bytes, language: str) -> bytes:
             raise ValueError("invalid count")
         # No accent stripping, case guessing, digraph expansion or word synthesis.
         word = unicodedata.normalize("NFC", word)
-        if 3 <= len(word) <= 32 and set(word) <= allowed:
+        if 2 <= len(word) <= 32 and set(word) <= allowed:
             words[word] = words.get(word, 0) + count
     root = [{}, 0]
     for word, count in sorted(words.items()):
