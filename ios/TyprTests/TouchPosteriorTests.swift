@@ -25,6 +25,13 @@ final class TouchPosteriorTests: XCTestCase {
         return PersonalTypingModel(state: model.state).calibration(for: layout)
     }
 
+    private func allTapsKey(labels n: Int) throws -> SpatialTouchCalibration.Key {
+        let model = PersonalTypingModel()
+        model.learn(try taps.prefix(n).map { TouchLabel(point: try point($0.0, $0.1, on: "f", in: layout), letter: "f") },
+                    layout: layout, source: .keep)
+        return model.state.layouts[KeyboardLayoutSignature(layout).id]?.allTapsKey("f") ?? SpatialTouchCalibration.prior
+    }
+
     func testGoldenPosteriorsAfterZeroOneThreeAndTenLabels() throws {
         let golden: [(n: Int, offsetX: Double, offsetY: Double, sigmaX: Double, sigmaY: Double, xy: Double,
                       degrees: Double, densities: [Double])] = [
@@ -40,7 +47,7 @@ final class TouchPosteriorTests: XCTestCase {
         ]
         let probes: [(Double, Double)] = [(0, 0), (0.3, -0.2), (-0.9, 0.6), (0.95, -0.95)]
         for row in golden {
-            let key = try calibration(labels: row.n)?.keys["f"] ?? SpatialTouchCalibration.prior
+            let key = try allTapsKey(labels: row.n)
             XCTAssertEqual(key.offsetX, row.offsetX, accuracy: 1e-12, "n=\(row.n)")
             XCTAssertEqual(key.offsetY, row.offsetY, accuracy: 1e-12, "n=\(row.n)")
             XCTAssertEqual(key.sigmaX, row.sigmaX, accuracy: 1e-12, "n=\(row.n)")

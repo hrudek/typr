@@ -106,16 +106,8 @@ final class KeyboardLearningSession {
     var protections: PersonalLexiconSnapshot { model.lexicon }
     /// Personal word priors for the decoder: none while learning is off.
     var personalPriors: PersonalLexiconSnapshot { model.isLearningEnabled ? model.lexicon : .empty }
-    /// Read-only frozen full-covariance/affine-aim projection; `nil` while off or below threshold.
+    /// Read-only frozen per-key posterior snapshot; `nil` while off or without labels for the layout.
     func calibration(for layout: KeyboardLayout) -> SpatialTouchCalibration? { model.calibration(for: layout) }
-
-    /// Starts the fast aim over and bumps the generation. Field and host changes keep the aim;
-    /// the learning switch and app resets clear it in the model. Tests use this seam.
-    func resetFastAim() {
-        breakWordSequence()
-        // Repeated evidence invalidation/polls with no active fast state are no-ops.
-        if model.resetFastAim() { generation &+= 1 }
-    }
 
     /// Keyboard appearance and settings sync: switch value and app reset epochs.
     func refresh() {

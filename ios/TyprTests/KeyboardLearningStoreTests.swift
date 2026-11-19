@@ -314,6 +314,39 @@ final class KeyboardLearningStoreTests: XCTestCase {
         XCTAssertEqual(diagnostics[.storeWriteFailed], 2)
     }
 
+    func testAimMemoriesSurviveReloadRepairNonFiniteWeightsAndReset() throws {
+        let fixture = try Fixture(); defer { fixture.clean() }
+        let layout = KeyboardLayout(width: 375)
+        let id = KeyboardLayoutSignature(layout).id
+        let e = try XCTUnwrap(layout.key(.character("e"))).frame
+        let session = KeyboardLearningSession(store: fixture.store(), defaults: fixture.defaults)
+        for dx in [0.0, 0.3, 0.3, 0.3] {
+            session.learn([.init(point: CGPoint(x: e.midX + dx * e.width, y: e.midY), letter: "e")], layout: layout, source: .keep)
+        }
+        session.flush()
+        let saved = try XCTUnwrap(fixture.store().load().0)
+        XCTAssertEqual(saved, session.model.state)
+        XCTAssertNotNil(saved.layouts[id]?.aims?["e"])
+        XCTAssertEqual(PersonalTypingModel(state: saved).calibration(for: layout), session.calibration(for: layout))
+
+        var broken = saved
+        broken.layouts[id]?.aims?["e"]?.weights = [.infinity, 0, 0]
+        let store = fixture.store()
+        _ = store.load()
+        var diagnostics = KeyboardDiagnostics()
+        XCTAssertTrue(store.save(model: broken, diagnostics: &diagnostics))
+        XCTAssertEqual(diagnostics[.storeWriteFailed], 1)
+        let repaired = try XCTUnwrap(fixture.store().load().0)
+        XCTAssertNil(repaired.layouts[id]?.aims?["e"])
+        XCTAssertEqual(repaired.layouts[id]?.keys, saved.layouts[id]?.keys, "statistics survive the repair")
+
+        XCTAssertTrue(fixture.store().requestLearningReset())
+        session.refresh()
+        XCTAssertNil(fixture.store().load().0)
+        XCTAssertNil(session.calibration(for: layout))
+        XCTAssertTrue(session.model.state.layouts.isEmpty)
+    }
+
     func testInvalidKeyStatsAreDroppedWithoutLosingProtectionOrBlockingLaterSaves() throws {
         let fixture = try Fixture(); defer { fixture.clean() }
         let layout = KeyboardLayout(width: 375)

@@ -57,14 +57,15 @@ are what you meant, not input.
 
 The replay uses the learning state at export time, changed only where a word's own log proves it
 (an autocorrected word was not kept then). It has no system spelling dictionary, so it validates
-words against the bundled word lists and never makes spelling-only corrections. Within one keyboard
-session the iPhone also adapts touch aim in memory, which the export does not carry. The replay sees
-at most the three words logged before each word as context.
+words against the bundled word lists and never makes spelling-only corrections. The learning state
+includes each key's aim memories at export time.
+The replay sees at most the three words logged before each word as context.
 
 ## Tests
 
 `python3 -m unittest discover -s ios/tools/keyboard_replay/tests` builds the tool and replays
 `fixture/synthetic.json`, invented text typed through the engine. After changing the export format,
 regenerate it with `keyboard-replay --make-fixture ios/tools/keyboard_replay/fixture/synthetic.json`.
-`keyboard-replay --touch-posterior` prints the learned touch densities after fixed labels; the
-tests compare them with an independent computation of the touch model.
+`keyboard-replay --touch-posterior` prints the learned touch densities after fixed labels and how
+displaced taps move one key's aim; the tests compare them with an independent computation of the
+touch model.

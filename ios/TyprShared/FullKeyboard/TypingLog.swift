@@ -5,7 +5,7 @@ import Foundation
 ///
 /// Export file (`TypingLogExport`), format `typr-typing-log`, version 2:
 /// `{ "format", "version", "exportedAt" (ISO 8601), "appBuild",
-///    "learning": PersonalTypingModel.State (touch calibration, kept and counted words, rejected
+///    "learning": PersonalTypingModel.State (touch calibration and aim memories, kept and counted words, rejected
 ///    corrections, word pairs), "protectedWords": imported personal words (`ProtectedPersonalLexicon`),
 ///    "words": [TypingLogWord], oldest first }`
 ///

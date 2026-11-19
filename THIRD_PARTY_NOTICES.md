@@ -329,8 +329,8 @@ histories, trigrams, neural weights or executable dependency are adopted.
 
 The aggregate-aim extension additionally translates full covariance, pooled shrinkage,
 multiple-timescale aim, predictive fixed-share weighting and covariance-display/test
-ideas (rewritten with Typr's shared 40/8-label affine drift, not upstream per-key
-30/3 banks) from `TouchModel.swift`, `Aim.swift`, `Tap.swift` and `TypingModelTests.swift` at
+ideas (then rewritten as a shared 40/8-label affine drift, now replaced by the per-key
+memories below) from `TouchModel.swift`, `Aim.swift`, `Tap.swift` and `TypingModelTests.swift` at
 [iikb `09a2e9cdfbe851adff6c4646333c0a3f74ba8765`](https://github.com/AVGVSTVS96/iikb/tree/09a2e9cdfbe851adff6c4646333c0a3f74ba8765),
 MIT, Copyright (c) 2026 Bassim Shahidy. The same full MIT notice above applies.
 No upstream recent-tap
@@ -342,6 +342,12 @@ the pooled within-key spread (`Posterior`, `Spread`, priors `priorSpread = .2`,
 [iikb `e05a0ab8a670478d97765d26ffb8493ed5b7ab66`](https://github.com/AVGVSTVS96/iikb/tree/e05a0ab8a670478d97765d26ffb8493ed5b7ab66)
 into `SpatialTouchCalibration` (`TypingModelTypes.swift`), computed from Typr's existing
 per-key aggregates. MIT, Copyright (c) 2026 Bassim Shahidy; the same full MIT notice above applies.
+
+The per-key aim memories port `KeyTouches` and `Drift` (memories of about 30 and 3 taps, the
+prequential weights with a 1% fixed share) and `Posterior.aiming` / `Posterior(blending:)` from the
+same `TouchModel.swift` at iikb `e05a0ab8a670478d97765d26ffb8493ed5b7ab66` into `PersonalTypingModel.KeyAim` and
+`SpatialTouchCalibration.aiming` / `blending`. They replace Typr's earlier shared affine drift.
+Typr keeps its own all-taps statistics and does not adopt the `recent` tap display.
 
 The deferred suggestion pipeline additionally translates snapshot/job/revision-checked
 finish and compatible-cache adoption from

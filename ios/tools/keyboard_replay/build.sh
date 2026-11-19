@@ -47,7 +47,7 @@ sources=(
   FullKeyboard/KeyboardUndoWindow FullKeyboard/LexiconDelivery FullKeyboard/PersonalBigramModel
   FullKeyboard/PersonalCompletionIndex FullKeyboard/PersonalTypingModel FullKeyboard/ProtectedPersonalLexicon
   FullKeyboard/ShiftStateMachine FullKeyboard/SpatialPrefixSearch FullKeyboard/SpatialWordDecoder
-  FullKeyboard/SpatialWordRanking FullKeyboard/SwipeDecoder FullKeyboard/SwipeEncoder FullKeyboard/TouchAimDrift
+  FullKeyboard/SpatialWordRanking FullKeyboard/SwipeDecoder FullKeyboard/SwipeEncoder
   FullKeyboard/TypingLog FullKeyboard/TypingModelTypes Statistics/UsageStatistics
   Statistics/UsageStatisticsSession Statistics/UsageStatisticsStore DictationFeedback DictationFeedbackBridge
   DictationLanguage SpeechEngineChoice TyprSettings FullKeyboard/FullKeyboardSettings
