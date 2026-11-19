@@ -366,20 +366,32 @@ final class KeyboardLayoutTests: XCTestCase {
 
     func testHitTargetsTileTheKeyAreaWithNoDeadZonesOrOverlaps() {
         var generator = SystemRandomNumberGenerator()
-        // The split halves' gap is meant to type nothing; KeyboardPoseTests checks each half and the gap.
-        for layout in everyLayout() where layout.orientation != .splitLandscape {
+        for layout in everyLayout() {
             let area = layout.keysAreaFrame
+            let isSplit = layout.orientation == .splitLandscape
             var rowTop = area.minY
+            // Split only: per row, the stretch between the halves that types nothing.
+            var gaps: [(rows: Range<CGFloat>, xs: Range<CGFloat>)] = []
             for row in 0...layout.bottomRowIndex {
-                let targets = layout.keys.filter { $0.row == row }.map(\.hitFrame).sorted { $0.minX < $1.minX }
+                let keys = layout.keys.filter { $0.row == row }.sorted { $0.frame.minX < $1.frame.minX }
+                let targets = keys.map(\.hitFrame)
                 XCTAssertEqual(targets.first?.minX, 0, describe(layout))
                 XCTAssertEqual(targets.last?.maxX, layout.width, describe(layout))
                 for target in targets {
                     XCTAssertEqual(target.minY, rowTop, accuracy: 0.0001, "\(describe(layout)) row \(row)")
                 }
-                for (a, b) in zip(targets, targets.dropFirst()) {
-                    XCTAssertEqual(a.maxX, b.minX, accuracy: 0.0001, "\(describe(layout)) row \(row)")
+                var gapCount = 0
+                for (a, b) in zip(keys, keys.dropFirst()) {
+                    if isSplit, b.frame.minX - a.frame.maxX > layout.letterWidth {
+                        gapCount += 1
+                        XCTAssertLessThan(a.hitFrame.maxX, layout.width / 2, "\(describe(layout)) row \(row)")
+                        XCTAssertGreaterThan(b.hitFrame.minX, layout.width / 2, "\(describe(layout)) row \(row)")
+                        gaps.append((a.hitFrame.minY..<a.hitFrame.maxY, a.hitFrame.maxX..<b.hitFrame.minX))
+                    } else {
+                        XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, "\(describe(layout)) row \(row)")
+                    }
                 }
+                XCTAssertEqual(gapCount, isSplit ? 1 : 0, "\(describe(layout)) row \(row)")
                 rowTop = targets[0].maxY
             }
             XCTAssertEqual(rowTop, area.maxY, accuracy: 0.0001, describe(layout))
@@ -390,7 +402,8 @@ final class KeyboardLayoutTests: XCTestCase {
                     y: CGFloat.random(in: area.minY..<area.maxY, using: &generator)
                 )
                 let hits = layout.keys.filter { $0.hitFrame.contains(point) }
-                XCTAssertEqual(hits.count, 1, "\(describe(layout)) at \(point): \(hits.map(\.label))")
+                let inGap = gaps.contains { $0.rows.contains(point.y) && $0.xs.contains(point.x) }
+                XCTAssertEqual(hits.count, inGap ? 0 : 1, "\(describe(layout)) at \(point): \(hits.map(\.label))")
             }
             if layout.showsStrip {
                 XCTAssertNil(layout.hitTest(CGPoint(x: 20, y: layout.stripFrame.midY)), "strip is not a key")

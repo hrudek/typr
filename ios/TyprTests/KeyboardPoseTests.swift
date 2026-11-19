@@ -128,6 +128,21 @@ final class KeyboardPoseTests: XCTestCase {
         }
     }
 
+    func testTheSplitGapTypesNothingPastHalfAKeyOnEveryLayer() {
+        for width: CGFloat in [801, innerLandscape.width] {
+            for layer in [KeyboardLayer.numbers, .symbols] {
+                for field in [KeyboardFieldKind.text, .url, .email] {
+                    for showsStrip in [true, false] {
+                        assertTheGapTypesNothingPastHalfAKey(KeyboardLayout(
+                            width: width, orientation: .splitLandscape, layer: layer, field: field,
+                            showsGlobe: true, showsStrip: showsStrip
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
     func testTheJoinedSpaceAndTyprKeycapTakesOnlyTheRightSpaceBarWhenSplit() throws {
         for width: CGFloat in [801, innerLandscape.width] {
             let layout = KeyboardLayout(width: width, orientation: .splitLandscape)
