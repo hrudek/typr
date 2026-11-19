@@ -48,13 +48,20 @@ protocol SecretStoring: AnyObject {
     func delete()
 }
 
-/// The owner's Anthropic API key. Never logged, never in defaults, logs or exports.
+/// The owner's Anthropic API key. Never logged, never in defaults, logs or exports. A copy in
+/// the App Group's Keychain access group lets the keyboard ask Claude for next-word predictions.
 @MainActor
 struct AnthropicKeyStore {
     private let storage: any SecretStoring
+    private let keyboardCopy: (any SecretStoring)?
 
-    init(storage: any SecretStoring = KeychainSecret.anthropicAPIKey) {
+    init() {
+        self.init(storage: KeychainSecret.anthropicAPIKey, keyboardCopy: KeychainSecret.keyboardAnthropicAPIKey)
+    }
+
+    init(storage: any SecretStoring, keyboardCopy: (any SecretStoring)? = nil) {
         self.storage = storage
+        self.keyboardCopy = keyboardCopy
     }
 
     var key: String? {
@@ -72,59 +79,28 @@ struct AnthropicKeyStore {
     @discardableResult
     func save(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        return storage.write(trimmed)
+        guard !trimmed.isEmpty, storage.write(trimmed) else { return false }
+        syncKeyboardCopy()
+        return true
     }
 
-    func remove() { storage.delete() }
-}
-
-/// A generic password in the app's own Keychain access group (no shared group: the keyboard
-/// can't read it), only after first unlock and never migrated to another device.
-@MainActor
-final class KeychainSecret: SecretStoring {
-    static let anthropicAPIKey = KeychainSecret(service: "dev.rudek.typr.anthropic", account: "api-key")
-
-    private let service: String
-    private let account: String
-
-    init(service: String, account: String) {
-        self.service = service
-        self.account = account
+    func remove() {
+        storage.delete()
+        keyboardCopy?.delete()
     }
 
-    private var query: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: service,
-         kSecAttrAccount as String: account]
-    }
-
-    func read() -> String? {
-        var request = query
-        request[kSecReturnData as String] = true
-        request[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        guard SecItemCopyMatching(request as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    func write(_ value: String) -> Bool {
-        let data = Data(value.utf8)
-        let attributes: [String: Any] = [kSecValueData as String: data,
-                                         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
-        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
-        if status == errSecSuccess { return true }
-        guard status == errSecItemNotFound else { return false }
-        var item = query
-        item.merge(attributes) { _, new in new }
-        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
-    }
-
-    func delete() {
-        SecItemDelete(query as CFDictionary)
+    /// The keyboard's copy matches the saved key; keys saved before the copy existed get one at launch.
+    func syncKeyboardCopy() {
+        guard let keyboardCopy else { return }
+        if let key {
+            if keyboardCopy.read() != key, !keyboardCopy.write(key) { keyboardCopy.delete() }
+        } else {
+            keyboardCopy.delete()
+        }
     }
 }
+
+extension KeychainSecret: SecretStoring {}
 
 /// Resolves the engine per call, so a switch applies to the next dictation without a restart.
 @MainActor

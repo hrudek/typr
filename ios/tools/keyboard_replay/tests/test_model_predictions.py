@@ -23,6 +23,7 @@ class ModelPredictionTests(unittest.TestCase):
             run = subprocess.run([binary, "--model-predictions"], capture_output=True, text=True,
                                  check=True, timeout=120)
         cls.report = json.loads(run.stdout)
+        cls.output = run.stdout + run.stderr
 
     def test_count_predictions_show_first_and_model_words_merge_for_the_same_context(self):
         counted = self.report["noProvider"]
@@ -54,6 +55,30 @@ class ModelPredictionTests(unittest.TestCase):
         self.assertNotIn("Secret", context)
         self.assertTrue(context.startswith("along"), "Starts at a whole word")
         self.assertTrue(context.endswith("river "))
+
+    def test_cloud_without_a_key_sends_nothing(self):
+        cloud = self.report["cloud"]
+        for case in ("noKey", "emptyKey", "secure"):
+            self.assertEqual(cloud[case]["requests"], 0, case)
+        self.assertEqual(cloud["noKey"]["bar"], self.report["noProvider"])
+
+    def test_cloud_success_merges_and_sends_only_the_bounded_context(self):
+        success = self.report["cloud"]["success"]
+        self.assertEqual(success["bar"], ["the", "go", "see"])
+        self.assertEqual(success["requests"], 1)
+        self.assertEqual(success["sent"], ["I would like to "])
+        self.assertEqual(success["model"], "claude-haiku-5-5")
+        self.assertEqual(success["url"], "https://api.anthropic.com/v1/messages")
+        self.assertTrue(success["keyHeader"])
+
+    def test_cloud_failures_keep_local_predictions(self):
+        for case in ("rateLimited", "overloaded", "malformed", "timeout"):
+            result = self.report["cloud"][case]
+            self.assertEqual(result["requests"], 1, case)
+            self.assertEqual(result["bar"], self.report["noProvider"], case)
+
+    def test_key_never_printed(self):
+        self.assertNotIn("sk-ant-replay-key", self.output)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
 import Foundation
 import UIKit
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A text field whose traits a scenario sets.
 @MainActor
@@ -57,7 +60,8 @@ actor FakeModel: ModelPredictionProvider {
 
 @MainActor
 func modelPredictionReport(words: WordData) async throws -> String {
-    func engine(_ target: TraitTarget, provider: FakeModel?, timeout: Duration = .seconds(5)) -> FullKeyboardEngine {
+    func engine(_ target: TraitTarget, provider: (any ModelPredictionProvider)?,
+                timeout: Duration = .seconds(5)) -> FullKeyboardEngine {
         let autocorrect = AutocorrectEngine(checker: LexiconChecker(words.lexicons[.english]),
                                             spatialDecoder: SpatialWordDecoder(lexicons: words.lexicons),
                                             contextResources: KeyboardContextResources(model: words.context))
@@ -156,6 +160,77 @@ func modelPredictionReport(words: WordData) async throws -> String {
     await settle(boundedEngine)
     report["boundedContexts"] = await bounded.contexts
 
+    report["cloud"] = await cloudReport(engine: engine, sentence: sentence)
+
     let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
     return String(decoding: data, as: UTF8.self) + "\n"
+}
+
+/// Records each request and answers like the Messages API would; no network.
+actor FakeAnthropic {
+    enum Reply { case words(String), status(Int), malformed, hang }
+    private let reply: Reply
+    private(set) var requests: [URLRequest] = []
+
+    init(_ reply: Reply) { self.reply = reply }
+
+    func respond(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        requests.append(request)
+        let status: Int
+        let body: Data
+        switch reply {
+        case .words(let text):
+            status = 200
+            body = try JSONSerialization.data(withJSONObject: ["content": [["type": "text", "text": text]]])
+        case .status(let code): status = code; body = Data("{}".utf8)
+        case .malformed: status = 200; body = Data("not json".utf8)
+        case .hang:
+            try await Task.sleep(for: .seconds(30))
+            status = 200; body = Data()
+        }
+        return (body, HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
+let replayKey = "sk-ant-replay-key"
+
+@MainActor
+func cloudReport(engine: (TraitTarget, (any ModelPredictionProvider)?, Duration) -> FullKeyboardEngine,
+                 sentence: String) async -> [String: Any] {
+    func run(_ reply: FakeAnthropic.Reply, key: String? = replayKey,
+             configure: (TraitTarget) -> Void = { _ in }) async -> [String: Any] {
+        let api = FakeAnthropic(reply)
+        let provider = AnthropicPredictionProvider(key: { key }, transport: { try await api.respond($0) })
+        let target = TraitTarget()
+        configure(target)
+        let keyboard = engine(target, provider, .milliseconds(200))
+        target.text = sentence
+        keyboard.textDidChange()
+        await keyboard.waitForSuggestions()
+        let limit = ContinuousClock.now.advanced(by: .seconds(10))
+        while keyboard.modelPredictions?.isActive == true, ContinuousClock.now < limit {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        let requests = await api.requests
+        var result: [String: Any] = ["bar": keyboard.suggestions.map(\.replacement), "requests": requests.count]
+        if let request = requests.first,
+           let body = request.httpBody.flatMap({ try? JSONSerialization.jsonObject(with: $0) }) as? [String: Any] {
+            let messages = body["messages"] as? [[String: Any]]
+            result["sent"] = messages?.map { $0["content"] as? String ?? "" } ?? []
+            result["model"] = body["model"] as? String ?? ""
+            result["keyHeader"] = request.value(forHTTPHeaderField: "x-api-key") == key
+            result["url"] = request.url?.absoluteString ?? ""
+        }
+        return result
+    }
+    return [
+        "noKey": await run(.words("go"), key: nil),
+        "emptyKey": await run(.words("go"), key: "  "),
+        "success": await run(.words("go\nsee\nVisit")),
+        "rateLimited": await run(.status(429)),
+        "overloaded": await run(.status(529)),
+        "malformed": await run(.malformed),
+        "timeout": await run(.hang),
+        "secure": await run(.words("go")) { $0.isSecureTextEntry = true },
+    ]
 }

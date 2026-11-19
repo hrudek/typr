@@ -2,7 +2,7 @@ import Foundation
 
 /// Sends one dictation to Anthropic's Messages API. The response body, prompt and key never
 /// reach errors or logs: every failure becomes a bare `CleanupModelError`.
-typealias AnthropicTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+typealias AnthropicTransport = AnthropicAPI.Transport
 
 @MainActor
 struct AnthropicCleaner: TyprTranscriptCleaning {
@@ -49,9 +49,9 @@ final class AnthropicCleanupSession: CleanupSession {
 }
 
 enum AnthropicCleanupRequest {
-    static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    static let version = "2026-10-21"
-    static let model = "claude-haiku-5-5"
+    static let endpoint = AnthropicAPI.endpoint
+    static let version = AnthropicAPI.version
+    static let model = AnthropicAPI.model
     static let timeout: TimeInterval = 15
 
     /// Room for an answer as long as the transcript: half the prompt's bytes plus slack, at most 2048.
