@@ -208,11 +208,11 @@ final class TypingLogRecorder {
         self.now = now
     }
 
-    /// A character went in. `token`: the current word in the field afterwards.
+    /// A character went in. `field`: the text before the cursor afterwards.
     func typed(_ text: String, point: CGPoint?, key: String?, layout: KeyboardLayout,
-               time: TimeInterval, token: String?) {
-        if var draft = open, token == draft.text + text
-            || (token == nil && Self.isApostrophe(text) && draft.text.last?.isLetter == true) {
+               time: TimeInterval, field: String?) {
+        let token = Self.word(in: field)
+        if var draft = open, token == draft.text + text {
             draft.append(text, point: point, key: key, layout: layout, time: time)
             draft.backspacing = false
             open = draft.isBounded ? draft : nil
@@ -259,8 +259,9 @@ final class TypingLogRecorder {
         settled = draft.isBounded ? draft : nil
     }
 
-    /// One character was deleted. `token`: the current word in the field afterwards.
-    func deleted(token: String?) {
+    /// One character was deleted. `field`: the text before the cursor afterwards.
+    func deleted(field: String?) {
+        let token = Self.word(in: field)
         if var draft = open {
             open = nil
             guard (token ?? "") == String(draft.text.dropLast()), !draft.text.isEmpty else { return }
@@ -290,7 +291,8 @@ final class TypingLogRecorder {
     }
 
     /// Backspace restored `original` in place of the word's automatic change.
-    func undone(original: String, token: String?) {
+    func undone(original: String, field: String?) {
+        let token = Self.word(in: field)
         guard var draft = settled, let token, original.hasSuffix(token) else { discard(); return }
         settled = nil
         draft.word.corrections.append(.init(kind: .undo, from: draft.text, to: original))
@@ -338,9 +340,28 @@ final class TypingLogRecorder {
     private func finish(_ draft: Draft?, end: String?) {
         guard var word = draft?.word, let text = draft?.text, !text.isEmpty else { return }
         if let end, word.end.isEmpty { word.end = end }
-        word.meant = String(text.reversed().drop(while: { Self.isApostrophe(String($0)) }).reversed())
+        word.meant = text
         write(word)
     }
 
-    private static func isApostrophe(_ text: String) -> Bool { text == "'" || text == "’" }
+    /// The word before the cursor: `AutocorrectEngine.currentToken`, but keeping a trailing apostrophe
+    /// (`can'` while typing `can't`, the possessive `dogs'`). Leading apostrophes open a quote.
+    static func word(in field: String?) -> String? {
+        guard let field else { return nil }
+        let apostrophes: Set<Character> = ["'", "’"]
+        var start = field.endIndex
+        while start > field.startIndex {
+            let previous = field.index(before: start)
+            guard field[previous].isLetter || apostrophes.contains(field[previous]) else { break }
+            start = previous
+        }
+        let run = start
+        while start < field.endIndex, apostrophes.contains(field[start]) { start = field.index(after: start) }
+        guard start < field.endIndex else { return nil }
+        if run > field.startIndex {
+            let boundary = field[field.index(before: run)]
+            if "@/.#_-:".contains(boundary) || boundary.isNumber { return nil }
+        }
+        return String(field[start...])
+    }
 }

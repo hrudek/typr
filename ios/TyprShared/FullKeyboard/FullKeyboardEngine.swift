@@ -826,7 +826,7 @@ final class FullKeyboardEngine {
                 target.deleteBackward()
             }
             target.insertText(undo.original)
-            logTyping { $0.undone(original: undo.original, token: currentToken) }
+            logTyping { $0.undone(original: undo.original, field: target.documentContextBeforeInput) }
             autocorrect.touchInput.clear()
             autocorrect.recordUndo(undo)
             autocorrect.touchInput.deletedBackward(before: nil, after: target.documentContextBeforeInput)
@@ -838,7 +838,7 @@ final class FullKeyboardEngine {
         autocorrect.discardFeedback()
         if recordsStatistics { statistics?.deletion() }
         target.deleteBackward()
-        logTyping { $0.deleted(token: currentToken) }
+        logTyping { $0.deleted(field: target.documentContextBeforeInput) }
         autocorrect.touchInput.deletedBackward(before: beforeDeletion, after: target.documentContextBeforeInput)
         lastSpaceAt = nil
         didEdit()
@@ -920,7 +920,7 @@ final class FullKeyboardEngine {
             insert(text, sample: sample)
             logTyping { log in
                 log.typed(text, point: sample?.point, key: sample?.key.character, layout: tapLayout,
-                          time: clock(), token: currentToken)
+                          time: clock(), field: target.documentContextBeforeInput)
             }
             return
         }
@@ -1264,8 +1264,6 @@ final class FullKeyboardEngine {
               case .keys(.text, _) = KeyboardFieldRouting.route(for: target.keyboardType) else { return false }
         return true
     }
-
-    private var currentToken: String? { AutocorrectEngine.currentToken(in: target.documentContextBeforeInput) }
 
     private var typingLogCorrection: TypingLogWord.Commit.CorrectionKind {
         switch autocorrect.pendingFeedback?.kind {
