@@ -94,13 +94,41 @@ final class KeyboardAdaptiveAssignmentTests: XCTestCase {
     }
 
     func testFirstLetterAcrossRowsAtFieldStartAfterSpaceAndAfterPunctuation() throws {
-        for start in ["", "ok ", "ok,", "ok."] {
+        for start in ["", "ok ", "ok,", "ok!", "(ok)"] {
             let (engine, target) = try keyboard(start)
             let point = topEdgeOfGUnderT(engine)
             XCTAssertEqual(engine.layout.hitTest(point)?.character, "g")
             XCTAssertTrue(engine.layout.reaches(point, letter: "t"))
             tap(point, engine)
             XCTAssertEqual(target.text, start + "t", start)
+        }
+    }
+
+    func testLetterAfterAPeriodAtSignOrSlashInsideATokenTypesTheKeyItHits() throws {
+        let cases: [(String, Character)] = [("wikipedia.", "o"), ("bit.", "l"), ("www.", "g"), ("gmx.", "n"),
+                                            ("example.", "c"), ("github.", "c"), ("heise.", "d"), ("e.", "g"),
+                                            ("i.", "e"), ("a.b@c.", "d"), ("a.", "b"), ("name@", "g"), ("x.com/", "a")]
+        for trained in [false, true] {
+            for (context, letter) in cases {
+                let (engine, target) = try keyboard(context)
+                if trained {
+                    for _ in 0..<5 { "abcdefghijklmnopqrstuvwxyz".forEach { label($0, engine) } }
+                    engine.refreshSuggestions()
+                }
+                XCTAssertNil(engine.autocorrect.keyMap(layout: engine.layout, context: context, permitsCorrection: true),
+                             context)
+                let area = key(letter, engine).hitFrame
+                for i in 0..<15 {
+                    for j in 0..<9 {
+                        let point = CGPoint(x: area.minX + (CGFloat(i) + 0.5) * area.width / 15,
+                                            y: area.minY + (CGFloat(j) + 0.5) * area.height / 9)
+                        tap(point, engine)
+                        XCTAssertEqual(target.text.last, letter, "\(context)\(letter) trained=\(trained)")
+                        engine.deleteBackward()
+                    }
+                }
+                XCTAssertEqual(target.text, context)
+            }
         }
     }
 
