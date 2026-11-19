@@ -92,7 +92,26 @@ extension KeyboardBoundaryDecoderTests {
     }
 
     func testBottomRowLetterHitInsteadOfSpace() async throws {
+        let (cold, coldTarget) = try runKeyboard()
+        try typeRun(cold, "love")
+        try typeAboveSpace(cold, "b")
+        try typeRun(cold, "you")
+        await cold.waitForSuggestions()
+        XCTAssertTrue(cold.suggestions.contains { $0.replacement == "love you" && !$0.willAutoReplace },
+                      "Without learned Space aim the tap fits b better: offered, not applied")
+        try typeSpace(cold)
+        XCTAssertEqual(coldTarget.text, "lovebyou ")
+
         let (keyboard, target) = try runKeyboard()
+        let layout = keyboard.layout, learning = keyboard.autocorrect.learning
+        let labels = try "abcdefghijklmnopqrstuvwxyz".map { letter in
+            TouchLabel(point: try centre(keyboard, .character(String(letter))), letter: letter)
+        }
+        for _ in 0..<3 { learning.learn(labels, layout: layout, source: .literalValid) }
+        let space = try XCTUnwrap(layout.key(.space)).frame
+        for tap in 0..<10 {
+            learning.learnSpace(CGPoint(x: space.minX + 4 + CGFloat(tap) * 15, y: space.minY + 2), layout: layout)
+        }
         try typeRun(keyboard, "love")
         try typeAboveSpace(keyboard, "b")
         try typeRun(keyboard, "you")
@@ -229,6 +248,35 @@ extension KeyboardBoundaryDecoderTests {
         await keyboard.waitForSuggestions()
         try typeSpace(keyboard)
         XCTAssertEqual(target.text, "gutenachtritual ")
+    }
+
+    func testCentredBottomRowLetterIsNotReadAsSpace() async throws {
+        for languages: Set<Language> in [[.english], [.german, .english]] {
+            for word in ["jazzband", "hairband", "schoolband", "punkband"] {
+                let (keyboard, target) = try runKeyboard(languages)
+                try typeRun(keyboard, word)
+                await keyboard.waitForSuggestions()
+                try typeSpace(keyboard)
+                XCTAssertFalse(target.text.hasSuffix(" and "), "\(word) \(languages)")
+            }
+        }
+        let ac = engine(try resources(), languages: [.english], model: try contextModel())
+        installMultipart(try multipartTouch("jazzband", aimed: "jazzband"), in: ac)
+        _ = ac.suggestions(beforeInput: "jazzband", field: .text, autocorrectionType: .default)
+        XCTAssertNotEqual(ac.replacementOnSpace(beforeInput: "jazzband", field: .text,
+                                                autocorrectionType: .default)?.replacement, "jazz and")
+    }
+
+    func testGermanCompoundWithATypoIsNotSplit() async throws {
+        for languages: Set<Language> in [[.german], [.german, .english]] {
+            for word in ["gutenachtlued", "gutenmorgenkaffre"] {
+                let (keyboard, target) = try runKeyboard(languages)
+                try typeRun(keyboard, word)
+                await keyboard.waitForSuggestions()
+                try typeSpace(keyboard)
+                XCTAssertEqual(target.text.split(separator: " ").count, 1, "\(word) \(languages): \(target.text)")
+            }
+        }
     }
 
     func testRunSearchStaysWithinItsBudgets() throws {

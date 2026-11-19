@@ -15,14 +15,12 @@ nonisolated enum KeyboardMultipartSegmenter {
     struct Reading: Equatable, Sendable {
         let word: String
         let score: Double
-        var edited = false
     }
     struct Run: Equatable, Sendable {
         let words: [String]
         let score: Double
         var consumesTap = false
         var spaceFits = false
-        var edited = false
     }
     struct Result: Sendable {
         let runs: [Run]
@@ -122,7 +120,7 @@ nonisolated enum KeyboardMultipartSegmenter {
                 let edits = zip(part, word).reduce(0) { $0 + ($1.0 == $1.1 ? 0 : 1) }
                 guard edits <= 1, let gain = support(word, start: start, used: used, edits: edits) else { continue }
                 let prior = max(shortPrior, sources.compactMap { $0.logPrior(for: word) }.max() ?? -.infinity)
-                keep(Reading(word: word, score: prior + personal.bonus(for: word) + gain, edited: edits > 0),
+                keep(Reading(word: word, score: prior + personal.bonus(for: word) + gain),
                      start: start, end: start + used)
             }
             let initial: [Int] = Array(0...length)
@@ -160,8 +158,7 @@ nonisolated enum KeyboardMultipartSegmenter {
                         let prior = log(node.count / lexicon.total) + personal.bonus(for: word)
                         for used in 1...length where next[used] <= 1 {
                             guard let gain = support(word, start: start, used: used, edits: next[used]) else { continue }
-                            keep(Reading(word: word, score: prior + gain, edited: next[used] > 0),
-                                 start: start, end: start + used)
+                            keep(Reading(word: word, score: prior + gain), start: start, end: start + used)
                         }
                     }
                     guard depth < maximumPartLetters else { return }
@@ -202,8 +199,7 @@ nonisolated enum KeyboardMultipartSegmenter {
                         for (run, boundary) in runs {
                             let extended = Run(words: run.words + [reading.word],
                                                score: run.score + boundary + reading.score,
-                                               consumesTap: run.consumesTap, spaceFits: run.spaceFits,
-                                               edited: run.edited || reading.edited)
+                                               consumesTap: run.consumesTap, spaceFits: run.spaceFits)
                             if end == count {
                                 if parts >= 1 { retain(extended, in: &finished) }
                                 continue
@@ -211,8 +207,7 @@ nonisolated enum KeyboardMultipartSegmenter {
                             retain(extended, in: &unspaced[(parts + 1) * width + end])
                             if end + 1 < count, let space = asSpace[end] {
                                 retain(Run(words: extended.words, score: extended.score + space, consumesTap: true,
-                                           spaceFits: space > 0 && (!run.consumesTap || run.spaceFits),
-                                           edited: extended.edited),
+                                           spaceFits: space > 0 && (!run.consumesTap || run.spaceFits)),
                                        in: &spaced[(parts + 1) * width + end + 1])
                             }
                         }

@@ -111,14 +111,12 @@ nonisolated enum KeyboardBoundaryDecoder {
     ]
     static let shortPrior = log(0.01)
 
-    /// An unlisted literal as a novel word spelled letter by letter, as iikb's `LanguageModel`
-    /// prices it: novelty × (1/letters)^(length+1), with novelty at iikb's cold start of 1/2.
+    /// iikb `LanguageModel` novel spelling: novelty × (1/letters)^(length+1), novelty 1/2.
     static func novelSpelling(_ token: String, languages: Set<Language>) -> Double {
         let letters = languages.contains(.german) ? SpatialWordLexicon.alphabet.count : 26
         return log(0.5) - Double(token.count + 1) * log(Double(letters))
     }
 
-    /// `finer` only adds spaces inside the words of `coarser`, a likelier reading of the same letters.
     static func subdivides(_ finer: Candidate, _ coarser: Candidate) -> Bool {
         guard finer.kind == .split, coarser.kind == .split, finer.replacement != coarser.replacement,
               finer.replacement.count > coarser.replacement.count,
@@ -167,10 +165,10 @@ nonisolated enum KeyboardBoundaryDecoder {
         var multipart: KeyboardMultipartSegmenter.Result?
         var needsMultipart = false
         var wholePrior: Double?
-        var exactSplits: Set<String> = []
+        var lexicalSplits: Set<String> = []
         func withholdGermanCompounds() {
             guard job.languages.contains(.german) else { return }
-            for index in found.indices where found[index].automatic && exactSplits.contains(found[index].replacement) {
+            for index in found.indices where found[index].automatic && lexicalSplits.contains(found[index].replacement) {
                 let words = found[index].replacement.split(separator: " ").map(String.init)
                 func reading(_ language: Language, _ short: Set<String>) -> Double {
                     guard job.languages.contains(language) else { return -.infinity }
@@ -190,11 +188,11 @@ nonisolated enum KeyboardBoundaryDecoder {
                       multipartExhausted: multipart?.exhausted ?? false,
                       includesMultipart: includeMultipart || !needsMultipart)
         }
-        func retain(_ candidate: Candidate, supported: Bool = false, exact: Bool = false) {
+        func retain(_ candidate: Candidate, supported: Bool = false, spaceTap: Bool = false) {
             var candidate = candidate
             candidate.automatic = (candidate.kind == .split ? wholePrior == nil : candidate.spatial)
                 && supported && candidate.score - candidate.baseline >= automaticLogOdds
-            if exact { exactSplits.insert(candidate.replacement) }
+            if candidate.kind == .split && !spaceTap { lexicalSplits.insert(candidate.replacement) }
             if let old = found.firstIndex(where: { $0.replacement == candidate.replacement }) {
                 guard candidate.score > found[old].score else { return }
                 found.remove(at: old)
@@ -319,7 +317,7 @@ nonisolated enum KeyboardBoundaryDecoder {
                                  replacement: left + " " + right, score: score, baseline: baseline,
                                  strongPair: strongPair,
                                  weakWhole: strongPair && wholePrior != nil && literalBaseline > competitorBaseline),
-                       supported: rightLift > 0, exact: true)
+                       supported: rightLift > 0)
             }
         }
         // Spatial cases share the exact lookup budget and the top-three retention. Only
@@ -345,7 +343,7 @@ nonisolated enum KeyboardBoundaryDecoder {
                     if score > wholeBaseline {
                         retain(Candidate(kind: .split, original: job.token, replacement: left + " " + right,
                                          score: score, baseline: wholeBaseline, spatial: true),
-                               supported: lift.inner > 0 || spaceScore > letterScore)
+                               supported: spaceScore > letterScore, spaceTap: spaceScore > letterScore)
                     }
                 }
             }
@@ -433,7 +431,7 @@ nonisolated enum KeyboardBoundaryDecoder {
                 guard score > wholeBaseline else { continue }
                 retain(Candidate(kind: .split, original: job.token, replacement: run.words.joined(separator: " "),
                                  score: score, baseline: wholeBaseline, spatial: run.consumesTap),
-                       supported: lift.inner > 0 || run.spaceFits, exact: !run.consumesTap && !run.edited)
+                       supported: run.consumesTap ? run.spaceFits : lift.inner > 0, spaceTap: run.spaceFits)
             }
         }
         return result()

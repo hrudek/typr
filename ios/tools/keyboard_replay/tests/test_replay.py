@@ -99,7 +99,7 @@ class ReplayTests(unittest.TestCase):
         for word in export["words"]:
             word["commit"]["text"] = word["literal"]
         report = self.report("--show-words", export=export)
-        self.assertEqual([line["replayed"]["standard"] for line in report["words"]], ["I love you"])
+        self.assertEqual([line["replayed"] for line in report["words"]], ["I love you"])
 
     def test_edits_replay_in_order_up_to_the_first_boundary(self):
         retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
