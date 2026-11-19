@@ -243,10 +243,11 @@ final class AutocorrectEngine {
 
     /// Synchronous, checker-free attribution preparation, before any deferred ranking.
     /// Needs autocorrect and every selected pack; without learning or labels the touch model is
-    /// the prior. A word starts at the field start, after whitespace or after prose punctuation.
+    /// the prior. A word starts at the field start, after whitespace or after prose punctuation;
+    /// a letter right after '.', '@' or '/' continues a domain, address or abbreviation.
     func keyMap(layout: KeyboardLayout, context: String?, permitsCorrection: Bool) -> KeyboardKeyMap? {
         let startsWord = context == "" || context?.last.map {
-            $0.isWhitespace || ($0.isPunctuation && !"@/#_-:'’".contains($0))
+            $0.isWhitespace || ($0.isPunctuation && !".@/#_-:'’".contains($0))
         } == true
         guard isEnabled, permitsCorrection, layout.layer == .letters, layout.field == .text,
               let token = Self.currentToken(in: context) ?? (startsWord ? "" : nil), token.utf8.count <= 256,
