@@ -12,9 +12,11 @@ extension KeyboardBoundaryDecoderTests {
         func p(_ word: String, _ context: String?) -> Double {
             model.probability(word, after: context, weightDE: 0, german: false, english: true)
         }
-        // "in" is a curated short word (.01); "the" uses its TSW1 prior. Context multiplies
-        // the lexical product by P(in|we)/P(in) and P(the|in)/P(the).
-        let lexical = log(0.01) + (try XCTUnwrap(sources[.english]?.logPrior(for: "the")))
+        // "in" takes the larger of the curated short-word prior and its TSW1 prior; "the" uses
+        // its TSW1 prior. Context multiplies the lexical product by P(in|we)/P(in) and P(the|in)/P(the).
+        let english = try XCTUnwrap(sources[.english])
+        let lexical = max(Boundary.shortPrior, english.logPrior(for: "in") ?? -.infinity)
+            + (try XCTUnwrap(english.logPrior(for: "the")))
         let lifts = log(p("in", "we") / p("in", nil)) + log(p("the", "in") / p("the", nil))
         XCTAssertEqual(candidate.score, lexical + lifts + Boundary.missingSpacePenalty, accuracy: 1e-9)
         XCTAssertTrue(candidate.strongPair)
