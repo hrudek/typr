@@ -80,6 +80,24 @@ class ModelPredictionTests(unittest.TestCase):
     def test_key_never_printed(self):
         self.assertNotIn("sk-ant-replay-key", self.output)
 
+    def test_on_device_model_runs_only_when_available_for_every_enabled_language(self):
+        self.assertEqual(self.report["onDevice"]["source"], {
+            "none": "none", "unavailable": "none", "englishOnlyModel": "none",
+            "englishOnlyModelEnglishKeyboard": "onDevice", "noLanguages": "none",
+            "available": "onDevice", "cloudKey": "cloud",
+        })
+
+    def test_unavailable_or_refusing_on_device_model_keeps_count_predictions(self):
+        counted = self.report["noProvider"]
+        on_device = self.report["onDevice"]
+        self.assertEqual(on_device["unavailable"], {"bar": counted, "calls": 0})
+        self.assertEqual(on_device["refused"], {"bar": counted, "calls": 1})
+
+    def test_on_device_words_merge_into_the_bar(self):
+        answered = self.report["onDevice"]["answered"]
+        self.assertEqual(answered["contexts"], ["I would like to "])
+        self.assertEqual(answered["bar"], ["Visit", "see", "the"], "Model words first, likeliest in the centre")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -244,6 +244,7 @@ final class KeyboardViewController: UIInputViewController {
             keyboard.allowsHaptics = { [weak self] in self?.hasFullAccess ?? false }
             keyboard.allowsCompactBar = isPhone
             keyboard.onShowCompactBar = { [weak self] in self?.switchSurface(toCompactBar: true) }
+            keyboard.onDeviceModel = OnDeviceModelPredictions.systemModel()
             fullKeyboard = keyboard
             // Surface switches can create a keyboard without another viewWillAppear callback.
             let imports = hasFullAccess

@@ -58,6 +58,31 @@ actor FakeModel: ModelPredictionProvider {
     }
 }
 
+/// An on-device model that is available or not, supports some languages, answers or refuses.
+@MainActor
+final class FakeOnDeviceModel: OnDeviceNextWordModel {
+    struct Refusal: Error {}
+    let isAvailable: Bool
+    let languages: Set<SpatialWordDecoder.Language>
+    let words: [String]?
+    private(set) var contexts: [String] = []
+
+    init(available: Bool = true, languages: Set<SpatialWordDecoder.Language> = [.german, .english], words: [String]?) {
+        isAvailable = available
+        self.languages = languages
+        self.words = words
+    }
+
+    func supports(_ language: SpatialWordDecoder.Language) -> Bool { languages.contains(language) }
+    func prewarm() {}
+
+    func nextWords(after context: String) async throws -> [String] {
+        contexts.append(context)
+        guard let words else { throw Refusal() }
+        return words
+    }
+}
+
 @MainActor
 func modelPredictionReport(words: WordData) async throws -> String {
     func engine(_ target: TraitTarget, provider: (any ModelPredictionProvider)?,
@@ -161,6 +186,46 @@ func modelPredictionReport(words: WordData) async throws -> String {
     report["boundedContexts"] = await bounded.contexts
 
     report["cloud"] = await cloudReport(engine: engine, sentence: sentence)
+
+    var onDevice: [String: Any] = [:]
+    let both: Set<SpatialWordDecoder.Language> = [.german, .english]
+    let sources: [(String, Bool, FakeOnDeviceModel?, Set<SpatialWordDecoder.Language>)] = [
+        ("none", false, nil, both),
+        ("unavailable", false, FakeOnDeviceModel(available: false, words: ["go"]), both),
+        ("englishOnlyModel", false, FakeOnDeviceModel(languages: [.english], words: ["go"]), both),
+        ("englishOnlyModelEnglishKeyboard", false, FakeOnDeviceModel(languages: [.english], words: ["go"]), [.english]),
+        ("noLanguages", false, FakeOnDeviceModel(words: ["go"]), []),
+        ("available", false, FakeOnDeviceModel(words: ["go"]), both),
+        ("cloudKey", true, FakeOnDeviceModel(words: ["go"]), both),
+    ]
+    var chosen: [String: String] = [:]
+    for (name, hasCloud, model, languages) in sources {
+        chosen[name] = ModelPredictionSource.choose(hasCloud: hasCloud, onDevice: model, languages: languages)
+            .map { "\($0)" } ?? "none"
+    }
+    onDevice["source"] = chosen
+
+    let offline = FakeOnDeviceModel(available: false, words: ["go"])
+    let offlineTarget = TraitTarget()
+    let offlineEngine = engine(offlineTarget, provider: OnDeviceModelPredictions(model: offline))
+    await typed(sentence, offlineTarget, offlineEngine)
+    await settle(offlineEngine)
+    onDevice["unavailable"] = ["bar": bar(offlineEngine), "calls": offline.contexts.count]
+
+    let refusing = FakeOnDeviceModel(words: nil)
+    let refusedTarget = TraitTarget()
+    let refusedEngine = engine(refusedTarget, provider: OnDeviceModelPredictions(model: refusing))
+    await typed(sentence, refusedTarget, refusedEngine)
+    await settle(refusedEngine)
+    onDevice["refused"] = ["bar": bar(refusedEngine), "calls": refusing.contexts.count]
+
+    let answering = FakeOnDeviceModel(words: ["see", "Visit"])
+    let answeredTarget = TraitTarget()
+    let answeredEngine = engine(answeredTarget, provider: OnDeviceModelPredictions(model: answering))
+    await typed(sentence, answeredTarget, answeredEngine)
+    await settle(answeredEngine)
+    onDevice["answered"] = ["bar": bar(answeredEngine), "contexts": answering.contexts]
+    report["onDevice"] = onDevice
 
     let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
     return String(decoding: data, as: UTF8.self) + "\n"

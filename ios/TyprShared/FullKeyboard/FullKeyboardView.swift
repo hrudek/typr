@@ -36,6 +36,10 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     /// Fixtures force the suggestion bar on or off; the keyboard follows Typr's switch.
     var suggestionBarOverride: Bool? { didSet { applySuggestionBarSetting() } }
     var designOverride: KeyboardDesign?
+    /// Model next words: the cloud provider while a key is stored, otherwise the on-device model.
+    var cloudPredictions: (any ModelPredictionProvider)? { didSet { replaceModelPredictions() } }
+    var onDeviceModel: (any OnDeviceNextWordModel)? { didSet { replaceModelPredictions() } }
+    private var modelSource: ModelPredictionSource?
     /// How long Fix in Typr stays after Problem before the panel closes itself.
     var problemPanelDuration: TimeInterval {
         get { model.problemPanelDuration }
@@ -240,6 +244,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
             }
             engine.refreshSuggestions()
         }
+        applyModelPredictions()
         // Learning loads/resets (also when consumed by a chip tap), installed spatial resources
         // or an unreported host context change: republish chips that could no longer be accepted.
         engine.refreshSuggestionsIfStale()
@@ -266,6 +271,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         syncSettings()
         plane.cancelAllTouches()
         engine.configureForField()
+        if modelSource == .onDevice { onDeviceModel?.prewarm() }
         refreshReturnKey()
         applyAppearance()
         refreshStrip()
@@ -339,6 +345,29 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         refreshFeedbackPanel()
         setNeedsLayout()
         hostController?.view.setNeedsLayout()
+    }
+
+    private func replaceModelPredictions() {
+        modelSource = nil
+        engine.modelPredictions?.cancel()
+        engine.modelPredictions = nil
+        applyModelPredictions()
+    }
+
+    /// Re-checked with the settings: availability and the enabled languages can change.
+    private func applyModelPredictions() {
+        let source = ModelPredictionSource.choose(hasCloud: cloudPredictions != nil, onDevice: onDeviceModel,
+                                                  languages: engine.autocorrect.suggestionLanguages)
+        guard source != modelSource else { return }
+        modelSource = source
+        engine.modelPredictions?.cancel()
+        engine.modelPredictions = switch source {
+        case .cloud: cloudPredictions.map { ModelPredictionSession(provider: $0) }
+        case .onDevice: onDeviceModel.map {
+            ModelPredictionSession(provider: OnDeviceModelPredictions(model: $0), timeout: OnDeviceModelPredictions.timeout)
+        }
+        case nil: nil
+        }
     }
 
     /// Fixtures: show a key held down.
