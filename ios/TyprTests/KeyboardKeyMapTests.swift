@@ -846,4 +846,217 @@ final class KeyboardKeyMapTests: XCTestCase {
         XCTAssertLessThanOrEqual(resourceBytes, 6_400_000)
         print("EVAL P8_bounds map_entries=26 max_neighbor_scores=2 max_entry_inspections=52 map_payload_bytes=\(bytes) policy_bytes=\(MemoryLayout<KeyboardKeyMap.Policy>.stride) recovery_bits=1 continuation_index_bytes=\(resourceBytes) map_and_center_probes_mean_ms=\(ms) wall_clock_assertions=0")
     }
+
+    private func trainedCalibration(_ sources: [Language: SpatialWordLexicon]) throws -> SpatialTouchCalibration {
+        try XCTUnwrap(keyboard(sources).0.autocorrect.learning.calibration(for: grid))
+    }
+
+    private func leftEdge(_ letter: Character, depth: CGFloat = 2) -> CGPoint {
+        CGPoint(x: key(letter).hitFrame.minX + depth, y: key(letter).frame.midY)
+    }
+
+    private func adaptiveMap(_ prefix: String, _ languages: Set<Language>, sources: [Language: SpatialWordLexicon],
+                             calibration: SpatialTouchCalibration,
+                             personal: PersonalCompletionIndex? = nil) -> KeyboardKeyMap? {
+        KeyboardKeyMap.make(layout: grid, prefix: prefix, calibration: calibration, languages: languages,
+                            lexicons: sources, personal: personal, policy: .adaptive)
+    }
+
+    private func knownReading(of taps: [CGPoint], _ languages: Set<Language>,
+                              sources: [Language: SpatialWordLexicon],
+                              calibration: SpatialTouchCalibration) -> String? {
+        var samples: [KeyboardTouchWord.Sample] = []
+        for point in taps {
+            let geometric = grid.hitTest(point)!, prefix = samples.map(\.text).joined()
+            guard point != center(geometric) else {
+                samples.append(.init(text: geometric.character!, point: point, key: geometric))
+                continue
+            }
+            let map = adaptiveMap(prefix, languages, sources: sources, calibration: calibration)
+            let typed = map?.attributedKey(at: point, geometric: geometric, layout: grid, prefix: prefix) ?? geometric
+            samples.append(.init(text: typed.character!, point: point, key: geometric,
+                                 deferredKey: map?.deferredKey(at: point, geometric: geometric, layout: grid, prefix: prefix)))
+        }
+        let reading = KeyboardTouchWord(layout: grid, samples: samples).adaptiveReading
+        return reading.flatMap { word in languages.contains { sources[$0]?.logPrior(for: word) != nil } ? word : nil }
+    }
+
+    func testAdaptiveReadsAnEdgeMissAsTheKnownWord() throws {
+        let sources = try resources()
+        let frozen = try trainedCalibration(sources)
+        let point = leftEdge("m"), geometric = key("m")
+        let adaptive = try XCTUnwrap(adaptiveMap("arou", [.english], sources: sources, calibration: frozen))
+        let standard = try XCTUnwrap(KeyboardKeyMap.make(layout: grid, prefix: "arou", calibration: frozen,
+                                                         languages: [.english], lexicons: sources, personal: nil,
+                                                         policy: KeyboardKeyMap.Policy(.standard)))
+        XCTAssertEqual(adaptive.attributedKey(at: point, geometric: geometric, layout: grid, prefix: "arou"), geometric)
+        XCTAssertEqual(adaptive.deferredKey(at: point, geometric: geometric, layout: grid, prefix: "arou"), key("n"))
+        XCTAssertNil(standard.deferredKey(at: point, geometric: geometric, layout: grid, prefix: "arou"))
+        var taps = "around".map { center(key($0)) }
+        taps[4] = point
+        XCTAssertEqual(knownReading(of: taps, [.english], sources: sources, calibration: frozen), "around")
+        let word = KeyboardTouchWord(layout: grid, samples: "Aroumd".map {
+            .init(text: String($0), point: .zero, key: key(Character($0.lowercased())),
+                  deferredKey: $0 == "m" ? key("n") : nil)
+        })
+        XCTAssertEqual(word.adaptiveReading, "Around")
+    }
+
+    func testAdaptiveFindsNoMoveTowardRareOrPersonalOnlyContinuations() throws {
+        let sources = try resources()
+        let frozen = try trainedCalibration(sources)
+        for (prefix, letter) in [("anne", Character("l")), ("baum", "g")] {
+            let map = try XCTUnwrap(adaptiveMap(prefix, [.german], sources: sources, calibration: frozen))
+            XCTAssertNil(map.deferredKey(at: leftEdge(letter), geometric: key(letter), layout: grid, prefix: prefix))
+        }
+        let personal = PersonalCompletionIndex(sortedWords: ["aroumar"], kept: ["aroumar"], counts: [:])
+        let map = try XCTUnwrap(adaptiveMap("arou", [.english], sources: sources, calibration: frozen,
+                                            personal: personal))
+        XCTAssertNil(map.deferredKey(at: leftEdge("m"), geometric: key("m"), layout: grid, prefix: "arou"))
+        for k in grid.keys {
+            XCTAssertNil(map.deferredKey(at: center(k), geometric: k, layout: grid, prefix: "arou"))
+        }
+    }
+
+    func testAdaptiveReadingGoesThroughTheAutocorrectCommitPath() throws {
+        let sources = try resources()
+        func settle(_ word: String, _ hitAreas: KeyboardHitAreas, before: String = "",
+                  configure: (FullKeyboardEngine, FixtureTextTarget) -> Void = { _, _ in })
+            -> (engine: FullKeyboardEngine, target: FixtureTextTarget) {
+            let (engine, target, _) = keyboard(sources)
+            engine.autocorrect.hitAreas = hitAreas
+            target.insertText(before)
+            engine.refreshSuggestions()
+            let m = key("m", engine.layout)
+            for (index, letter) in word.enumerated() {
+                tap(index == 4 ? CGPoint(x: m.hitFrame.minX + 2, y: m.frame.midY) : center(key(letter, engine.layout)), engine)
+            }
+            XCTAssertEqual(target.text, before + (word == "around" ? "aroumd" : word))
+            configure(engine, target)
+            tap(center(engine.layout.key(.space)!), engine)
+            return (engine, target)
+        }
+        let moved = settle("around", .adaptive)
+        XCTAssertEqual(moved.target.text, "around ")
+        moved.engine.deleteBackward()
+        XCTAssertEqual(moved.target.text, "aroumd", "Delete restores the literal like any correction")
+
+        XCTAssertEqual(settle("around", .adaptive) { engine, _ in engine.autocorrect.hitAreas = .standard }.target.text,
+                       settle("around", .standard).target.text, "the setting is read when the word ends")
+        XCTAssertEqual(settle("around", .adaptive) { engine, _ in engine.autocorrect.isEnabled = false }.target.text,
+                       "aroumd ")
+        XCTAssertEqual(settle("around", .adaptive) { _, target in target.autocorrectionType = .no }.target.text,
+                       "aroumd ")
+        XCTAssertEqual(settle("around", .adaptive) { engine, _ in engine.autocorrect.learning.keep("aroumd") }.target.text,
+                       "aroumd ")
+        let context = RejectedCorrection.context(before: "hello aroumd", token: "aroumd")
+        let rejected = settle("around", .adaptive, before: "hello ") { engine, _ in
+            engine.autocorrect.learning.rejectCorrection(typed: "aroumd", replacement: "around", context: context)
+        }
+        XCTAssertEqual(rejected.target.text, "hello aroumd ", "a rejected pair stays rejected in its context")
+        XCTAssertEqual(settle("friemel", .adaptive).target.text, settle("friemel", .standard).target.text)
+    }
+
+    func testAdaptiveOffersNoKnownReadingForUnknownWords() throws {
+        let sources = try resources()
+        let frozen = try trainedCalibration(sources)
+        var seen: Set<String> = []
+        let oov = KeyboardKeyMapEvaluationFixtures.groups.flatMap(\.1).map { $0.lowercased() }.filter { word in
+            seen.insert(word).inserted && sources.values.allSatisfy { $0.logPrior(for: word) == nil }
+        } + ["gehring", "reolink", "fotheringham", "friemel", "everud", "everup", "friemelt"]
+        let known = Array(Set((SpatialTypoEvaluationFixtures.german + SpatialTypoEvaluationFixtures.english)
+            .map { $0.lowercased() })).sorted()
+        let modes: [Set<Language>] = [[.german], [.english], [.german, .english]]
+        let pitch = CGSize(width: key("q").frame.width + grid.metrics.gap, height: key("q").frame.height + grid.metrics.rowGap)
+        let depths: [CGFloat] = EvaluationSample.isFull ? [0.1, 0.3, 0.8, 1.4, 2, 3, 4, 5] : [0.3, 2, 4]
+        let area: [(x: CGFloat, y: CGFloat)] = stride(from: -1.0, through: 1.0, by: 0.1).flatMap { x in
+            [-1.0, -0.6, -0.45, -0.3, 0, 0.3, 0.45, 0.6, 1.0].map { (CGFloat(x), CGFloat($0)) }
+        }
+        func taps(around k: KeyboardKey, dense: Bool) -> [CGPoint] {
+            let edges = depths.flatMap { [CGPoint(x: k.hitFrame.minX + $0, y: k.frame.midY),
+                                          CGPoint(x: k.hitFrame.maxX - $0, y: k.frame.midY)] }
+            let grid2D = area.map { CGPoint(x: k.frame.midX + $0.x * pitch.width, y: k.frame.midY + $0.y * pitch.height) }
+            return (dense ? edges + grid2D : edges).filter { grid.hitTest($0)?.character?.count == 1 }
+        }
+        var probes = 0, moved: [String] = [], gains = 0
+        for languages in modes {
+            for (ordinal, word) in oov.enumerated() {
+                for (index, letter) in word.enumerated() {
+                    for point in taps(around: key(letter), dense: EvaluationSample.includes(ordinal, every: 43)) {
+                        var line = word.map { center(key($0)) }
+                        line[index] = point
+                        probes += 1
+                        if let reading = knownReading(of: line, languages, sources: sources, calibration: frozen) {
+                            moved.append("\(word)->\(reading)")
+                        }
+                    }
+                }
+            }
+            for (ordinal, word) in known.enumerated() where EvaluationSample.includes(ordinal, every: 7) {
+                for (index, letter) in word.enumerated() {
+                    for point in taps(around: key(letter), dense: true) {
+                        var line = word.map { center(key($0)) }
+                        line[index] = point
+                        if knownReading(of: line, languages, sources: sources, calibration: frozen) == word { gains += 1 }
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(moved, [])
+        XCTAssertGreaterThan(gains, 0)
+        print("EVAL hit_areas_taps full=\(EvaluationSample.isFull) unknown_words=\(oov.count) probes=\(probes) known_readings_for_unknown=\(moved.count) known_word_readings=\(gains)")
+    }
+
+    func testAdaptiveOffersNoKnownReadingInTheNoiseEvaluation() throws {
+        let sources = try resources()
+        let frozen = try trainedCalibration(sources)
+        var seen: Set<String> = []
+        let oov = KeyboardKeyMapEvaluationFixtures.groups.flatMap(\.1).map { $0.lowercased() }.filter { word in
+            seen.insert(word).inserted && sources.values.allSatisfy { $0.logPrior(for: word) == nil }
+        }
+        func points(_ word: String, ordinal: Int, profile: Int) -> [CGPoint] {
+            var state = UInt64(ordinal + 1) &* 0x9E3779B97F4A7C15
+            func uniform() -> Double {
+                state = state &* 6364136223846793005 &+ 1442695040888963407
+                return Double(state >> 11) / 9_007_199_254_740_992
+            }
+            func gaussian() -> Double { sqrt(-2 * log(max(1e-12, uniform()))) * cos(2 * Double.pi * uniform()) }
+            return word.enumerated().map { index, letter in
+                let k = key(letter)
+                if profile == 0 { return center(k) }
+                if profile == 3 {
+                    guard index == 2 + ordinal % max(1, word.count - 2) else { return center(k) }
+                    return CGPoint(x: k.hitFrame.minX + [0.1, 0.3, 0.8, 1.4][ordinal % 4], y: k.frame.midY)
+                }
+                let drift = profile == 2 ? 0.35 : 0.0, spread = profile == 2 ? 0.10 : 0.18
+                let p = CGPoint(x: k.frame.midX + (drift + spread * gaussian()) * (k.frame.width + grid.metrics.gap),
+                                y: k.frame.midY + 0.10 * gaussian() * (k.frame.height + grid.metrics.rowGap))
+                return grid.hitTest(p)?.character?.first?.isLetter == true ? p : center(k)
+            }
+        }
+        let modes: [(Set<Language>, [String])] = [
+            ([.german], SpatialTypoEvaluationFixtures.german),
+            ([.english], SpatialTypoEvaluationFixtures.english),
+            ([.german, .english], SpatialTypoEvaluationFixtures.german + SpatialTypoEvaluationFixtures.english)
+        ]
+        var moved: [String] = [], gains = 0
+        for (languages, vocabulary) in modes {
+            for profile in 0..<4 {
+                for (ordinal, word) in oov.enumerated() where EvaluationSample.includes(ordinal, every: 43) {
+                    let taps = points(word, ordinal: ordinal, profile: profile)
+                    if let reading = knownReading(of: taps, languages, sources: sources, calibration: frozen) {
+                        moved.append("\(word)->\(reading)")
+                    }
+                }
+                for (ordinal, word) in vocabulary.enumerated() where EvaluationSample.includes(ordinal, every: 43) {
+                    let word = word.lowercased()
+                    let reading = knownReading(of: points(word, ordinal: ordinal, profile: profile), languages,
+                                               sources: sources, calibration: frozen)
+                    if reading == word { gains += 1 }
+                }
+            }
+        }
+        XCTAssertEqual(moved, [])
+        print("EVAL hit_areas_noise full=\(EvaluationSample.isFull) known_readings_for_unknown=\(moved.count) known_word_readings=\(gains)")
+    }
 }

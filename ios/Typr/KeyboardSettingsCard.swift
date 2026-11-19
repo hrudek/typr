@@ -7,6 +7,7 @@ struct KeyboardSettingsCard: View {
     private let defaults: UserDefaults?
     @State private var autocorrect: Bool
     @State private var swipeTyping: Bool
+    @State private var hitAreas: KeyboardHitAreas
     @State private var autocorrectGerman: Bool
     @State private var autocorrectEnglish: Bool
 
@@ -18,6 +19,7 @@ struct KeyboardSettingsCard: View {
         let typr = TyprSettings(defaults: defaults)
         _autocorrect = State(initialValue: keyboard.autocorrect)
         _swipeTyping = State(initialValue: keyboard.swipeTyping)
+        _hitAreas = State(initialValue: keyboard.hitAreas)
         _autocorrectGerman = State(initialValue: typr.autocorrectGerman)
         _autocorrectEnglish = State(initialValue: typr.autocorrectEnglish)
     }
@@ -54,6 +56,17 @@ struct KeyboardSettingsCard: View {
                 SettingsFooter(Self.swipeNotice)
             }
 
+            SettingsSection(title: "Hit areas") {
+                ForEach(Array(KeyboardHitAreas.allCases.enumerated()), id: \.element) { index, choice in
+                    if index > 0 { SettingsDivider() }
+                    SettingsChoiceRow(title: choice.title, detail: choice.detail, isSelected: hitAreas == choice) {
+                        hitAreas = choice
+                        keyboardSettings.hitAreas = choice
+                    }
+                }
+            }
+            .enabled(autocorrect)
+
             SettingsSection {
                 NavigationLink(value: SettingsDestination.keyboardWordsPrivacy) {
                     SettingsLink(title: "Words and privacy", detail: "Learning, personal words and saved data")
@@ -80,6 +93,7 @@ struct KeyboardSettingsCard: View {
     private func refresh() {
         autocorrect = keyboardSettings.autocorrect
         swipeTyping = keyboardSettings.swipeTyping
+        hitAreas = keyboardSettings.hitAreas
         autocorrectGerman = typrSettings.autocorrectGerman
         autocorrectEnglish = typrSettings.autocorrectEnglish
     }
@@ -97,6 +111,22 @@ extension GlobeKey {
         case .switches: "Switches keyboards"
         case .spacer: "Spacer"
         case .hidden: "Hidden"
+        }
+    }
+}
+
+extension KeyboardHitAreas {
+    var title: String {
+        switch self {
+        case .standard: "Standard"
+        case .adaptive: "Adaptive"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .standard: "Only taps in the narrow gap between keys use your learned aim."
+        case .adaptive: "When a word ends, a tap near a key edge can count as the neighboring key if that makes a known word. A made-up word one key away from a known word can change too; Delete right after undoes it."
         }
     }
 }
