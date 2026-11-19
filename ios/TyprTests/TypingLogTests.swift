@@ -138,7 +138,7 @@ final class TypingLogTests: XCTestCase {
             if character == " " { log.boundary(" "); continue }
             let point = layout.key(.character(character)).map { CGPoint(x: $0.frame.midX, y: $0.frame.midY) }
             log.typed(character, point: point, key: point == nil ? nil : character, layout: layout,
-                      time: clock, token: AutocorrectEngine.currentToken(in: field))
+                      time: clock, field: field)
         }
     }
 
@@ -146,9 +146,25 @@ final class TypingLogTests: XCTestCase {
         written = []
         let log = recorder()
         var field = ""
-        record("can't can’t 'hello' x", into: log, field: &field)
-        XCTAssertEqual(written.map(\.meant), ["can't", "can’t", "hello"])
-        XCTAssertEqual(written.map(\.literal), ["can't", "can’t", "hello'"])
+        record("can't can’t 'hello' dogs' James’ x", into: log, field: &field)
+        XCTAssertEqual(written.map(\.meant), ["can't", "can’t", "hello'", "dogs'", "James’"])
+    }
+
+    func testRetypingAfterAnApostropheKeepsTheWord() {
+        for apostrophe in ["'", "’"] {
+            written = []
+            let log = recorder()
+            var field = ""
+            record("can\(apostrophe)t", into: log, field: &field)
+            for _ in 0..<2 {
+                field.removeLast()
+                log.deleted(field: field)
+            }
+            record("\(apostrophe)t x", into: log, field: &field)
+            XCTAssertEqual(written.map(\.meant), ["can\(apostrophe)t"])
+            XCTAssertEqual(written.first?.literal, "can\(apostrophe)t")
+            XCTAssertEqual(written.first?.corrections.first?.erased?.map(\.text), [apostrophe, "t"])
+        }
     }
 
     func testEndlessEditsOfOneWordAreDropped() {
@@ -159,7 +175,7 @@ final class TypingLogTests: XCTestCase {
         for _ in 0...TypingLogRecorder.maxCorrections {
             record("b", into: log, field: &field)
             field.removeLast()
-            log.deleted(token: AutocorrectEngine.currentToken(in: field))
+            log.deleted(field: field)
         }
         log.end("field")
         XCTAssertEqual(written, [])
