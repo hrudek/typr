@@ -129,6 +129,20 @@ nonisolated enum KeyboardBoundaryDecoder {
         return spaces(coarser.replacement).isSubset(of: spaces(finer.replacement))
     }
 
+    static func isCompound(_ letters: [Character], of lexicon: SpatialWordLexicon) -> Bool {
+        guard letters.count <= maxLetters else { return false }
+        var parts = [Int?](repeating: nil, count: letters.count + 1)
+        parts[0] = 0
+        for start in letters.indices {
+            guard let before = parts[start], start + 2 <= letters.count else { continue }
+            for end in (start + 2)...min(letters.count, start + maxPartLetters)
+                where lexicon.logPrior(for: String(letters[start..<end])) != nil {
+                parts[end] = max(parts[end] ?? 0, before + 1)
+            }
+        }
+        return (parts[letters.count] ?? 0) >= 2
+    }
+
     static func shortWords(languages: Set<Language>) -> [String] {
         var words: Set<String> = []
         if languages.contains(.german) { words.formUnion(germanShort) }
@@ -167,7 +181,12 @@ nonisolated enum KeyboardBoundaryDecoder {
         var wholePrior: Double?
         var lexicalSplits: Set<String> = []
         func withholdGermanCompounds() {
-            guard job.languages.contains(.german) else { return }
+            guard job.languages.contains(.german), let german = lexicons[.german],
+                  found.contains(where: { $0.kind == .split && $0.automatic }) else { return }
+            if Self.isCompound(Array(PersonalLexiconSnapshot.normalize(job.token)), of: german) {
+                for index in found.indices where found[index].kind == .split { found[index].automatic = false }
+                return
+            }
             for index in found.indices where found[index].automatic && lexicalSplits.contains(found[index].replacement) {
                 let words = found[index].replacement.split(separator: " ").map(String.init)
                 func reading(_ language: Language, _ short: Set<String>) -> Double {

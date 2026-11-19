@@ -257,7 +257,7 @@ extension KeyboardBoundaryDecoderTests {
                 try typeRun(keyboard, word)
                 await keyboard.waitForSuggestions()
                 try typeSpace(keyboard)
-                XCTAssertFalse(target.text.hasSuffix(" and "), "\(word) \(languages)")
+                XCTAssertEqual(target.text, word + " ", "\(languages)")
             }
         }
         let ac = engine(try resources(), languages: [.english], model: try contextModel())
@@ -265,6 +265,35 @@ extension KeyboardBoundaryDecoderTests {
         _ = ac.suggestions(beforeInput: "jazzband", field: .text, autocorrectionType: .default)
         XCTAssertNotEqual(ac.replacementOnSpace(beforeInput: "jazzband", field: .text,
                                                 autocorrectionType: .default)?.replacement, "jazz and")
+    }
+
+    func testGermanSentencesKeepLoanwordCompounds() async throws {
+        let cases: [(String, String)] = [
+            ("ich höre am liebsten ", "punkrock"), ("wir hören heute abend ", "punkrock"), ("", "punkrock"),
+            ("meine schwester spielt in einer ", "metalband"), ("das ist meine lieblings ", "metalband"),
+            ("", "metalband"), ("mein bruder macht nächstes jahr den ", "ironman"), ("", "ironman"),
+            ("die ", "brassband"), ("wir haben gestern eine ", "brassband"), ("", "brassband"),
+            ("das ist eine tolle ", "rockband"), ("ich höre gern ", "rockmusik"), ("wir sehen uns beim ", "rockkonzert"),
+            ("ich esse heute ", "fastfood"), ("ich gehe heute in den ", "nightclub")]
+        for wait in [true, false] {
+            for (context, word) in cases {
+                let (keyboard, target) = try runKeyboard([.german, .english], text: context)
+                try typeRun(keyboard, word)
+                if wait { await keyboard.waitForSuggestions() }
+                try typeSpace(keyboard)
+                XCTAssertEqual(target.text, context + word + " ", "wait \(wait)")
+            }
+        }
+        for word in ["Metalband", "Brassband", "Ironman"] {
+            let (keyboard, target) = try runKeyboard([.german, .english], text: "Das ist toll. ")
+            target.autocapitalizationType = UITextAutocapitalizationType.sentences
+            keyboard.textDidChange()
+            try typeRun(keyboard, word.lowercased())
+            XCTAssertEqual(target.text, "Das ist toll. " + word)
+            await keyboard.waitForSuggestions()
+            try typeSpace(keyboard)
+            XCTAssertEqual(target.text, "Das ist toll. " + word + " ")
+        }
     }
 
     func testGermanCompoundWithATypoIsNotSplit() async throws {
