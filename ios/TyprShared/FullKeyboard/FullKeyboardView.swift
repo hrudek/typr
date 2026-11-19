@@ -38,7 +38,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     var designOverride: KeyboardDesign?
     /// Model next words: the cloud provider while a key is stored, otherwise the on-device model.
     var cloudPredictions: (any ModelPredictionProvider)? { didSet { replaceModelPredictions() } }
-    /// Read when the keyboard appears, not on every settings sync (a Keychain lookup).
+    /// Checked when the keyboard appears or a provider is set.
     var hasCloudKey: () -> Bool = { false }
     private var cloudKeyStored = false
     var onDeviceModel: (any OnDeviceNextWordModel)? { didSet { replaceModelPredictions() } }
