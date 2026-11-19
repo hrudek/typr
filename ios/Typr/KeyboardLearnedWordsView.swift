@@ -8,6 +8,7 @@ struct KeyboardLearnedWordsView: View {
     @State private var error: String?
     @State private var searchText = ""
     @State private var observer: KeyboardLearningObserver?
+    @State private var editMode: EditMode = .inactive
     private let fixture: Bool
 
     init(fixture: Bool = KeyboardLearnedWordsView.isFixtureRequested) {
@@ -90,7 +91,13 @@ struct KeyboardLearnedWordsView: View {
                     prompt: "Search words and corrections")
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
-        .toolbar { EditButton() }
+        .toolbar {
+            Button(editMode.isEditing ? "Done" : "Edit",
+                   systemImage: editMode.isEditing ? "checkmark" : "pencil") {
+                withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+            }
+        }
+        .environment(\.editMode, $editMode)
         .refreshable { reload() }
         .onAppear {
             reload()
