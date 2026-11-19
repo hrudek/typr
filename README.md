@@ -34,6 +34,10 @@ An explicit engine or language choice never silently falls back to another.
   options, 2 s budget, answer check); Claude gets Hex's dictation rewrite prompt word for
   word, with the host app and the text around the cursor as context. The full keyboard adds German/English autocorrect and adaptive
   suggestions.
+- While learning is on, the keyboard keeps a typing log on the iPhone: taps,
+  corrections and the final word of the most recent 10,000 to 20,000 words, never
+  from secure, URL or email fields. Keyboard › Words and privacy exports it as
+  JSON with the touch calibration, or deletes it.
 
 ## Downloaded model preparation
 
