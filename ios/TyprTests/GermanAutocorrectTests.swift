@@ -188,6 +188,60 @@ final class GermanAutocorrectTests: XCTestCase {
             .contains { $0.replacement == "hello" })
     }
 
+    func testLanguageOrderDefaultsToGermanFirstAndPersists() {
+        let settings = TyprSettings(defaults: defaults)
+        XCTAssertEqual(settings.autocorrectLanguageOrder, [.german, .english])
+        settings.autocorrectLanguageOrder = [.english, .german]
+        XCTAssertEqual(TyprSettings(defaults: defaults).autocorrectLanguageOrder, [.english, .german])
+        let invalid: [Any] = [["en"], ["en", "en"], ["fr", "en"], "en"]
+        for stored in invalid {
+            defaults.set(stored, forKey: "typr.autocorrectLanguageOrder")
+            XCTAssertEqual(settings.autocorrectLanguageOrder, [.german, .english], "\(stored)")
+        }
+    }
+
+    private func makeBilingualEngine(englishGuesses: [String], germanGuesses: [String]) -> AutocorrectEngine {
+        let engine = AutocorrectEngine(
+            checker: FakeTextChecker(guesses: ["wirk": englishGuesses]),
+            learning: KeyboardLearningSession(defaults: defaults), spatialDecoder: nil
+        )
+        engine.german = GermanAutocorrect(checker: FakeTextChecker(guesses: ["wirk": germanGuesses]))
+        return engine
+    }
+
+    func testPreferredLanguageWinsSpellingFixAndStripOrder() {
+        let cases: [(SpatialWordDecoder.Language, String, String)] = [(.german, "wird", "work"), (.english, "work", "wird")]
+        for (preferred, first, second) in cases {
+            let engine = makeBilingualEngine(englishGuesses: ["work"], germanGuesses: ["wird"])
+            engine.preferredLanguage = preferred
+            XCTAssertEqual(fix(engine, "wirk"), first, "\(preferred)")
+            let strip = engine.suggestions(beforeInput: "wirk", field: .text, autocorrectionType: .default)
+            XCTAssertEqual(strip.map(\.replacement), ["wirk", first, second], "\(preferred)")
+        }
+    }
+
+    func testSecondaryLanguageStillFixesItsOwnWords() {
+        let english = makeBilingualEngine(englishGuesses: ["work"], germanGuesses: [])
+        XCTAssertEqual(english.preferredLanguage, .german)
+        XCTAssertEqual(fix(english, "wirk"), "work")
+        let german = makeBilingualEngine(englishGuesses: [], germanGuesses: ["wird"])
+        german.preferredLanguage = .english
+        XCTAssertEqual(fix(german, "wirk"), "wird")
+    }
+
+    func testPreferenceDoesNotChangeASingleLanguage() {
+        for preferred in SpatialWordDecoder.Language.allCases {
+            let englishOnly = makeBilingualEngine(englishGuesses: ["work"], germanGuesses: ["wird"])
+            englishOnly.german = nil
+            englishOnly.preferredLanguage = preferred
+            XCTAssertEqual(fix(englishOnly, "wirk"), "work")
+            let germanOnly = makeBilingualEngine(englishGuesses: ["work"], germanGuesses: ["wird"])
+            germanOnly.englishEnabled = false
+            germanOnly.preferredLanguage = preferred
+            XCTAssertEqual(fix(germanOnly, "wirk"), "wird")
+        }
+    }
+
     func testTextReplacementIsIndependentOfLanguageSelection() {
         let engine = makeEngine(germanOn: false)
         engine.englishEnabled = false

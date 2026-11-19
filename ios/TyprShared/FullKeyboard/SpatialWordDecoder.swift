@@ -210,9 +210,25 @@ final class SpatialWordDecoder {
             }
         }
 
+        /// With two languages on, a candidate outside the preferred language ranks this much lower
+        /// against the other candidates (twice the ambiguity margin to win against a preferred one).
+        /// Its own score, and so its margin over the literal, is unchanged.
+        static let secondaryLanguagePenalty = 1.6
+
+        /// `candidates` reordered by that penalty; `nil` keeps the decoder's order.
+        func ranked(preferring isPreferred: ((Candidate) -> Bool)?) -> [Candidate] {
+            guard let isPreferred else { return candidates }
+            return candidates.sorted { rank($0, isPreferred) > rank($1, isPreferred) }
+        }
+
+        private func rank(_ candidate: Candidate, _ isPreferred: ((Candidate) -> Bool)?) -> Double {
+            isPreferred?(candidate) == false ? candidate.score - Self.secondaryLanguagePenalty : candidate.score
+        }
+
         /// Dictionary/casing, keeps, rejected pairs and field guards remain the caller's job.
-        func automaticDecision(literalIsValid: Bool) -> AutoDecision {
+        func automaticDecision(literalIsValid: Bool, preferring isPreferred: ((Candidate) -> Bool)? = nil) -> AutoDecision {
             guard complete else { return .refuse(.incompleteSearch) }
+            let candidates = ranked(preferring: isPreferred)
             guard let best = candidates.first else { return .refuse(.noCandidate) }
             guard !best.isCompletion else { return .refuse(.belowMargin) }
             if best.edit != .none && literalIsValid { return .refuse(.editNeedsInvalidLiteral) }
@@ -220,7 +236,7 @@ final class SpatialWordDecoder {
                   best.edit != .none || best.spatialScore - literalSpatialScore >= 2 else {
                 return .refuse(.belowMargin)
             }
-            guard candidates.count < 2 || best.score - candidates[1].score >= 1.6 else {
+            guard candidates.count < 2 || rank(best, isPreferred) - rank(candidates[1], isPreferred) >= 1.6 else {
                 return .refuse(.ambiguous)
             }
             return .replace(best)

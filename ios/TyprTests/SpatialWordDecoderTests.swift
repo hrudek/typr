@@ -700,6 +700,36 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertTrue(result([candidate("hello", score: 4, spatial: 0)]).geometryPrefersAlternative)
     }
 
+    func testPreferredLanguageWinsCloseCandidatesOnly() {
+        typealias Decoder = SpatialWordDecoder
+        func candidate(_ word: String, _ language: Decoder.Language, score: Double) -> Decoder.Candidate {
+            .init(word: word, language: language, score: score, spatialScore: 3, edit: .none, alignment: [0, 1, 2, 3])
+        }
+        func decision(_ candidates: [Decoder.Candidate], preferring language: Decoder.Language?) -> String? {
+            let result = Decoder.Result(candidates: candidates, literalScore: 0, literalSpatialScore: 0,
+                                        literalInLexicon: false, complete: true, visits: 1, generated: 1)
+            let isPreferred = language.map { language in { (candidate: Decoder.Candidate) in candidate.language == language } }
+            if case .replace(let best) = result.automaticDecision(literalIsValid: false, preferring: isPreferred) {
+                return best.word
+            }
+            return nil
+        }
+        // `wirk`: English `work` slightly ahead of German `wird`, ambiguous without a preference.
+        let close = [candidate("work", .english, score: 5), candidate("wird", .german, score: 4.5)]
+        XCTAssertNil(decision(close, preferring: nil))
+        XCTAssertEqual(decision(close, preferring: .english), "work")
+        XCTAssertEqual(decision(Array(close.reversed()), preferring: .english), "work")
+        let germanAhead = [candidate("wird", .german, score: 5), candidate("work", .english, score: 4.5)]
+        XCTAssertNil(decision(germanAhead, preferring: nil))
+        XCTAssertEqual(decision(germanAhead, preferring: .german), "wird")
+        XCTAssertNil(decision(germanAhead, preferring: .english), "A small lead of the other language still refuses")
+        let englishClear = [candidate("work", .english, score: 8), candidate("wird", .german, score: 4.5)]
+        XCTAssertEqual(decision(englishClear, preferring: .german), "work")
+        XCTAssertEqual(decision([candidate("work", .english, score: 3.5)], preferring: .german), "work")
+        XCTAssertNil(decision([candidate("work", .english, score: 2.9)], preferring: .german),
+                     "The literal margin is unchanged")
+    }
+
     func testPersonalCandidatesPriorAndCalibrationNormalization() throws {
         let decoder = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 1_000_000), ("world", 1)])])
         let personal = PersonalLexiconSnapshot(kept: ["zello"], counts: ["zello": 4, "xello": 1], rejected: [])
