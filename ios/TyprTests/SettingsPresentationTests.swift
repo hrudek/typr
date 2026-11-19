@@ -81,11 +81,39 @@ final class SettingsPresentationTests: XCTestCase {
     }
 
     @MainActor
-    func testAutocorrectLanguageSummaryCoversAllSelections() {
-        XCTAssertEqual(AutocorrectLanguageSettingsCard.summary(german: true, english: false), "DE")
-        XCTAssertEqual(AutocorrectLanguageSettingsCard.summary(german: false, english: true), "EN")
-        XCTAssertEqual(AutocorrectLanguageSettingsCard.summary(german: true, english: true), "DE, EN")
-        XCTAssertEqual(AutocorrectLanguageSettingsCard.summary(german: false, english: false), "None")
+    func testAutocorrectLanguageSummaryCoversAllSelectionsInStoredOrder() {
+        typealias Card = AutocorrectLanguageSettingsCard
+        for order: [SpatialWordDecoder.Language] in [[.german, .english], [.english, .german]] {
+            XCTAssertEqual(Card.summary(order: order, german: true, english: false), "DE")
+            XCTAssertEqual(Card.summary(order: order, german: false, english: true), "EN")
+            XCTAssertEqual(Card.summary(order: order, german: false, english: false), "None")
+        }
+        XCTAssertEqual(Card.summary(order: [.german, .english], german: true, english: true), "DE, EN")
+        XCTAssertEqual(Card.summary(order: [.english, .german], german: true, english: true), "EN, DE")
+    }
+
+    @MainActor
+    func testDroppingAutocorrectLanguageTakesTheTargetPlace() {
+        typealias Card = AutocorrectLanguageSettingsCard
+        XCTAssertEqual(Card.moving(.english, onto: .german, in: [.german, .english]), [.english, .german])
+        XCTAssertEqual(Card.moving(.german, onto: .english, in: [.german, .english]), [.english, .german])
+        XCTAssertEqual(Card.moving(.german, onto: .german, in: [.german, .english]), [.german, .english])
+    }
+
+    @MainActor
+    func testMovedAutocorrectLanguageOrderIsStoredAndSummarized() throws {
+        let suite = "SettingsPresentationTests.languageOrder"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = TyprSettings(defaults: defaults)
+        settings.autocorrectLanguageOrder = AutocorrectLanguageSettingsCard.moving(
+            .english, onto: .german, in: settings.autocorrectLanguageOrder)
+        let stored = TyprSettings(defaults: defaults)
+        XCTAssertEqual(stored.autocorrectLanguageOrder, [.english, .german])
+        XCTAssertEqual(AutocorrectLanguageSettingsCard.summary(order: stored.autocorrectLanguageOrder,
+                                                               german: stored.autocorrectGerman,
+                                                               english: stored.autocorrectEnglish), "EN, DE")
     }
 
     func testRemovedDiagnosticsRoutesDoNotNavigateOrUseLearnedWordsFixtures() {
