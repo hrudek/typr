@@ -145,6 +145,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
             engine.autocorrect.hitAreas = FullKeyboardSettings().hitAreas
             engine.swipeTypingEnabled = FullKeyboardSettings().swipeTyping
             engine.autocorrect.englishEnabled = TyprSettings().autocorrectEnglish
+            engine.autocorrect.preferredLanguage = TyprSettings().autocorrectLanguageOrder[0]
             if TyprSettings().autocorrectGerman {
                 let instance = GermanAutocorrect.system()
                 cachedGerman = instance
@@ -226,6 +227,11 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         let wantsEnglish = TyprSettings().autocorrectEnglish
         if engine.autocorrect.englishEnabled != wantsEnglish {
             engine.autocorrect.englishEnabled = wantsEnglish
+            engine.refreshSuggestions()
+        }
+        let wantsPreferred = TyprSettings().autocorrectLanguageOrder[0]
+        if engine.autocorrect.preferredLanguage != wantsPreferred {
+            engine.autocorrect.preferredLanguage = wantsPreferred
             engine.refreshSuggestions()
         }
         // Cache the German dictionary across language selection changes.

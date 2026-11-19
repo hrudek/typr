@@ -10,6 +10,7 @@ struct TyprSettings {
         static let dictationLog = "typr.dictationLog"
         static let autocorrectGerman = "typr.autocorrectGerman"
         static let autocorrectEnglish = "typr.autocorrectEnglish"
+        static let autocorrectLanguageOrder = "typr.autocorrectLanguageOrder"
         static let hideSuggestionBar = "typr.hideSuggestionBar"
         static let personalLearning = "keyboard.personalLearning"
         static let dictationLanguage = "typr.dictationLanguage"
@@ -50,6 +51,17 @@ struct TyprSettings {
     var autocorrectEnglish: Bool {
         get { defaults?.object(forKey: Key.autocorrectEnglish) as? Bool ?? true }
         nonmutating set { defaults?.set(newValue, forKey: Key.autocorrectEnglish) }
+    }
+
+    /// Both autocorrect languages, preferred first; selected or not. Deutsch first by default;
+    /// anything but exactly both languages falls back to the default.
+    var autocorrectLanguageOrder: [SpatialWordDecoder.Language] {
+        get {
+            let stored = defaults?.stringArray(forKey: Key.autocorrectLanguageOrder) ?? []
+            guard stored.sorted() == ["de", "en"] else { return [.german, .english] }
+            return stored.compactMap(SpatialWordDecoder.Language.init(rawValue:))
+        }
+        nonmutating set { defaults?.set(newValue.map(\.rawValue), forKey: Key.autocorrectLanguageOrder) }
     }
 
     /// Learn local touch calibration and word counts. Explicit keep protection still works while off.

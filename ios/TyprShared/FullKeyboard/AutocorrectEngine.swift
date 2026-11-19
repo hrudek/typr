@@ -188,6 +188,9 @@ final class AutocorrectEngine {
         if (oldValue == nil) != (german == nil) { discardFeedback() }
         invalidateDecode()
     } }
+    /// The language that wins ties while both are on: first in spelling fixes and guesses, and
+    /// ranked ahead of the other language's spatial candidates.
+    var preferredLanguage = SpatialWordDecoder.Language.german
     private(set) var lexiconShortcuts: [String: String] = [:]
     private(set) var protectedLexicon: ProtectedPersonalLexicon = .empty
 
@@ -922,7 +925,8 @@ final class AutocorrectEngine {
         // literal nothing else trusts; automatic decisions read `candidates` alone.
         let protectsLiteral = spatial?.suggestions.contains(where: { $0.edit != .none }) == true
             && protectsFromEditSuggestions(token)
-        for candidate in spatial?.suggestions ?? [] {
+        let spatialSuggestions = spatial.map { $0.ranked(preferring: isPreferredCandidate) + $0.editSuggestions } ?? []
+        for candidate in spatialSuggestions {
             if pool.count >= poolLimit { break }
             if candidate.edit != .none && protectsLiteral { continue }
             let text = spatialSpelling(candidate, token: token).text
@@ -999,10 +1003,12 @@ final class AutocorrectEngine {
 
         // Spelling guesses or prefix completions from `UITextChecker`.
         if pool.count < poolLimit && token.count >= 2 {
-            // Typr: German-valid words count as valid; German guesses come first.
             let valid = Self.shorthandAllowlist.contains(lower) || literalIsValid(token)
             if !valid {
-                for guess in germanGuesses(for: token) + (englishEnabled ? rankedGuesses(for: token) : []) {
+                let english = englishEnabled ? rankedGuesses(for: token) : []
+                let guesses = preferredLanguage == .english ? english + germanGuesses(for: token)
+                    : germanGuesses(for: token) + english
+                for guess in guesses {
                     let cased = Self.matchCase(of: token, onto: guess)
                     if cased.caseInsensitiveCompare(token) != .orderedSame,
                        !pool.contains(where: { $0.caseInsensitiveCompare(cased) == .orderedSame }) {
@@ -1346,7 +1352,7 @@ final class AutocorrectEngine {
         case .unavailable(.resource)?:
             refusal = spatialDecoder?.isResourceLoading == true ? .resourceLoading : .refusedMissingResource
         case .result(let result)?:
-            switch result.automaticDecision(literalIsValid: false) {
+            switch result.automaticDecision(literalIsValid: false, preferring: isPreferredCandidate) {
             case .replace(let best):
                 let spelling = spatialSpelling(best, token: token)
                 if spelling.validated {
@@ -1372,30 +1378,45 @@ final class AutocorrectEngine {
             if !result.complete || result.geometryPrefersAlternative { return Decision(refusal: refusal) }
         }
 
-        // 6. Spelling-only fallback. Typr: German guesses win over English ones.
-        if let german {
-            var germanBest: String?
-            var germanScore = Double.greatestFiniteMagnitude
-            for (rank, rawGuess) in germanGuesses(for: token).enumerated() {
-                guard !rawGuess.contains(" ") else { continue }
-                let normalized = rawGuess.replacingOccurrences(of: "'", with: "").lowercased()
-                guard let cost = german.costAdjustedForUmlauts(from: lower, to: normalized) else { continue }
-                let total = cost + Double(rank) * 0.08
-                if total < germanScore {
-                    germanScore = total
-                    germanBest = rawGuess
-                }
-            }
-            if let germanBest, germanScore <= 1.6 {
-                var decision = automatic(Self.matchCase(of: token, onto: germanBest), token: token,
-                                         kind: .autoSpelling, counter: .autoSpellingFallback)
-                decision.refusal = decision.refusal ?? refusal
-                return decision
+        let fixes = preferredLanguage == .english ? [englishSpellingFix, germanSpellingFix]
+            : [germanSpellingFix, englishSpellingFix]
+        guard let fix = fixes.lazy.compactMap({ $0(token) }).first else { return Decision(refusal: refusal) }
+        var decision = automatic(Self.matchCase(of: token, onto: fix), token: token,
+                                 kind: .autoSpelling, counter: .autoSpellingFallback)
+        decision.refusal = decision.refusal ?? refusal
+        return decision
+    }
+
+    /// With both languages on, candidates the preferred language's corpus lacks rank second.
+    private var isPreferredCandidate: ((SpatialWordDecoder.Candidate) -> Bool)? {
+        guard englishEnabled, german != nil else { return nil }
+        let preferred = preferredLanguage
+        let lexicon = spatialDecoder?.resourceSnapshot[preferred]
+        return { $0.language == nil || $0.language == preferred || lexicon?.logPrior(for: $0.word) != nil }
+    }
+
+    private func germanSpellingFix(_ token: String) -> String? {
+        guard let german else { return nil }
+        let lower = token.lowercased()
+        var best: String?
+        var bestScore = Double.greatestFiniteMagnitude
+        for (rank, rawGuess) in germanGuesses(for: token).enumerated() {
+            guard !rawGuess.contains(" ") else { continue }
+            let normalized = rawGuess.replacingOccurrences(of: "'", with: "").lowercased()
+            guard let cost = german.costAdjustedForUmlauts(from: lower, to: normalized) else { continue }
+            let total = cost + Double(rank) * 0.08
+            if total < bestScore {
+                bestScore = total
+                best = rawGuess
             }
         }
+        return bestScore <= 1.6 ? best : nil
+    }
 
-        guard englishEnabled else { return Decision(refusal: refusal) }
-        var bestGuess: String?
+    private func englishSpellingFix(_ token: String) -> String? {
+        guard englishEnabled else { return nil }
+        let lower = token.lowercased()
+        var best: String?
         var bestScore = Double.greatestFiniteMagnitude
         for (rank, rawGuess) in checker.guesses(for: token).prefix(8).enumerated() {
             // Skip multi-word splits (`alot` -> `a lot` is fine only if single space, keep v1 single-token + apostrophe).
@@ -1405,14 +1426,10 @@ final class AutocorrectEngine {
             let totalScore = editCost + Double(rank) * 0.08
             if totalScore < bestScore {
                 bestScore = totalScore
-                bestGuess = rawGuess
+                best = rawGuess
             }
         }
-        guard let bestGuess, bestScore <= 1.35 else { return Decision(refusal: refusal) }
-        var decision = automatic(Self.matchCase(of: token, onto: bestGuess), token: token,
-                                 kind: .autoSpelling, counter: .autoSpellingFallback)
-        decision.refusal = decision.refusal ?? refusal
-        return decision
+        return bestScore <= 1.35 ? best : nil
     }
 
     private func rankedGuesses(for token: String) -> [String] {
