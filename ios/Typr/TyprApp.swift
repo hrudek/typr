@@ -36,6 +36,7 @@ struct TyprApp: App {
                     setupRequestID: setupRequestID
                 )
                 .task {
+                    AnthropicKeyStore().syncKeyboardCopy()
                     PersonalLexiconImporter.shared.refresh(force: true)
                     if scenePhase == .active { dictation.noteSceneDidBecomeActive() }
                 }

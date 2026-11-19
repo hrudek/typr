@@ -104,7 +104,7 @@ struct TextProcessingSettingsCard: View {
                 .disabled(!AnthropicKeyStore.canSave(keyDraft))
                 .accessibilityIdentifier("save-anthropic-key")
             }
-            Text("Dictations, the app you dictate in, the text around the cursor and your vocabulary are sent to Anthropic. Requires internet; plain transcript if unavailable.")
+            Text("Dictations, the app you dictate in, the text around the cursor and your vocabulary are sent to Anthropic. Requires internet; plain transcript if unavailable. With Full Access on, text you type with the Typr keyboard (up to 200 characters before the cursor) is also sent to Anthropic for next-word predictions.")
                 .font(.footnote).foregroundStyle(TyprTheme.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }

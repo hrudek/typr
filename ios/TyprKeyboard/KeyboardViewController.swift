@@ -237,6 +237,10 @@ final class KeyboardViewController: UIInputViewController {
                 typingLog: typingLog(persistent: store != nil)
             )
             keyboard.hostController = self
+            if hasFullAccess {
+                keyboard.engine.modelPredictions = ModelPredictionSession(provider: AnthropicPredictionProvider(
+                    key: { KeychainSecret.keyboardAnthropicAPIKey.read() }))
+            }
             keyboard.allowsHaptics = { [weak self] in self?.hasFullAccess ?? false }
             keyboard.allowsCompactBar = isPhone
             keyboard.onShowCompactBar = { [weak self] in self?.switchSurface(toCompactBar: true) }
