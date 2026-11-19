@@ -247,17 +247,21 @@ final class TypingLogTests: XCTestCase {
 
     func testRotationByAnotherProcessIsNotMistakenForTheSameFile() throws {
         let layout = TypingLogLayout(KeyboardLayout(width: 393))
-        let candidates = (1...64).flatMap { length in [" ", "\n"].map { end in
-            let text = String(repeating: "a", count: length)
-            return TypingLogWord(at: wall, end: end, languages: ["en"], layout: layout,
-                                 taps: (0..<length).map { TypingLogTap(t: $0 * 100, x: 100, y: 150, key: "a", text: "a") },
-                                 literal: text, commit: .init(kind: .literal, text: text), meant: text)
+        // Line sizes need a, b, c with size(a) + size(b) == size(c); tap count and meant length vary
+        // independently so a solution exists whatever the fixed per-record overhead is.
+        let candidates: [TypingLogWord] = (1...3).flatMap { count in (1...1500).map { length -> TypingLogWord in
+            TypingLogWord(at: wall, end: " ", languages: ["en"], layout: layout,
+                          taps: (0..<count).map { TypingLogTap(t: $0 * 100, x: 100, y: 150, key: "a", text: "a") },
+                          literal: "a", commit: .init(kind: .literal, text: "a"),
+                          meant: String(repeating: "a", count: length))
         } }
         let sizes = try candidates.map { try TypingLogExport.encoder().encode($0).count + 1 }
+        var bySize: [Int: Int] = [:]
+        for index in sizes.indices where bySize[sizes[index]] == nil { bySize[sizes[index]] = index }
         var match: (TypingLogWord, TypingLogWord, TypingLogWord)?
         for a in candidates.indices where match == nil {
             for b in candidates.indices where match == nil {
-                if let c = sizes.firstIndex(of: sizes[a] + sizes[b]) { match = (candidates[a], candidates[b], candidates[c]) }
+                if let c = bySize[sizes[a] + sizes[b]] { match = (candidates[a], candidates[b], candidates[c]) }
             }
         }
         let (small, other, big) = try XCTUnwrap(match)
