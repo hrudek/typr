@@ -249,7 +249,7 @@ final class TypingLogTests: XCTestCase {
         let layout = TypingLogLayout(KeyboardLayout(width: 393))
         // Line sizes need a, b, c with size(a) + size(b) == size(c); tap count and meant length vary
         // independently so a solution exists whatever the fixed per-record overhead is.
-        let candidates = (1...3).flatMap { count in (1...1500).map { length in
+        let candidates: [TypingLogWord] = (1...3).flatMap { count in (1...1500).map { length -> TypingLogWord in
             TypingLogWord(at: wall, end: " ", languages: ["en"], layout: layout,
                           taps: (0..<count).map { TypingLogTap(t: $0 * 100, x: 100, y: 150, key: "a", text: "a") },
                           literal: "a", commit: .init(kind: .literal, text: "a"),
