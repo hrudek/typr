@@ -300,6 +300,15 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         keys.first { $0.hitFrame.contains(point) }
     }
 
+    /// iikb KeyGrid.reaches (73c2ed9016b802e5bf017a2d595d037d1e748ccf, MIT © 2026 Bassim Shahidy).
+    func reaches(_ point: CGPoint, letter: String) -> Bool {
+        guard let key = key(.character(letter)) else { return false }
+        let cell = key.frame.insetBy(dx: -metrics.gap / 2, dy: -metrics.rowGap / 2)
+        let dx = max(cell.minX - point.x, 0, point.x - cell.maxX)
+        let dy = max(cell.minY - point.y, 0, point.y - cell.maxY)
+        return dx <= cell.width / 4 && dy <= cell.height / 4
+    }
+
     /// The balloon for a character key, kept inside the keyboard's bounds. `nil` for keys
     /// without one (space, modifiers) and in landscape, where there is no room above row 1.
     func balloon(for key: KeyboardKey) -> KeyBalloon? {

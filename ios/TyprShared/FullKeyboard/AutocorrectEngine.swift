@@ -716,8 +716,7 @@ final class AutocorrectEngine {
               intended.count == typed.count, intended.allSatisfy({ ("a"..."z").contains($0) }),
               alignment.elementsEqual(typed.indices.map { Optional($0) }) else { return }
         for (index, letter) in intended.enumerated() where letter != typed[index] {
-            guard KeyboardTouchInput.reaches(evidence.samples[index].point, letter: String(letter),
-                                             in: evidence.layout) else { return }
+            guard evidence.layout.reaches(evidence.samples[index].point, letter: String(letter)) else { return }
         }
         let labels = zip(evidence.samples, intended).map { TouchLabel(point: $0.point, letter: $1) }
         learning.learn(labels, layout: evidence.layout, source: .autocorrect)
