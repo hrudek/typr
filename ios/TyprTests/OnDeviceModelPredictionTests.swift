@@ -140,10 +140,17 @@ final class OnDeviceModelPredictionTests: XCTestCase {
         XCTAssertTrue(keyboard.engine.modelPredictions?.provider is OnDeviceModelPredictions)
         XCTAssertEqual(model.prewarms, 1, "Prewarmed when the keyboard appears")
 
+        var keyStored = false
+        keyboard.hasCloudKey = { keyStored }
         keyboard.cloudPredictions = CloudModel()
-        XCTAssertTrue(keyboard.engine.modelPredictions?.provider is CloudModel)
-        keyboard.cloudPredictions = nil
-        XCTAssertTrue(keyboard.engine.modelPredictions?.provider is OnDeviceModelPredictions)
+        XCTAssertTrue(keyboard.engine.modelPredictions?.provider is OnDeviceModelPredictions, "No key: on-device")
+        keyStored = true
+        keyboard.prepareForField()
+        XCTAssertTrue(keyboard.engine.modelPredictions?.provider is CloudModel, "A stored key wins")
+        XCTAssertEqual(model.prewarms, 1, "No prewarm while the cloud runs")
+        keyStored = false
+        keyboard.prepareForField()
+        XCTAssertTrue(keyboard.engine.modelPredictions?.provider is OnDeviceModelPredictions, "Key removed")
     }
 
     // MARK: - Requests

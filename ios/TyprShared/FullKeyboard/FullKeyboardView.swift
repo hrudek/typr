@@ -38,6 +38,9 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     var designOverride: KeyboardDesign?
     /// Model next words: the cloud provider while a key is stored, otherwise the on-device model.
     var cloudPredictions: (any ModelPredictionProvider)? { didSet { replaceModelPredictions() } }
+    /// Read when the keyboard appears, not on every settings sync (a Keychain lookup).
+    var hasCloudKey: () -> Bool = { false }
+    private var cloudKeyStored = false
     var onDeviceModel: (any OnDeviceNextWordModel)? { didSet { replaceModelPredictions() } }
     private var modelSource: ModelPredictionSource?
     /// How long Fix in Typr stays after Problem before the panel closes itself.
@@ -268,6 +271,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     /// The keyboard came on screen for a (possibly new) field.
     func prepareForField() {
+        cloudKeyStored = hasCloudKey()
         syncSettings()
         plane.cancelAllTouches()
         engine.configureForField()
@@ -349,13 +353,14 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     private func replaceModelPredictions() {
         modelSource = nil
+        cloudKeyStored = hasCloudKey()
         engine.modelPredictions?.cancel()
         engine.modelPredictions = nil
         applyModelPredictions()
     }
 
     private func applyModelPredictions() {
-        let source = ModelPredictionSource.choose(hasCloud: cloudPredictions != nil, onDevice: onDeviceModel,
+        let source = ModelPredictionSource.choose(hasCloud: cloudPredictions != nil && cloudKeyStored, onDevice: onDeviceModel,
                                                   languages: engine.autocorrect.suggestionLanguages)
         guard source != modelSource else { return }
         modelSource = source
