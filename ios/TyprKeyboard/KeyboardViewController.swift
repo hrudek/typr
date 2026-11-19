@@ -58,6 +58,7 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         fullKeyboard?.suspendSuggestions()
+        fullKeyboard?.engine.endTypingLogWord("dismiss")
         fullKeyboard?.discardTouchEvidence()
         fullKeyboard?.flushLearning()
         pollTimer?.invalidate()
@@ -119,6 +120,15 @@ final class KeyboardViewController: UIInputViewController {
         updateKeyboardTraits()
         fullKeyboard?.textDidChange()
         handOffNumericPadIfNeeded()
+    }
+
+    /// Like learning: files only with real Full Access on a device, never in the simulator.
+    private func typingLog(persistent: Bool) -> TypingLogRecorder? {
+        guard persistent, let directory = KeyboardLearningStore.sharedDirectory else { return nil }
+        let store = TypingLogStore(directory: directory)
+        return TypingLogRecorder { [weak self] word in
+            if self?.hasFullAccess == true { store.append(word) }
+        }
     }
 
     private func handOffNumericPadIfNeeded() {
@@ -223,7 +233,8 @@ final class KeyboardViewController: UIInputViewController {
                 statistics: UsageStatisticsSession(
                     store: UsageStatisticsStore(directory: store == nil ? nil : KeyboardLearningStore.sharedDirectory),
                     allowsPersistence: { [weak self] in self?.hasFullAccess == true }
-                )
+                ),
+                typingLog: typingLog(persistent: store != nil)
             )
             keyboard.hostController = self
             keyboard.allowsHaptics = { [weak self] in self?.hasFullAccess ?? false }

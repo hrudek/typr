@@ -24,6 +24,7 @@ struct KeyboardWordsPrivacyCard: View {
             }
             PersonalLexiconSettingsCard()
             KeyboardLearningResetControls()
+            TypingLogControls()
         }
         .onAppear { personalLearning = TyprSettings().personalLearning }
         .onChange(of: scenePhase) { _, phase in

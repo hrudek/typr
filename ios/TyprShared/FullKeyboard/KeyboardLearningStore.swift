@@ -272,13 +272,14 @@ final class KeyboardLearningStore {
 
     private func write(_ data: Data, to url: URL) throws {
         try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-        try protect(url)
+        try Self.protect(url)
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         try handle.synchronize()
     }
 
-    private func protect(_ url: URL, directory: Bool = false) throws {
+    /// Owner-only, readable after first unlock (the keyboard writes while the device is locked), not backed up.
+    nonisolated static func protect(_ url: URL, directory: Bool = false) throws {
         if directory { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication,
                                               .posixPermissions: directory ? 0o700 : 0o600], ofItemAtPath: url.path)
@@ -289,7 +290,7 @@ final class KeyboardLearningStore {
 
     private func withLock<T>(_ work: (URL) throws -> T) throws -> T {
         guard let directory else { throw CocoaError(.fileNoSuchFile) }
-        try protect(directory, directory: true)
+        try Self.protect(directory, directory: true)
         let file = directory.appendingPathComponent("learning.lock")
         let fd = open(file.path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
         guard fd >= 0 else { throw CocoaError(.fileWriteUnknown) }
@@ -301,7 +302,7 @@ final class KeyboardLearningStore {
         }
         guard locked else { throw CocoaError(.fileWriteUnknown) }
         defer { _ = flock(fd, LOCK_UN) }
-        try protect(file)
+        try Self.protect(file)
         return try work(directory)
     }
 }
