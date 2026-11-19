@@ -1,26 +1,30 @@
 import Foundation
 
-/// Exact two-part run segmentation and whole-vs-split comparison translated from iikb's
+/// Run segmentation and whole-vs-split comparison translated from iikb's
 /// Correction/Corrector.swift and Typing/TypingEngine+Words.swift at
 /// 09a2e9cdfbe851adff6c4646333c0a3f74ba8765 (MIT, © 2026 Bassim Shahidy).
-/// One spatial boundary reinterpretation is allowed. A separate bounded lexical
-/// multi-part fallback has no automatic authority or fabricated tap evidence.
+/// Every reading is scored like the whole word: prior, sentence context and the taps'
+/// density relative to the literal. `automaticLogOdds` decides what the separator applies.
 nonisolated enum KeyboardBoundaryDecoder {
     typealias Language = SpatialWordDecoder.Language
     static let maxLetters = 32
     static let maxPartLetters = 20
     static let resultLimit = 3
-    // Exact baseline ≤74; at most 60 spatial part lookups plus eight whole
-    // competitors and five Space-as-letter joins. If both paths run, the prior
-    // word + Space leaves at most 30 current letters (saving eight part lookups).
+    // Exact baseline ≤63; at most 60 spatial part lookups and five Space-as-letter
+    // joins. If both paths run, the prior word + Space leaves at most 30 current letters.
     // Each query uses at most two tries; 144 includes rejected endpoints.
     static let maximumLexicalQueries = 144
     static let maximumTrieEdgeChecks = maximumLexicalQueries * maxLetters * 30 * 2
-    // Conditional and unconditional mixture lookups: whole literal, eight whole
-    // competitors and both parts at every split. Each lookup uses ≤2 packs,
-    // ≤14 binary-search steps per key and ≤16 retained row edges.
-    static let maximumContextQueries = 2 + 2 * 8 + 4 * (maxLetters - 1)
-    static let maximumLanguageEvidenceQueries = 2 * (maxLetters - 1)
+    // Conditional and unconditional mixture lookups: "a" and "i", whole literal, both parts at every
+    // exact and letter-as-Space split, and every word of the finished multi-part runs.
+    // Each lookup uses ≤2 packs, ≤14 binary-search steps per key and ≤16 retained row edges.
+    static let maximumContextQueries = 2 + 2 + 4 * (maxLetters - 1) + 4 * (maxLetters - 2)
+        + 2 * KeyboardMultipartSegmenter.beamWidth * KeyboardMultipartSegmenter.maximumParts
+    static let maximumLanguageEvidenceQueries = 2 * (maxLetters - 1) + 2 * (maxLetters - 2)
+        + 2 * KeyboardMultipartSegmenter.beamWidth * (KeyboardMultipartSegmenter.maximumParts - 1)
+    /// Log odds a boundary edit needs over the whole-word reading to apply at the separator
+    /// (iikb `Corrector.splitLogOdds`). Below it the reading is only offered as a chip.
+    static let automaticLogOdds = log(100.0)
     /// Bound on |ln lift| so one sparse corpus row cannot dominate the lexical scale.
     static let maximumLogLift = log(1_000.0)
     static let missingSpacePenalty = log(0.01)
@@ -71,6 +75,9 @@ nonisolated enum KeyboardBoundaryDecoder {
         /// Independent likelihood protection for dictionary-valid parts on MainActor,
         /// including valid names/words absent from the ranking lexicons.
         var betterThanSeparateTap = false
+        /// The separator may apply it: a split of a run no lexicon lists, at `automaticLogOdds`
+        /// over the whole reading, or a Space tap read as a letter. MainActor protections still veto.
+        var automatic = false
     }
 
     struct Retrieval: Sendable {
@@ -98,6 +105,14 @@ nonisolated enum KeyboardBoundaryDecoder {
         "no", "of", "oh", "on", "or", "so", "to", "up", "us", "we"
     ]
     static let shortPrior = log(0.01)
+
+    /// An unlisted literal as a novel word spelled letter by letter, as iikb's `LanguageModel`
+    /// prices it: novelty × (1/letters)^(length+1), with novelty at iikb's cold start of 1/2.
+    /// One flat floor would make a long run of letters likelier than the words it spells.
+    static func novelSpelling(_ token: String, languages: Set<Language>) -> Double {
+        let letters = languages.contains(.german) ? SpatialWordLexicon.alphabet.count : 26
+        return log(0.5) - Double(token.count + 1) * log(Double(letters))
+    }
 
     static func shortWords(languages: Set<Language>) -> [String] {
         var words: Set<String> = []
@@ -140,9 +155,21 @@ nonisolated enum KeyboardBoundaryDecoder {
                       multipartVisits: multipart?.visits ?? 0, multipartCells: multipart?.cells ?? 0,
                       multipartCachedReadings: multipart?.cachedReadings ?? 0,
                       multipartExhausted: multipart?.exhausted ?? false,
-                      includesMultipart: includeMultipart || !needsMultipart || !found.isEmpty)
+                      includesMultipart: includeMultipart || !needsMultipart)
         }
-        func retain(_ candidate: Candidate) {
+        var wholePrior: Double?
+        /// `supported`: evidence for the boundary itself beyond word frequency, either the
+        /// split words' corpus pairs (positive lift between them) or a tap that fits Space better
+        /// than its letter. Frequent words alone would split every unlisted compound.
+        func retain(_ candidate: Candidate, supported: Bool = false) {
+            var candidate = candidate
+            candidate.automatic = candidate.kind == .split
+                ? supported && wholePrior == nil && candidate.score - candidate.baseline >= automaticLogOdds
+                : candidate.spatial
+            if let old = found.firstIndex(where: { $0.replacement == candidate.replacement }) {
+                guard candidate.score > found[old].score else { return }
+                found.remove(at: old)
+            }
             found.append(candidate)
             found.sort {
                 let a = ($0.score * 1e9).rounded(), b = ($1.score * 1e9).rounded()
@@ -154,6 +181,7 @@ nonisolated enum KeyboardBoundaryDecoder {
               isEligible(job.token), job.personal.scan.complete else { return result() }
         let sources = Language.allCases.filter { job.languages.contains($0) }
         let floor = sources.compactMap { lexicons[$0].map { log(1 / $0.total) } }.max() ?? 0
+        var shortPriors: [String: Double] = [:]
         func prior(_ word: String) -> Double? {
             queries += 1
             precondition(queries <= maximumLexicalQueries)
@@ -161,7 +189,7 @@ nonisolated enum KeyboardBoundaryDecoder {
             for language in sources {
                 var value = lexicons[language]?.logPrior(for: word)
                 let short = language == .german ? germanShort : englishShort
-                if short.contains(word) { value = max(value ?? -.infinity, shortPrior) }
+                if short.contains(word) { value = max(value ?? -.infinity, shortPriors[word] ?? shortPrior) }
                 if let value { best = max(best ?? -.infinity, value) }
             }
             if job.personal.isKept(word) || (job.personal.counts[word] ?? 0) >= 2 {
@@ -194,33 +222,50 @@ nonisolated enum KeyboardBoundaryDecoder {
             guard let previous = job.context?.previous else { return 0 }
             return logLift(probability(word, after: previous), probability(word, after: nil))
         }
+        // Corpus pairs do not cover code switches. Opposite-language evidence on the
+        // parts must not let sparse monolingual rows penalize "mit you".
+        func crossesLanguage(_ left: String, _ right: String) -> Bool {
+            guard job.languages.count == 2, let contextModel else { return false }
+            languageEvidenceQueries += 2
+            precondition(languageEvidenceQueries <= maximumLanguageEvidenceQueries)
+            return contextModel.evidence(left) * contextModel.evidence(right) < 0
+        }
+        /// Sentence context of a run: its first word after the previous one (`total` only), each
+        /// next word after its predecessor (`inner` and `total`).
+        func runLift(_ words: [String]) -> (total: Double, inner: Double) {
+            guard contextModel != nil else { return (0, 0) }
+            var inner = 0.0
+            for (left, right) in zip(words, words.dropFirst()) {
+                let lift = logLift(probability(right, after: left), probability(right, after: nil))
+                inner += crossesLanguage(left, right) ? max(0, lift) : lift
+            }
+            return (contextLift(words[0]) + inner, inner)
+        }
+        // The word lists start at two letters.
+        let short = shortWords(languages: job.languages)
+        for word in short where word.count == 1 && contextModel != nil {
+            shortPriors[word] = max(shortPrior, log(probability(word, after: nil)))
+        }
         let token = PersonalLexiconSnapshot.normalize(job.token)
-        let wholePrior = prior(token)
+        wholePrior = prior(token)
         let protected = job.kept.contains(token) || (job.personal.counts[token] ?? 0) > 0
-        needsMultipart = !protected && wholePrior == nil && token.count >= 6 && job.touch?.isUsable == true
+        needsMultipart = !protected && wholePrior == nil && token.count >= 3
+        var competitorBaseline = -Double.infinity
+        if case .result(let reading) = whole {
+            for candidate in reading.candidates.prefix(8) where !candidate.isCompletion && candidate.word != token {
+                competitorBaseline = max(competitorBaseline, candidate.score - reading.literalSpatialScore)
+            }
+        }
+        let previous = job.context?.previous
+        let wholeContext = probability(token, after: previous)
+        let wholeUnigram = previous == nil ? wholeContext : probability(token, after: nil)
+        let literalBaseline = (wholePrior ?? novelSpelling(token, languages: job.languages))
+            + logLift(wholeContext, wholeUnigram)
+        let wholeBaseline = max(competitorBaseline, literalBaseline)
         if !protected, token.count >= 3 {
             // Corpus membership is not spelling validity (the packs contain e.g. "inthe").
             // A known whole must lose on score too; MainActor separately vetoes every literal
             // the enabled dictionaries accept.
-            let previous = job.context?.previous
-            let wholeContext = probability(token, after: previous)
-            let wholeUnigram = previous == nil ? wholeContext : probability(token, after: nil)
-            let literalBaseline = (wholePrior ?? floor) + logLift(wholeContext, wholeUnigram)
-            var competitorBaseline = -Double.infinity
-            if case .result(let reading) = whole {
-                // Convert the existing .35-weighted whole-word score to full lexical log
-                // probability; the unchanged letters' spatial density cancels for exact splits.
-                for candidate in reading.candidates.prefix(8) where !candidate.isCompletion {
-                    queries += 1
-                    let p = sources.compactMap { lexicons[$0]?.logPrior(for: candidate.word) }.max() ?? floor
-                    // The literal itself is compared separately, including corpus merge noise.
-                    // candidate.score already includes its personal bonus; add it only once.
-                    if candidate.word != token {
-                        competitorBaseline = max(competitorBaseline, candidate.score - reading.literalSpatialScore
-                                                 + 0.65 * p + contextLift(candidate.word))
-                    }
-                }
-            }
             let letters = Array(token)
             for point in 1..<letters.count {
                 guard point <= maxPartLetters, letters.count - point <= maxPartLetters else { continue }
@@ -232,14 +277,7 @@ nonisolated enum KeyboardBoundaryDecoder {
                     if let previous { leftLift = logLift(probability(left, after: previous), leftUnigram) }
                     let pair = probability(right, after: left), rightUnigram = probability(right, after: nil)
                     rightLift = logLift(pair, rightUnigram)
-                    // Corpus pairs do not cover code switches. Opposite-language evidence on
-                    // the parts must not let sparse monolingual rows penalize "mit you".
-                    let crossLanguage = job.languages.count == 2 && contextModel.map {
-                        languageEvidenceQueries += 2
-                        precondition(languageEvidenceQueries <= maximumLanguageEvidenceQueries)
-                        return $0.evidence(left) * $0.evidence(right) < 0
-                    } == true
-                    if crossLanguage { leftLift = max(0, leftLift); rightLift = max(0, rightLift) }
+                    if crossesLanguage(left, right) { leftLift = max(0, leftLift); rightLift = max(0, rightLift) }
                     // Merge noise needs an actual retained edge (not just frequent words) and a
                     // whole absent from the independent sentence corpus. Keeps, counts and the
                     // MainActor dictionary/contact/identifier protections still win.
@@ -252,7 +290,8 @@ nonisolated enum KeyboardBoundaryDecoder {
                 retain(Candidate(kind: .split, original: job.token,
                                  replacement: left + " " + right, score: score, baseline: baseline,
                                  strongPair: strongPair,
-                                 weakWhole: strongPair && wholePrior != nil && literalBaseline > competitorBaseline))
+                                 weakWhole: strongPair && wholePrior != nil && literalBaseline > competitorBaseline),
+                       supported: rightLift > 0)
             }
         }
         // Spatial cases share the exact lookup budget and the top-three retention. Only
@@ -261,16 +300,6 @@ nonisolated enum KeyboardBoundaryDecoder {
             let layout = touch.current.layout
             let adjacent = KeyboardBoundaryTouch.adjacentLetters(in: layout)
             if !protected, token.count >= 3 {
-                var baseline = wholePrior ?? floor
-                if case .result(let reading) = whole {
-                    for candidate in reading.candidates.prefix(8) where !candidate.isCompletion {
-                        // Same full-prior scale as the exact split comparison above.
-                        queries += 1
-                        precondition(queries <= maximumLexicalQueries)
-                        let p = sources.compactMap { lexicons[$0]?.logPrior(for: candidate.word) }.max() ?? floor
-                        baseline = max(baseline, candidate.score - reading.literalSpatialScore + 0.65 * p)
-                    }
-                }
                 let letters = Array(token)
                 for index in 1..<(letters.count - 1) {
                     guard index <= maxPartLetters, letters.count - index - 1 <= maxPartLetters,
@@ -283,10 +312,12 @@ nonisolated enum KeyboardBoundaryDecoder {
                                                                               calibration: job.calibration) else { continue }
                     let left = String(letters[..<index]), right = String(letters[(index + 1)...])
                     guard let a = prior(left), let b = prior(right) else { continue }
-                    let score = a + b + spaceScore - letterScore
-                    if score > baseline {
+                    let lift = runLift([left, right])
+                    let score = a + b + spaceScore - letterScore + lift.total
+                    if score > wholeBaseline {
                         retain(Candidate(kind: .split, original: job.token, replacement: left + " " + right,
-                                         score: score, baseline: baseline, spatial: true))
+                                         score: score, baseline: wholeBaseline, spatial: true),
+                               supported: lift.inner > 0 || spaceScore > letterScore)
                     }
                 }
             }
@@ -357,26 +388,20 @@ nonisolated enum KeyboardBoundaryDecoder {
                 }
             }
         }
-        // Preserve the established exact/spatial ranking. Only unknown wholes with
-        // no retained boundary alternative enter the more permissive lexical beam.
-        // MainActor still applies dictionary/contact/personal/rejection protection.
-        if includeMultipart, found.isEmpty, !protected, wholePrior == nil, token.count >= 6,
-           let touch = job.touch, touch.isUsable, touch.current.text == job.token {
-            let packs: [SpatialWordLexicon] = sources.compactMap { lexicons[$0] }
-            let short = shortWords(languages: job.languages)
-            let segmented = KeyboardMultipartSegmenter.retrieve(token, sources: packs, shortWords: short,
-                                                                 touch: touch.current, calibration: job.calibration)
+        if includeMultipart, needsMultipart {
+            let touch = job.touch.flatMap { $0.isUsable && $0.current.text == job.token ? $0.current : nil }
+            let segmented = KeyboardMultipartSegmenter.retrieve(
+                token, sources: sources.compactMap { lexicons[$0] },
+                shortWords: short.map { ($0, shortPriors[$0] ?? shortPrior) },
+                touch: touch, calibration: job.calibration, personal: job.personal)
             multipart = segmented
-            var baseline = KeyboardMultipartSegmenter.noveltyBaseline
-            if case .result(let reading) = whole {
-                for candidate in reading.candidates.prefix(8) where !candidate.isCompletion {
-                    baseline = max(baseline, candidate.score - reading.literalSpatialScore)
-                }
-            }
-            for run in segmented.runs where run.score > baseline {
-                retain(Candidate(kind: .split, original: job.token,
-                                 replacement: run.words.joined(separator: " "),
-                                 score: run.score, baseline: baseline))
+            for run in segmented.runs {
+                let lift = runLift(run.words)
+                let score = run.score + lift.total
+                guard score > wholeBaseline else { continue }
+                retain(Candidate(kind: .split, original: job.token, replacement: run.words.joined(separator: " "),
+                                 score: score, baseline: wholeBaseline, spatial: run.consumesTap),
+                       supported: lift.inner > 0 || run.spaceFits)
             }
         }
         return result()

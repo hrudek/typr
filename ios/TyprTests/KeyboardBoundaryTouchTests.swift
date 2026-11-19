@@ -138,8 +138,9 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
             XCTAssertFalse(Boundary.retrieve(request, lexicons: sources).candidates.contains { $0.spatial })
         }
         var centered = try word("greatvday")
+        // A tap centred on v fits v better than Space: reading it as Space is only offered.
         XCTAssertFalse(Boundary.retrieve(job(KeyboardBoundaryTouch(current: centered)), lexicons: sources)
-            .candidates.contains { $0.replacement == "great day" })
+            .candidates.contains { $0.replacement == "great day" && $0.automatic })
         centered.learningIntact = false
         XCTAssertFalse(KeyboardBoundaryTouch(current: centered).isUsable)
     }

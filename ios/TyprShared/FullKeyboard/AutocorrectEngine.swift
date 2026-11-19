@@ -213,6 +213,8 @@ final class AutocorrectEngine {
     /// Phrase pairs never enter the letter/apostrophe-only persistent rejection schema.
     private var boundaryRejections: [RejectedCorrection] = []
     private var reversibleBoundary: KeyboardBoundaryDecoder.Candidate?
+    /// The boundary edit `replacementOnSpace` just returned, until the engine records it.
+    private var appliedBoundary: KeyboardBoundaryDecoder.Candidate?
     static let boundaryRejectionLimit = 64
     var boundaryRejectionCount: Int { boundaryRejections.count }
     private var lastCorrection: PendingUndo?
@@ -364,6 +366,51 @@ final class AutocorrectEngine {
                      touch: touch, calibration: touch.flatMap { learning.calibration(for: $0.current.layout) })
     }
 
+    /// The cased text a boundary candidate writes, or nil when a MainActor protection vetoes it.
+    private func boundaryReplacement(_ candidate: KeyboardBoundaryDecoder.Candidate, token: String) -> String? {
+        let parts = candidate.original.split(separator: " ").map(String.init)
+        let protected = parts.contains {
+            suppressedInSession.contains($0.lowercased()) || lexiconTermKeys.contains($0.lowercased())
+                || protectedLexicon.contains($0)
+                || lexiconShortcuts[$0.lowercased()] != nil || learning.protections.isKept($0)
+                || Self.shorthandAllowlist.contains($0.lowercased())
+        }
+        if protected { return nil }
+        // Dictionary validity stays authoritative even when the worker treated a
+        // FrequencyWords entry (e.g. "inthe") as merge noise: Apple's checker, not the
+        // ranking corpus, decides whether "comeback" or "beider" is a real word.
+        if candidate.kind == .split && literalIsValid(token) { return nil }
+        if candidate.kind == .join && parts.allSatisfy({ literalIsValid($0) })
+            && (!candidate.spatial || !candidate.betterThanSeparateTap) { return nil }
+        guard candidate.kind == .split else { return personalSpelling(candidate.replacement, token: parts[0]) }
+        let words = candidate.replacement.split(separator: " ").map(String.init)
+        return words.enumerated().map { index, word in
+            let cased = word == "i" && englishEnabled ? "I" : personalSpelling(word, token: word)
+            return index == 0 ? Self.matchCase(of: token, onto: cased) : cased
+        }.joined(separator: " ")
+    }
+
+    /// The boundary edit the separator applies: the best admitted candidate, if the decoder
+    /// marked it automatic. Needs this run's own taps; a capitalized word inside a sentence
+    /// is a name, as in iikb's `Corrector.correction`.
+    private func automaticBoundary(in retrieval: KeyboardBoundaryDecoder.Retrieval, beforeInput: String?)
+        -> (candidate: KeyboardBoundaryDecoder.Candidate, replacement: String)? {
+        let job = retrieval.job
+        guard let beforeInput, let touch = job.touch, touch.isUsable, touch.current.text == job.token,
+              beforeInput.hasSuffix(touch.original) else { return nil }
+        if job.token.first?.isUppercase == true {
+            let head = beforeInput.dropLast(job.token.count).trimmingCharacters(in: .whitespaces)
+            guard head.isEmpty || head.last.map({ ".!?\n".contains($0) }) == true else { return nil }
+        }
+        for candidate in retrieval.candidates {
+            let pair = RejectedCorrection(typed: candidate.original, replacement: candidate.replacement)
+            guard !boundaryRejections.contains(pair),
+                  let replacement = boundaryReplacement(candidate, token: job.token) else { continue }
+            return candidate.automatic && beforeInput.hasSuffix(candidate.original) ? (candidate, replacement) : nil
+        }
+        return nil
+    }
+
     private func heldBoundary(_ job: KeyboardBoundaryDecoder.Job,
                               evidence: KeyboardTouchWord?) -> KeyboardBoundaryDecoder.Retrieval? {
         guard let cache = boundaryCache, cache.retrieval.job == job, cache.evidence == evidence,
@@ -470,7 +517,9 @@ final class AutocorrectEngine {
 
     func recordAppliedCorrection(original: String, insertedText: String, at now: TimeInterval) {
         record(AppliedCorrection(original: original, insertedText: insertedText,
-                                 kind: pendingFeedback?.kind ?? .autoRule, context: rejectionContext), at: now)
+                                 kind: pendingFeedback?.kind ?? .autoRule, context: rejectionContext,
+                                 boundary: appliedBoundary), at: now)
+        appliedBoundary = nil
     }
 
     func recordAppliedBoundary(_ candidate: KeyboardBoundaryDecoder.Candidate, replacement: String,
@@ -869,6 +918,25 @@ final class AutocorrectEngine {
             // Rejected protections suppress automatic decisions, not the immediate explicit revert.
             pool.append(Self.matchCase(of: token, onto: pair.replacement))
         }
+        let retrieval = boundaryJob(beforeInput: beforeInput).map { job in
+            let retrieval = boundaryRetrieval.flatMap { $0.job == job ? $0 : nil }
+                ?? heldBoundary(job, evidence: evidence)
+                ?? KeyboardBoundaryDecoder.retrieve(job, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
+                                                     whole: spatialOutcome(for: token, evidence: evidence,
+                                                                           forSuggestions: true, context: scoring),
+                                                     model: contextResources.model, includeMultipart: false)
+            if spatialDecoder?.isResourceLoading != true {
+                boundaryCache = BoundaryCache(retrieval: retrieval, evidence: evidence,
+                                              generation: learning.generation,
+                                              resources: spatialDecoder?.resourceRevision ?? -1)
+            }
+            return retrieval
+        }
+        let automaticRun = retrieval.flatMap { automaticBoundary(in: $0, beforeInput: beforeInput) }
+        if let automaticRun {
+            pool.append(automaticRun.replacement)
+            boundaries[automaticRun.replacement] = automaticRun.candidate
+        }
         if let autoFix {
             if !pool.contains(autoFix) { pool.append(autoFix) }
         } else if isEnabled, let suggested = orthographySuggestion(token, context: context) {
@@ -888,20 +956,7 @@ final class AutocorrectEngine {
             }
         }
 
-        // Worker boundaries precede speculative within-word alternatives, not an automatic fix.
-        // UIKit dictionary validity remains on MainActor, after retrieval.
-        if let job = boundaryJob(beforeInput: beforeInput) {
-            let retrieval = boundaryRetrieval.flatMap { $0.job == job ? $0 : nil }
-                ?? heldBoundary(job, evidence: evidence)
-                ?? KeyboardBoundaryDecoder.retrieve(job, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
-                                                     whole: spatialOutcome(for: token, evidence: evidence,
-                                                                           forSuggestions: true, context: scoring),
-                                                     model: contextResources.model, includeMultipart: false)
-            if spatialDecoder?.isResourceLoading != true {
-                boundaryCache = BoundaryCache(retrieval: retrieval, evidence: evidence,
-                                              generation: learning.generation,
-                                              resources: spatialDecoder?.resourceRevision ?? -1)
-            }
+        if let retrieval {
             var candidates = retrieval.candidates
             if let reversibleBoundary, beforeInput?.hasSuffix(reversibleBoundary.original) == true {
                 candidates.insert(reversibleBoundary, at: 0)
@@ -909,31 +964,8 @@ final class AutocorrectEngine {
             for candidate in candidates where pool.count < 2 {
                 let pair = RejectedCorrection(typed: candidate.original, replacement: candidate.replacement)
                 if boundaryRejections.contains(pair) && candidate != reversibleBoundary { continue }
-                let parts = candidate.original.split(separator: " ").map(String.init)
-                let protected = parts.contains {
-                    suppressedInSession.contains($0.lowercased()) || lexiconTermKeys.contains($0.lowercased())
-                        || protectedLexicon.contains($0)
-                        || lexiconShortcuts[$0.lowercased()] != nil || learning.protections.isKept($0)
-                        || Self.shorthandAllowlist.contains($0.lowercased())
-                }
-                if protected { continue }
-                // Dictionary validity stays authoritative even when the worker treated a
-                // FrequencyWords entry (e.g. "inthe") as merge noise: Apple's checker, not the
-                // ranking corpus, decides whether "comeback" or "beider" is a real word.
-                if candidate.kind == .split && literalIsValid(token) { continue }
-                if candidate.kind == .join && parts.allSatisfy({ literalIsValid($0) })
-                    && (!candidate.spatial || !candidate.betterThanSeparateTap) { continue }
-                let replacement: String
-                if candidate.kind == .split {
-                    let words = candidate.replacement.split(separator: " ").map(String.init)
-                    replacement = words.enumerated().map { index, word in
-                        let cased = word == "i" && englishEnabled ? "I" : personalSpelling(word, token: word)
-                        return index == 0 ? Self.matchCase(of: token, onto: cased) : cased
-                    }.joined(separator: " ")
-                } else {
-                    replacement = personalSpelling(candidate.replacement, token: parts[0])
-                }
-                guard !pool.contains(replacement) else { continue }
+                guard let replacement = boundaryReplacement(candidate, token: token),
+                      !pool.contains(replacement) else { continue }
                 pool.append(replacement)
                 boundaries[replacement] = candidate
             }
@@ -1067,10 +1099,10 @@ final class AutocorrectEngine {
             KeyboardSuggestion(
                 displayText: first,
                 replacement: first,
-                // Explicit rules retain #117's highlight exception; inferred boundaries do not.
-                kind: .primary(autoReplace: boundaries[first] == nil && first == autoFix
-                               && (decision?.kind == .autoRule
-                                   || (!completions.contains(first) && !Self.isPrefixExtension(first, of: token)))),
+                // Explicit rules retain #117's highlight exception.
+                kind: .primary(autoReplace: boundaries[first].map { $0 == automaticRun?.candidate }
+                               ?? (first == autoFix && (decision?.kind == .autoRule
+                                   || (!completions.contains(first) && !Self.isPrefixExtension(first, of: token))))),
                 isCompletion: boundaries[first] == nil && (completions.contains(first) || Self.isPrefixExtension(first, of: token)),
                 isPersonal: personalPicks.contains(first),
                 boundary: boundaries[first]
@@ -1101,8 +1133,24 @@ final class AutocorrectEngine {
         guard let token = Self.currentToken(in: beforeInput) else { return nil }
         rejectionContext = RejectedCorrection.context(before: beforeInput, token: token)
         let started = DispatchTime.now().uptimeNanoseconds
-        let decision = decide(token, evidence: evidence, forSuggestions: false,
-                              context: wordContext(before: beforeInput, token: token))
+        let context = wordContext(before: beforeInput, token: token)
+        appliedBoundary = nil
+        if let job = boundaryJob(beforeInput: beforeInput) {
+            let retrieval = heldBoundary(job, evidence: evidence).flatMap { $0.includesMultipart ? $0 : nil }
+                ?? KeyboardBoundaryDecoder.retrieve(job, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
+                                                     whole: spatialOutcome(for: token, evidence: evidence,
+                                                                           forSuggestions: false, context: context),
+                                                     model: contextResources.model)
+            if let run = automaticBoundary(in: retrieval, beforeInput: beforeInput) {
+                appliedBoundary = run.candidate
+                learning.breakWordSequence()
+                forgetSpaceTaps()
+                learning.increment(.boundaries)
+                learning.recordLatency(Self.seconds(since: started), kind: .boundary)
+                return (run.candidate.original, run.replacement)
+            }
+        }
+        let decision = decide(token, evidence: evidence, forSuggestions: false, context: context)
         let learnable = decision.text == nil && evidence?.learningIntact == true && learning.isLearningEnabled
             && (literalIsValid(token) || learning.model.state.rejected.contains(where: {
                 $0.typed == PersonalLexiconSnapshot.normalize(token)
