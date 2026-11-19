@@ -100,9 +100,7 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     static let priorSpread = 0.20
     static let prior = posterior(Moments(), spread: .prior)
     static let maxOffset = 0.5
-    /// Standard deviation of a key's predictive covariance in every direction, in pitches. The floor
-    /// (about half a millimetre on a phone) lies below measured human touch precision; it keeps
-    /// near-collinear labels from collapsing a key onto a line.
+    /// Standard deviation of a key's predictive covariance in every direction, in pitches.
     static let deviationRange: ClosedRange<Double> = 0.08...1.0
     static let degreesRange: ClosedRange<Double> = 3...1_000
 
