@@ -183,7 +183,7 @@ final class TypingLogRecorder {
         var tapsMatchText: Bool { word.literal == text }
 
         mutating func append(_ text: String, point: CGPoint?, key: String?, layout: KeyboardLayout, time: TimeInterval) {
-            if let point, word.layout == nil { word.layout = TypingLogLayout(layout) }
+            if point != nil, word.layout == nil { word.layout = TypingLogLayout(layout) }
             let onLayout = point != nil && word.layout == TypingLogLayout(layout)
             word.taps.append(TypingLogTap(t: Int(((time - started) * 1000).rounded()),
                                           x: onLayout ? point.map { (Double($0.x) * 100).rounded() / 100 } : nil,

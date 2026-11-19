@@ -17,6 +17,8 @@ final class TypingLogTests: XCTestCase {
     private var engine: FullKeyboardEngine!
     private var written: [TypingLogWord] = []
     private var clock: TimeInterval = 100
+    /// Whole seconds: the export's ISO 8601 dates keep no fractions.
+    private let wall = Date(timeIntervalSince1970: 1_800_000_000)
 
     override func setUp() async throws {
         suite = "TypingLogTests-\(UUID().uuidString)"
@@ -38,7 +40,7 @@ final class TypingLogTests: XCTestCase {
         configure(target)
         let learning = KeyboardLearningSession(defaults: defaults)
         let autocorrect = AutocorrectEngine(checker: Checker(), learning: learning, spatialDecoder: nil)
-        let log = TypingLogRecorder(write: { [unowned self] in self.written.append($0) })
+        let log = TypingLogRecorder(write: { [unowned self] in self.written.append($0) }, now: { [unowned self] in self.wall })
         engine = FullKeyboardEngine(target: target, autocorrect: autocorrect, typingLog: log)
         engine.width = 393
         engine.clock = { [unowned self] in self.clock }
@@ -154,7 +156,7 @@ final class TypingLogTests: XCTestCase {
     // MARK: - Store
 
     private func word(_ meant: String) -> TypingLogWord {
-        TypingLogWord(at: Date(timeIntervalSince1970: 1_800_000_000), end: " ", languages: ["en"],
+        TypingLogWord(at: wall, end: " ", languages: ["en"],
                       hitAreas: "standard", literal: meant, meant: meant)
     }
 
@@ -211,14 +213,14 @@ final class TypingLogTests: XCTestCase {
         type("hello w")
         let store = TypingLogStore(directory: directory)
         written.forEach(store.append)
-        let model = PersonalTypingModel()
+        let model = PersonalTypingModel(now: { [unowned self] in self.wall })
         model.keep("typr")
         let a = try XCTUnwrap(engine.layout.key(.character("a"))).frame
         model.learn([TouchLabel(point: CGPoint(x: a.midX, y: a.midY), letter: "a")], layout: engine.layout, source: .literalValid)
         XCTAssertFalse(model.state.layouts.isEmpty)
 
         let file = try store.export(touchModel: model.state, appBuild: "42", into: directory,
-                                    now: Date(timeIntervalSince1970: 1_800_000_000))
+                                    now: wall)
         let data = try Data(contentsOf: file)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(Set(object.keys), ["format", "version", "exportedAt", "appBuild", "touchModel", "words"])
