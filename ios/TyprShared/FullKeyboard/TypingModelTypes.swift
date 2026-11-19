@@ -23,9 +23,9 @@ nonisolated struct KeyboardLayoutSignature: Hashable, Codable, Sendable {
     }
 }
 
-/// Read-only offsets and spreads in key pitches (frame width + gap, height + rowGap).
-// Layout-separated calibration adapted from AVGVSTVS96/iikb
-// Packages/KeyboardModules/Sources/KeyboardCore/Correction/TouchModel.swift (MIT).
+// Normal-Inverse-Wishart touch posterior adapted from AVGVSTVS96/iikb
+// Packages/KeyboardModules/Sources/KeyboardCore/Correction/TouchModel.swift
+// at e05a0ab8a670478d97765d26ffb8493ed5b7ab66 (MIT).
 nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
     struct Key: Equatable, Sendable {
         let offsetX: Double
@@ -33,66 +33,103 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
         let sigmaX: Double
         let sigmaY: Double
         var covarianceXY: Double = 0
+        var degrees: Double = SpatialTouchCalibration.priorWeight - 1
 
         private var determinant: Double { sigmaX * sigmaX * sigmaY * sigmaY - covarianceXY * covarianceXY }
 
-        /// Squared Mahalanobis distance from the centre. Sanitized by the snapshot initializer.
         func mahalanobis(x: Double, y: Double) -> Double {
             let dx = x - offsetX, dy = y - offsetY
             return max(0, (sigmaY * sigmaY * dx * dx - 2 * covarianceXY * dx * dy + sigmaX * sigmaX * dy * dy) / determinant)
         }
 
-        /// Normalized full-covariance Gaussian. Sanitized by the snapshot initializer.
         func logDensity(x: Double, y: Double) -> Double {
-            if covarianceXY == 0 {
-                // Exact origin/main diagonal expression; also avoids unnecessary covariance
-                // arithmetic on the learning-off and slow-diagonal benchmark paths.
-                let dx = x - offsetX, dy = y - offsetY
-                return -0.5 * (dx * dx / (sigmaX * sigmaX) + dy * dy / (sigmaY * sigmaY))
-                    - log(2 * Double.pi * sigmaX * sigmaY)
-            }
-            return -0.5 * mahalanobis(x: x, y: y) - log(2 * Double.pi) - 0.5 * log(determinant)
+            -log(2 * Double.pi) - 0.5 * log(determinant) - (degrees / 2 + 1) * log1p(mahalanobis(x: x, y: y) / degrees)
         }
+
+        func logDensityY(_ y: Double) -> Double {
+            let dy = y - offsetY, variance = sigmaY * sigmaY
+            return lgamma((degrees + 1) / 2) - lgamma(degrees / 2) - 0.5 * log(degrees * Double.pi * variance)
+                - (degrees + 1) / 2 * log1p(dy * dy / (degrees * variance))
+        }
+    }
+
+    struct Moments: Equatable, Sendable {
+        var n = 0.0
+        var meanX = 0.0, meanY = 0.0
+        var scatterXX = 0.0, scatterXY = 0.0, scatterYY = 0.0
+    }
+
+    struct Spread: Equatable, Sendable {
+        let xx: Double, xy: Double, yy: Double
+
+        static let prior = Spread(pooling: [])
+
+        init(pooling keys: [Moments]) {
+            let weight = SpatialTouchCalibration.priorWeight - 3
+            let prior = weight * SpatialTouchCalibration.priorSpread * SpatialTouchCalibration.priorSpread
+            var xx = prior, xy = 0.0, yy = prior, n = weight
+            for key in keys {
+                let shrink = SpatialTouchCalibration.centerPrior * key.n / (SpatialTouchCalibration.centerPrior + key.n)
+                xx += key.scatterXX + shrink * key.meanX * key.meanX
+                xy += key.scatterXY + shrink * key.meanX * key.meanY
+                yy += key.scatterYY + shrink * key.meanY * key.meanY
+                n += key.n
+            }
+            (self.xx, self.xy, self.yy) = (xx / n, xy / n, yy / n)
+        }
+    }
+
+    static func posterior(_ taps: Moments, spread: Spread) -> Key {
+        let n = taps.n
+        let kappa = centerPrior + n
+        let degrees = priorWeight + n - 1
+        let weight = priorWeight - 3
+        let shrink = centerPrior * n / kappa
+        let scale = (kappa + 1) / (kappa * degrees)
+        let xx = (weight * spread.xx + taps.scatterXX + shrink * taps.meanX * taps.meanX) * scale
+        let xy = (weight * spread.xy + taps.scatterXY + shrink * taps.meanX * taps.meanY) * scale
+        let yy = (weight * spread.yy + taps.scatterYY + shrink * taps.meanY * taps.meanY) * scale
+        return Key(offsetX: n / kappa * taps.meanX, offsetY: n / kappa * taps.meanY,
+                   sigmaX: sqrt(xx), sigmaY: sqrt(yy), covarianceXY: xy, degrees: degrees)
     }
 
     let keys: [Character: Key]
     let space: Key?
-    static let staticSigma = 0.35
-    /// iikb's touch-model priors: a key's learned centre starts worth one tap, its spread ten
-    /// taps, and learned aim applies from the first trusted label.
     static let centerPrior = 1.0
-    static let spreadPrior = 10.0
-    static let readyLabels = 1
-    /// Physical tap spread (pitches) of a typical typist: the prior of the pooled spread.
-    static let referenceSpread = 0.20
-    /// Learned spreads count as learned (iikb's touch model is not tempered either).
-    static let temperature = 1.0
-    /// One-hand thumb use moves far-side aim by up to about half a key; the one-pitch
-    /// label gate and the 1.6-pitch decoder gate stay unchanged.
+    static let priorWeight = 10.0
+    static let priorSpread = 0.20
+    static let prior = posterior(Moments(), spread: .prior)
     static let maxOffset = 0.5
-    static let sigmaRange: ClosedRange<Double> = 0.10...0.50
+    /// Standard deviation of a key's predictive covariance in every direction, in pitches.
+    static let deviationRange: ClosedRange<Double> = 0.08...1.0
+    static let degreesRange: ClosedRange<Double> = 3...1_000
 
     init(keys: [Character: Key], space: Key? = nil) {
         self.keys = keys.reduce(into: [:]) { result, entry in
             guard entry.key.isLetter, String(entry.key) == String(entry.key).lowercased(),
-                  let key = Self.sanitized(entry.value, sigmaRange: Self.sigmaRange) else { return }
+                  let key = Self.sanitized(entry.value) else { return }
             result[entry.key] = key
         }
-        self.space = space.flatMap { Self.sanitized($0, sigmaRange: Self.sigmaRange) }
+        self.space = space.flatMap { Self.sanitized($0) }
     }
 
-    /// Finite, bounded centres; both covariance eigenvalues inside `sigmaRange`², hence a
-    /// positive determinant floor. Correlated spreads clamp their EIGENVALUES, preserving the
-    /// ellipse orientation; diagonal spreads clamp each axis exactly. `nil` for non-finite input.
-    static func sanitized(_ key: Key, sigmaRange: ClosedRange<Double>) -> Key? {
-        guard key.offsetX.isFinite, key.offsetY.isFinite,
-              key.sigmaX.isFinite, key.sigmaY.isFinite, key.covarianceXY.isFinite else { return nil }
+    static func scaleRange(degrees: Double) -> ClosedRange<Double> {
+        let toScale = ((degrees - 2) / degrees).squareRoot()
+        return deviationRange.lowerBound * toScale...deviationRange.upperBound * toScale
+    }
+
+    static func sanitized(_ key: Key) -> Key? {
+        guard key.offsetX.isFinite, key.offsetY.isFinite, key.sigmaX.isFinite, key.sigmaY.isFinite,
+              key.covarianceXY.isFinite, degreesRange.contains(key.degrees) else { return nil }
+        let sigmaRange = scaleRange(degrees: key.degrees)
         let sx = max(sigmaRange.lowerBound, min(sigmaRange.upperBound, key.sigmaX))
         let sy = max(sigmaRange.lowerBound, min(sigmaRange.upperBound, key.sigmaY))
         let offsetX = max(-maxOffset, min(maxOffset, key.offsetX))
         let offsetY = max(-maxOffset, min(maxOffset, key.offsetY))
         let xy = max(-sx * sy, min(sx * sy, key.covarianceXY))
-        guard xy != 0 else { return Key(offsetX: offsetX, offsetY: offsetY, sigmaX: sx, sigmaY: sy) }
+        guard xy != 0 else {
+            return Key(offsetX: offsetX, offsetY: offsetY, sigmaX: sx, sigmaY: sy, degrees: key.degrees)
+        }
         let floor = sigmaRange.lowerBound * sigmaRange.lowerBound
         let ceiling = sigmaRange.upperBound * sigmaRange.upperBound
         // 2×2 symmetric eigen-decomposition without trigonometry: mean ± radius.
@@ -101,7 +138,7 @@ nonisolated struct SpatialTouchCalibration: Equatable, Sendable {
         let center = (large + small) / 2, spread = (large - small) / 2
         return Key(offsetX: offsetX, offsetY: offsetY,
                    sigmaX: sqrt(center + spread * half / radius), sigmaY: sqrt(center - spread * half / radius),
-                   covarianceXY: spread * xy / radius)
+                   covarianceXY: spread * xy / radius, degrees: key.degrees)
     }
 }
 

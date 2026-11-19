@@ -335,6 +335,13 @@ MIT, Copyright (c) 2026 Bassim Shahidy. The same full MIT notice above applies.
 No upstream recent-tap
 reservoir, executable dependency, neural weights, or language resource is adopted.
 
+The touch density ports the Normal-Inverse-Wishart posterior predictive (Student-t) and
+the pooled within-key spread (`Posterior`, `Spread`, priors `priorSpread = .2`,
+`priorWeight = 10`, κ₀ = 1) from `Packages/KeyboardModules/Sources/KeyboardCore/Correction/TouchModel.swift` at
+[iikb `e05a0ab8a670478d97765d26ffb8493ed5b7ab66`](https://github.com/AVGVSTVS96/iikb/tree/e05a0ab8a670478d97765d26ffb8493ed5b7ab66)
+into `SpatialTouchCalibration` (`TypingModelTypes.swift`), computed from Typr's existing
+per-key aggregates. MIT, Copyright (c) 2026 Bassim Shahidy; the same full MIT notice above applies.
+
 The deferred suggestion pipeline additionally translates snapshot/job/revision-checked
 finish and compatible-cache adoption from
 [AVGVSTVS96/iikb at `09a2e9cdfbe851adff6c4646333c0a3f74ba8765`](https://github.com/AVGVSTVS96/iikb/tree/09a2e9cdfbe851adff6c4646333c0a3f74ba8765),

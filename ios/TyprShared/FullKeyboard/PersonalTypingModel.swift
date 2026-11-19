@@ -45,17 +45,10 @@ final class PersonalTypingModel {
             covarianceXY = max(-limit, min(limit, (1 - weight) * (covarianceXY + weight * dx * dy)))
         }
 
-        var calibration: SpatialTouchCalibration.Key {
-            let center = Double(n) / (Double(n) + SpatialTouchCalibration.centerPrior)
-            let shrink = Double(n) / (Double(n) + SpatialTouchCalibration.spreadPrior)
-            let prior = SpatialTouchCalibration.staticSigma * SpatialTouchCalibration.staticSigma
-            let raw = SpatialTouchCalibration.Key(
-                offsetX: center * meanX, offsetY: center * meanY,
-                sigmaX: sqrt(shrink * varianceX + (1 - shrink) * prior),
-                sigmaY: sqrt(shrink * varianceY + (1 - shrink) * prior),
-                covarianceXY: shrink * covarianceXY)
-            // Reuse the decoder contract's bounds for summaries as well as inference.
-            return SpatialTouchCalibration(keys: ["a": raw]).keys["a"] ?? raw
+        var moments: SpatialTouchCalibration.Moments {
+            let n = Double(n)
+            return .init(n: n, meanX: meanX, meanY: meanY,
+                         scatterXX: n * varianceX, scatterXY: n * covarianceXY, scatterYY: n * varianceY)
         }
 
         var isValid: Bool {
@@ -75,31 +68,16 @@ final class PersonalTypingModel {
         var global: TouchStats?
         var space: TouchStats?
 
-        /// Within-key pooled covariance, not between-key center differences. Each key
-        /// contributes at most 256 effective observations; iteration order is fixed.
-        /// Physical (untempered) spread: the prior is the reference spread, not .35.
-        var pooled: SpatialTouchCalibration.Key {
-            let prior = SpatialTouchCalibration.referenceSpread * SpatialTouchCalibration.referenceSpread
-            let weight = SpatialTouchCalibration.spreadPrior
-            var n = weight, xx = weight * prior, yy = weight * prior, xy = 0.0
-            for letter in keys.keys.sorted() {
-                guard let s = keys[letter], s.isValid else { continue }
-                let weight = Double(s.n)
-                n += weight; xx += weight * s.varianceX; yy += weight * s.varianceY
-                xy += weight * s.covarianceXY
-            }
-            return .init(offsetX: 0, offsetY: 0, sigmaX: sqrt(xx / n), sigmaY: sqrt(yy / n), covarianceXY: xy / n)
+        var pooled: SpatialTouchCalibration.Spread {
+            .init(pooling: keys.keys.sorted().compactMap { keys[$0].flatMap { $0.isValid ? $0.moments : nil } })
         }
 
         func slowKey(_ stats: TouchStats?) -> SpatialTouchCalibration.Key {
-            let prior = pooled
-            guard let stats else { return prior }
-            let c = Double(stats.n) / (Double(stats.n) + SpatialTouchCalibration.centerPrior)
-            let w = Double(stats.n) / (Double(stats.n) + SpatialTouchCalibration.spreadPrior)
-            return .init(offsetX: c * stats.meanX, offsetY: c * stats.meanY,
-                         sigmaX: sqrt(w * stats.varianceX + (1 - w) * prior.sigmaX * prior.sigmaX),
-                         sigmaY: sqrt(w * stats.varianceY + (1 - w) * prior.sigmaY * prior.sigmaY),
-                         covarianceXY: w * stats.covarianceXY + (1 - w) * prior.covarianceXY)
+            SpatialTouchCalibration.posterior(stats?.moments ?? .init(), spread: pooled)
+        }
+
+        var spaceKey: SpatialTouchCalibration.Key? {
+            space.map { SpatialTouchCalibration.posterior($0.moments, spread: .init(pooling: [$0.moments])) }
         }
     }
 
@@ -245,6 +223,8 @@ final class PersonalTypingModel {
         var rejected: [TouchLabelRejection: Int] = [:]
     }
 
+    /// A key's posterior predictive: Student-t with `degrees` degrees of freedom whose
+    /// standard deviations are `sigmaX`, `sigmaY` and covariance `covarianceXY` (pitches).
     nonisolated struct KeySummary: Equatable, Sendable {
         let letter: String
         let n: Int
@@ -253,7 +233,7 @@ final class PersonalTypingModel {
         let sigmaX: Double
         let sigmaY: Double
         var covarianceXY: Double = 0
-        var isCalibrated: Bool { n >= 20 }
+        let degrees: Double
     }
 
     nonisolated struct LayoutSummary: Equatable, Sendable {
@@ -293,32 +273,17 @@ final class PersonalTypingModel {
         }
     }
 
-    /// The slow (persisted) PHYSICAL density the fast drift is measured against. Keys without
-    /// labels use the pooled covariance and the layout-wide slow centre once pooled inference is ready.
     private static func slowKey(_ letter: String, in stats: LayoutStats) -> SpatialTouchCalibration.Key {
         let value = stats.keys[letter]
-        let pooled = physical(stats.slowKey(value))
-        guard value == nil, let global = stats.global,
-              global.n >= SpatialTouchCalibration.readyLabels else { return pooled }
-        let center = global.calibration
-        return physical(.init(offsetX: center.offsetX, offsetY: center.offsetY, sigmaX: pooled.sigmaX,
-                              sigmaY: pooled.sigmaY, covarianceXY: pooled.covarianceXY))
+        let key = stats.slowKey(value)
+        guard value == nil, let global = stats.global, global.n > 0 else { return bounded(key) }
+        let center = SpatialTouchCalibration.posterior(global.moments, spread: .prior)
+        return bounded(.init(offsetX: center.offsetX, offsetY: center.offsetY, sigmaX: key.sigmaX,
+                             sigmaY: key.sigmaY, covarianceXY: key.covarianceXY, degrees: key.degrees))
     }
 
-    private static let fallback = SpatialTouchCalibration.Key(
-        offsetX: 0, offsetY: 0, sigmaX: SpatialTouchCalibration.staticSigma, sigmaY: SpatialTouchCalibration.staticSigma)
-
-    /// Bounded physical spread: a numerically safe determinant floor for prequential scoring.
-    private static func physical(_ key: SpatialTouchCalibration.Key) -> SpatialTouchCalibration.Key {
-        SpatialTouchCalibration.sanitized(key, sigmaRange: 0.10...0.50) ?? fallback
-    }
-
-    /// The decoder contract: covariance tempered to the static density's calibration, then bounded.
-    static func tempered(_ key: SpatialTouchCalibration.Key) -> SpatialTouchCalibration.Key {
-        let t = SpatialTouchCalibration.temperature
-        return SpatialTouchCalibration.sanitized(.init(
-            offsetX: key.offsetX, offsetY: key.offsetY, sigmaX: key.sigmaX * sqrt(t), sigmaY: key.sigmaY * sqrt(t),
-            covarianceXY: key.covarianceXY * t), sigmaRange: SpatialTouchCalibration.sigmaRange) ?? fallback
+    private static func bounded(_ key: SpatialTouchCalibration.Key) -> SpatialTouchCalibration.Key {
+        SpatialTouchCalibration.sanitized(key) ?? SpatialTouchCalibration.prior
     }
 
     private var cachedLexicon: PersonalLexiconSnapshot?
@@ -363,10 +328,7 @@ final class PersonalTypingModel {
                     var stats = state.layouts[signature.id] ?? LayoutStats(signature: signature, lastUpdated: now())
                     activateAim(signature)
                     let letter = String(label.letter)
-                    // Prequential: the shared drift scores and learns this label against the
-                    // slow model BEFORE the slow aggregates absorb it. It starts only once
-                    // pooled inference is ready, so it always has a calibrated reference.
-                    if (stats.global?.n ?? 0) >= SpatialTouchCalibration.readyLabels,
+                    if (stats.global?.n ?? 0) > 0,
                        let φ = TouchAimDrift.features(for: layout)[label.letter] {
                         fastDrift.update(x: x, y: y, slow: Self.slowKey(letter, in: stats), features: φ)
                     }
@@ -415,26 +377,18 @@ final class PersonalTypingModel {
         // on layout discontinuities; learning a different layout also activates a fresh field.
         let drift = fastLayout == stats.signature.id ? fastDrift : TouchAimDrift()
         // Migration does not invent an ordered global stream from old per-key data.
-        // Until the first pooled label, legacy keys retain their per-key threshold.
-        let pooledReady = (stats.global?.n ?? 0) >= SpatialTouchCalibration.readyLabels
+        let pooledReady = (stats.global?.n ?? 0) > 0
         let features = pooledReady ? TouchAimDrift.features(for: layout) : [:]
         var keys: [Character: SpatialTouchCalibration.Key] = [:]
         for character in "abcdefghijklmnopqrstuvwxyz" {
             let letter = String(character)
             guard layout.key(.character(letter)) != nil,
-                  pooledReady || (stats.keys[letter]?.n ?? 0) >= SpatialTouchCalibration.readyLabels else { continue }
+                  pooledReady || (stats.keys[letter]?.n ?? 0) > 0 else { continue }
             let slow = Self.slowKey(letter, in: stats)
             // The shared drift reaches every key immediately, including rare and unseen keys.
-            keys[character] = Self.tempered(features[character].map { drift.prediction(slow: slow, features: $0) } ?? slow)
+            keys[character] = features[character].map { drift.prediction(slow: slow, features: $0) } ?? slow
         }
-        let space = stats.space.map { taps in
-            let c = Double(taps.n) / (Double(taps.n) + SpatialTouchCalibration.centerPrior)
-            let w = Double(taps.n) / (Double(taps.n) + SpatialTouchCalibration.spreadPrior)
-            let prior = SpatialTouchCalibration.referenceSpread * SpatialTouchCalibration.referenceSpread
-            let sigma = sqrt(w * taps.varianceY + (1 - w) * prior)
-            return Self.tempered(.init(offsetX: 0, offsetY: c * taps.meanY, sigmaX: sigma, sigmaY: sigma))
-        }
-        return keys.isEmpty ? nil : SpatialTouchCalibration(keys: keys, space: space)
+        return keys.isEmpty ? nil : SpatialTouchCalibration(keys: keys, space: stats.spaceKey)
     }
 
     // Explicit keeps remain available while learning is off. Counting is a separate trusted event.
@@ -543,15 +497,15 @@ final class PersonalTypingModel {
 
     var summary: Summary { Self.summarize(state) }
 
-    /// Statistics use the bounded physical saved density, not the decoder's tempered likelihood.
-    static func summarize(_ state: State, physicalTouch: Bool = false) -> Summary {
+    static func summarize(_ state: State) -> Summary {
         let layouts = state.layouts.values.sorted { $0.signature.id < $1.signature.id }.map { layout in
             LayoutSummary(signature: layout.signature, lastUpdated: layout.lastUpdated,
                 keys: layout.keys.sorted { $0.key < $1.key }.map { letter, stats in
-                    let slow = slowKey(letter, in: layout)
-                    let key = physicalTouch ? slow : tempered(slow)
+                    let key = slowKey(letter, in: layout)
+                    let variance = key.degrees / (key.degrees - 2)
                     return KeySummary(letter: letter, n: stats.n, offsetX: key.offsetX, offsetY: key.offsetY,
-                                      sigmaX: key.sigmaX, sigmaY: key.sigmaY, covarianceXY: key.covarianceXY)
+                                      sigmaX: key.sigmaX * sqrt(variance), sigmaY: key.sigmaY * sqrt(variance),
+                                      covarianceXY: key.covarianceXY * variance, degrees: key.degrees)
                 })
         }
         return Summary(layouts: layouts, keptWords: state.kept.count, countedWords: state.counts.count,

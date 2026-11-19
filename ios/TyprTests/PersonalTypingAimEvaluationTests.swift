@@ -5,11 +5,6 @@ import XCTest
 /// Seeded synthetic grip-change ablation on public fixture words. NOT measured human typing,
 /// a system dictionary or physical hit-test proof. Literals come from the static hit test of
 /// the simulated touch, so a grip change produces realistic neighbour typos.
-///
-/// Variants, decoded on IDENTICAL evidence after IDENTICAL trusted labels:
-/// - static: no personal calibration (learning off, origin/main decoder).
-/// - old: origin/main's slow per-key diagonal contract (n >= 20, shrink n/(n+20), ±.25 pitch).
-/// - new: this branch's `PersonalTypingModel.calibration(for:)`.
 @MainActor
 final class PersonalTypingAimEvaluationTests: XCTestCase {
     private let grid = KeyboardLayout(width: 393)
@@ -119,12 +114,10 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
     }
 
 #if TYPR_RESEARCH
-    /// Exact origin/main inference contract, recomputed from the SAME slow per-key aggregates
-    /// (whose update rule is unchanged): diagonal, per-key n >= 20, centres clamped to ±.25.
-    private func originMainCalibration(_ state: PersonalTypingModel.State) -> SpatialTouchCalibration? {
+    private func originParameterCalibration(_ state: PersonalTypingModel.State) -> SpatialTouchCalibration? {
         guard let layout = state.layouts[KeyboardLayoutSignature(grid).id] else { return nil }
         var keys: [Character: SpatialTouchCalibration.Key] = [:]
-        let prior = SpatialTouchCalibration.staticSigma * SpatialTouchCalibration.staticSigma
+        let prior = 0.35 * 0.35
         for (letter, stats) in layout.keys where stats.n >= 20 {
             let shrink = Double(stats.n) / Double(stats.n + 20)
             func clampOffset(_ value: Double) -> Double { max(-0.25, min(0.25, shrink * value)) }
@@ -226,8 +219,6 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
         return (model, stream)
     }
 
-    /// Runs mature two-thumb aim -> `away` grip -> back to two thumbs, returning per-phase,
-    /// per-checkpoint [static, old, new] metrics summed over groups, and per-group curves.
     private func runScenario(_ away: Grip) throws -> [(phase: String, rows: [(labels: Int, variants: [Metrics])])] {
         let decoder = try decoder()
         let originDecoder = try self.decoder(usesLegacySearch: true)
@@ -244,7 +235,7 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
             for labels in checkpoints {
                 offered += train(model, &stream, count: labels - trained, grip: grip)
                 trained = labels
-                let calibrations = [nil, originMainCalibration(model.state), model.calibration(for: grid)]
+                let calibrations = [nil, originParameterCalibration(model.state), model.calibration(for: grid)]
                 let slowOnly = phase == "away" && [0, 10, 20, 30].contains(labels)
                     ? PersonalTypingModel(state: model.state).calibration(for: grid) : nil
                 print("EVAL P7_labels scenario=\(away.rawValue) phase=\(phase) accepted=\(labels) offered=\(offered)")
@@ -294,18 +285,18 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
             }
             for (group, words) in groups {
                 let typos = staticMetrics[group]!.typos
-                print("EVAL P7_grip scenario=\(away.rawValue) phase=\(phase) group=\(group) words=\(words.count) typos=\(typos) curve=labels:recall1 static/old/new:recall3 s/o/n:wrongTypoAuto s/o/n:unwantedValidAuto s/o/n \(curves[group]!.joined(separator: ","))")
+                print("EVAL P7_grip scenario=\(away.rawValue) phase=\(phase) group=\(group) words=\(words.count) typos=\(typos) curve=labels:recall1 prior/originParameters/new:recall3 p/o/n:wrongTypoAuto p/o/n:unwantedValidAuto p/o/n \(curves[group]!.joined(separator: ","))")
             }
             let summary = rows.map { row in
                 let v = row.variants
                 return "\(row.labels):\(v[0].recall1)/\(v[1].recall1)/\(v[2].recall1):\(v[0].recall3)/\(v[1].recall3)/\(v[2].recall3):\(v[0].wrongAuto)/\(v[1].wrongAuto)/\(v[2].wrongAuto):\(v[0].unwanted)/\(v[1].unwanted)/\(v[2].unwanted)"
             }
             let first = rows[0].variants[0]
-            print("EVAL P7_gripTotal scenario=\(away.rawValue) phase=\(phase) words=\(first.words) typos=\(first.typos) curve=labels:recall1 static/old/new:recall3 s/o/n:wrongTypoAuto s/o/n:unwantedValidAuto s/o/n \(summary.joined(separator: ","))")
+            print("EVAL P7_gripTotal scenario=\(away.rawValue) phase=\(phase) words=\(first.words) typos=\(first.typos) curve=labels:recall1 prior/originParameters/new:recall3 p/o/n:wrongTypoAuto p/o/n:unwantedValidAuto p/o/n \(summary.joined(separator: ","))")
             var phaseWork = [Metrics(), Metrics(), Metrics()]
             for row in rows { for v in 0..<3 { phaseWork[v].add(row.variants[v]) } }
             print("EVAL P7_phaseVisits scenario=\(away.rawValue) phase=\(phase) " + phaseWork.enumerated().map { v, m in
-                String(format: "%@=%.1f/%.0f/%.0f", ["static", "old", "new"][v], m.visits.reduce(0, +) / Double(max(1, m.visits.count)),
+                String(format: "%@=%.1f/%.0f/%.0f", ["prior", "originParameters", "new"][v], m.visits.reduce(0, +) / Double(max(1, m.visits.count)),
                        Self.percentile(m.visits, 0.95), m.visits.max() ?? 0)
             }.joined(separator: " ") + " (mean/p95/max)")
             output.append((phase, rows))
@@ -313,7 +304,7 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
         // Decode work on identical inputs, all checkpoints and phases of this scenario.
         let work = measuredWork // Static is really decoded only once per phase, not at every checkpoint.
         func mean(_ values: [Double]) -> Double { values.reduce(0, +) / Double(max(1, values.count)) }
-        for (v, name) in ["static", "old", "new"].enumerated() {
+        for (v, name) in ["prior", "originParameters", "new"].enumerated() {
             let ms = work[v].milliseconds, visits = work[v].visits, clean = work[v].cleanVisits
             print(String(format: "EVAL P7_decodeWork scenario=%@ variant=%@ calls=%d meanMs=%.3f p95Ms=%.3f maxMs=%.3f visitsMean=%.1f visitsP95=%.0f visitsMax=%.0f cleanLiteralVisitsMean=%.1f cleanLiteralVisitsP95=%.0f incomplete=%d unavailable=%d platform=local_debug_not_iPhone",
                          away.rawValue, name, ms.count, mean(ms), Self.percentile(ms, 0.95),
@@ -324,8 +315,6 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
             XCTAssertEqual(work[v].incomplete, 0, "every decode is a complete, proven search")
             XCTAssertLessThanOrEqual(visits.max() ?? 0, Double(SpatialWordDecoder.searchBudget))
         }
-        // Correct literals: the adapted density must not make search materially harder than
-        // origin/main's static density (bound: +25% mean visits, Linux debug, same inputs).
         XCTAssertLessThanOrEqual(mean(work[2].cleanVisits), 1.25 * mean(work[0].cleanVisits))
         // Valid-literal safety: the adaptive model never adds an unwanted change of a valid literal.
         for phase in output { for row in phase.rows {
@@ -334,15 +323,12 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
         return output
     }
 
-    /// Steady state (mature two-thumb model, same grip): valid and out-of-lexicon literals typed
-    /// as intended must not be changed, and decode work is compared with origin/main on
-    /// identical evidence. Same control lists as the fixed spatial evaluation.
     func testSteadyStateControlsAndDecodeWork() throws {
         let decoder = try decoder()
         let originDecoder = try self.decoder(usesLegacySearch: true)
         let (model, _) = matureModel()
-        let calibrations = [nil, originMainCalibration(model.state), model.calibration(for: grid), model.calibration(for: grid)]
-        let names = ["originMainStatic", "originMainSlow", "new", "newDensityLegacySearch"]
+        let calibrations = [nil, originParameterCalibration(model.state), model.calibration(for: grid), model.calibration(for: grid)]
+        let names = ["prior", "originParametersStudentT", "new", "newDensityLegacySearch"]
         let inLexicon = (SpatialTypoEvaluationFixtures.german + SpatialTypoEvaluationFixtures.english
             + SpatialTypoEvaluationFixtures.germanNouns + SpatialTypoEvaluationFixtures.short
             + SpatialTypoEvaluationFixtures.rare).map { $0.lowercased() }
@@ -386,12 +372,8 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
                 print("EVAL P7_controls set=\(set) variant=\(edits ? "B" : "A") n=\(usable.count) \(rows.joined(separator: " ")) visits=mean/p95/max platform=local_debug_not_iPhone")
                 XCTAssertEqual(unwanted[2], 0, "no unwanted automatic change of a correctly typed control")
                 XCTAssertEqual(unwanted[3], 0, "bound changes work, not automatic policy")
-                // Current requirement: no material regression versus the original slow model
-                // on the exact same controls. Gate deterministic work, not noisy wall-clock ratios.
-                // A has only ~10-20 visits; allow eight absolute pops there.
-                // B's hundreds of edit-search visits must stay within ten percent.
                 XCTAssertLessThanOrEqual(meanVisits[2], 1.10 * meanVisits[1] + (edits ? 0 : 8))
-                print(String(format: "EVAL P7_originComparison set=%@ variant=%@ newOverOriginStaticVisits=%.3f newOverOriginStaticMeanMs=%.3f newOverOriginSlowVisits=%.3f newOverOriginSlowMeanMs=%.3f pruningVisitsRatio=%.3f",
+                print(String(format: "EVAL P7_originComparison set=%@ variant=%@ newOverPriorVisits=%.3f newOverPriorMeanMs=%.3f newOverOriginParametersVisits=%.3f newOverOriginParametersMeanMs=%.3f pruningVisitsRatio=%.3f",
                              set, edits ? "B" : "A", meanVisits[2] / meanVisits[0], meanTimes[2] / meanTimes[0],
                              meanVisits[2] / meanVisits[1], meanTimes[2] / meanTimes[1], meanVisits[2] / meanVisits[3]))
             }

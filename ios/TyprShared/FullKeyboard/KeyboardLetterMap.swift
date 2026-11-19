@@ -25,14 +25,12 @@ nonisolated enum KeyboardLetterMap {
         let finiteLabelMasks: [UInt32]
     }
 
-    /// Prepared once per physical key, not once per tap/key pair. All covariance
-    /// inverses and normalizers are immutable throughout the search. No extra score
-    /// approximation: the independent frozen-score DP checks this representation too.
     struct FrozenKey {
         let frame: CGRect
         let pitchX: Double, pitchY: Double
         let offsetX: Double, offsetY: Double
         let inverseXX: Double, inverseXY: Double, inverseYY: Double, normalizer: Double
+        let degrees: Double
 
         init(frame: CGRect, gap: CGFloat, rowGap: CGFloat, key: SpatialTouchCalibration.Key) {
             self.frame = frame
@@ -42,12 +40,14 @@ nonisolated enum KeyboardLetterMap {
             let determinant = xx * yy - xy * xy
             inverseXX = yy / determinant; inverseXY = -xy / determinant; inverseYY = xx / determinant
             normalizer = -log(2 * Double.pi) - 0.5 * log(determinant)
+            degrees = key.degrees
         }
 
         func score(_ point: CGPoint) -> Double {
             let dx = Double(point.x - frame.midX) / pitchX - offsetX
             let dy = Double(point.y - frame.midY) / pitchY - offsetY
-            return -0.5 * max(0, inverseXX * dx * dx + 2 * inverseXY * dx * dy + inverseYY * dy * dy) + normalizer
+            let distance = max(0, inverseXX * dx * dx + 2 * inverseXY * dx * dy + inverseYY * dy * dy)
+            return normalizer - (degrees / 2 + 1) * log1p(distance / degrees)
         }
     }
 
@@ -62,11 +62,7 @@ nonisolated enum KeyboardLetterMap {
         let alphabet = SpatialWordLexicon.alphabet
         let holders = alphabet.map { holder(of: $0) }
         let frames = holders.map { word.layout.key(.character(String($0)))?.frame }
-        let keys = holders.map {
-            calibration?.keys[$0] ?? SpatialTouchCalibration.Key(
-                offsetX: 0, offsetY: 0, sigmaX: SpatialTouchCalibration.staticSigma,
-                sigmaY: SpatialTouchCalibration.staticSigma)
-        }
+        let keys = holders.map { calibration?.keys[$0] ?? SpatialTouchCalibration.prior }
         let gap = word.layout.metrics.gap, rowGap = word.layout.metrics.rowGap
         var frozen = [FrozenKey?](repeating: nil, count: alphabet.count)
         for index in alphabet.indices {

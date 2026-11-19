@@ -41,7 +41,7 @@ final class StatisticsModel {
             usage = nil
             problem = "Statistics are unavailable. Typr could not read its shared storage. Try again or reset statistics."
         }
-        let snapshot = KeyboardLearningStore.readSnapshot(directory: directory, defaults: defaults, physicalTouch: true)
+        let snapshot = KeyboardLearningStore.readSnapshot(directory: directory, defaults: defaults)
         learning = snapshot.isPersistent && snapshot.modelAvailable ? snapshot : nil
     }
     func presentationDate(at date: Date) -> Date {

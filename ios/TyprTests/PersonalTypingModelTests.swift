@@ -51,27 +51,29 @@ final class PersonalTypingModelTests: XCTestCase {
         XCTAssertEqual(model.summary.effectiveTouchCount, 256)
     }
 
-    func testThresholdShrinkageAndCalibrationClamps() throws {
+    func testFirstLabelShrinkageAndSafetyBoundsOnly() throws {
         let model = PersonalTypingModel()
         XCTAssertNil(model.calibration(for: layout))
         // iikb's priors: the first trusted label already counts, its centre worth one tap.
         model.learn([try label(0.4)], layout: layout, source: .keep)
         var key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
-        XCTAssertEqual(try stats(model).calibration.offsetX, 0.2, accuracy: 1e-12)
         XCTAssertEqual(key.offsetX, 0.2, accuracy: 1e-12, "no fast drift before the first pooled label")
-        XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
+        XCTAssertTrue(SpatialTouchCalibration.scaleRange(degrees: key.degrees).contains(key.sigmaX))
         model.learn(Array(repeating: try label(0.9), count: 300), layout: layout, source: .keep)
         key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
         XCTAssertEqual(key.offsetX, SpatialTouchCalibration.maxOffset)
-        XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
+        XCTAssertTrue(SpatialTouchCalibration.scaleRange(degrees: key.degrees).contains(key.sigmaX))
         model.resetFastAim()
-        XCTAssertEqual(model.calibration(for: layout)?.keys["a"]?.sigmaX, SpatialTouchCalibration.sigmaRange.lowerBound)
+        let steady = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
+        XCTAssertEqual(steady.sigmaX, SpatialTouchCalibration.scaleRange(degrees: steady.degrees).lowerBound,
+                       accuracy: 1e-12)
         model.reset()
         for _ in 0..<150 {
             model.learn([try label(-0.9), try label(0.9)], layout: layout, source: .keep)
         }
-        XCTAssertEqual(model.calibration(for: layout)?.keys["a"]?.sigmaX, 0.50)
-        XCTAssertTrue(try XCTUnwrap(model.summary.layouts.first?.keys.first).isCalibrated)
+        let wide = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
+        XCTAssertGreaterThan(wide.sigmaX, 0.50)
+        XCTAssertLessThan(wide.sigmaX, SpatialTouchCalibration.scaleRange(degrees: wide.degrees).upperBound)
     }
 
     func testRejectsNonFiniteOutlierUnknownKeyAndUnsupportedLayout() throws {

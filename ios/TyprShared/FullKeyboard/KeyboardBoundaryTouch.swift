@@ -64,10 +64,6 @@ nonisolated struct KeyboardBoundaryTouch: Equatable, Sendable {
         }
     }
 
-    /// Predictive Space prior: uniform horizontal mass across the bar, Gaussian vertical
-    /// aim around its centre (.35 row pitch), or around the learned Space aim. Unlike a giant
-    /// circular key Gaussian this does not prefer the bar's centre over an ordinary
-    /// left/right thumb Space.
     static func spaceDensity(_ point: CGPoint, layout: KeyboardLayout,
                              calibration: SpatialTouchCalibration? = nil) -> Double? {
         guard point.x.isFinite, point.y.isFinite, let space = layout.key(.space) else { return nil }
@@ -78,11 +74,9 @@ nonisolated struct KeyboardBoundaryTouch: Equatable, Sendable {
               point.x <= space.frame.maxX + layout.metrics.gap else { return nil }
         let row = Double((point.y - space.frame.midY) / pitchY)
         guard abs(row) <= 1 else { return nil }
-        let aim = calibration?.space
-        let sigma = aim?.sigmaY ?? SpatialTouchCalibration.staticSigma
-        let y = row - (aim?.offsetY ?? 0)
+        let aim = calibration?.space ?? SpatialTouchCalibration.prior
         let width = Double((space.frame.width + 2 * layout.metrics.gap) / pitchX)
-        return -0.5 * y * y / (sigma * sigma) - log(sqrt(2 * Double.pi) * sigma * width)
+        return aim.logDensityY(row) - log(width)
     }
 
     static func letterDensity(_ point: CGPoint, key: KeyboardKey, layout: KeyboardLayout,
@@ -91,8 +85,6 @@ nonisolated struct KeyboardBoundaryTouch: Equatable, Sendable {
         let x = Double((point.x - key.frame.midX) / (key.frame.width + layout.metrics.gap))
         let y = Double((point.y - key.frame.midY) / (key.frame.height + layout.metrics.rowGap))
         guard x.isFinite, y.isFinite, abs(x) <= 1, abs(y) <= 1 else { return nil }
-        let sigma = SpatialTouchCalibration.staticSigma
-        let density = calibration?.keys[letter] ?? .init(offsetX: 0, offsetY: 0, sigmaX: sigma, sigmaY: sigma)
-        return density.logDensity(x: x, y: y)
+        return (calibration?.keys[letter] ?? SpatialTouchCalibration.prior).logDensity(x: x, y: y)
     }
 }
