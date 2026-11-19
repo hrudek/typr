@@ -197,7 +197,7 @@ final class PersonalTypingModel {
                   Set(rejected).count == rejected.count else { return nil }
             for (id, layout) in layouts {
                 let signature = layout.signature
-                guard id == signature.id, ["portrait", "landscape"].contains(signature.orientation),
+                guard id == signature.id, KeyboardOrientation(rawValue: signature.orientation) != nil,
                       (8...4096).contains(signature.widthBucket), signature.widthBucket % 8 == 0,
                       layout.lastUpdated.timeIntervalSinceReferenceDate.isFinite,
                       !layout.keys.isEmpty || layout.space != nil, layout.keys.count <= 26,

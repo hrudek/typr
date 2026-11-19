@@ -299,6 +299,29 @@ final class KeyboardLearningStoreTests: XCTestCase {
         XCTAssertLessThan(loaded.kept.count + loaded.counts.count, state.kept.count + state.counts.count)
     }
 
+    func testTapsLearnedOnTheWideLayoutsSaveAndLoad() throws {
+        let fixture = try Fixture(); defer { fixture.clean() }
+        let model = PersonalTypingModel()
+        let layouts = [
+            KeyboardLayout(width: 669, orientation: .widePortrait),
+            KeyboardLayout(width: 801, orientation: .wideLandscape),
+        ]
+        for layout in layouts {
+            let g = try XCTUnwrap(layout.key(.character("g")))
+            let outcome = model.learn([TouchLabel(point: CGPoint(x: g.frame.midX, y: g.frame.midY), letter: "g")],
+                                      layout: layout, source: .undo)
+            XCTAssertEqual(outcome.accepted, 1, "\(layout.orientation)")
+        }
+        XCTAssertNotNil(model.state.validated())
+        var diagnostics = KeyboardDiagnostics()
+        XCTAssertTrue(fixture.store().save(model: model.state, diagnostics: &diagnostics))
+        let loaded = try XCTUnwrap(fixture.store().load().0)
+        XCTAssertNotNil(loaded.validated())
+        for layout in layouts {
+            XCTAssertNotNil(loaded.layouts[KeyboardLayoutSignature(layout).id]?.keys["g"], "\(layout.orientation)")
+        }
+    }
+
     func testWriteFailureAndInvalidStateAreReported() throws {
         let fixture = try Fixture(); defer { fixture.clean() }
         let file = fixture.file("not-a-directory")

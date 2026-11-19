@@ -58,7 +58,7 @@ final class KeyboardKeyPlaneView: UIView {
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         let layout = engine.layout
-        let isLandscape = layout.orientation == .landscape
+        let isPhoneLandscape = layout.orientation == .landscape
         let radius = layout.metrics.cornerRadius
         let pressed = engine.pressedKinds
         let preview = layout.showsBalloons ? engine.previewKey?.kind : nil
@@ -85,7 +85,7 @@ final class KeyboardKeyPlaneView: UIView {
                 let label = engine.displayLabel(for: key)
                 let isWidePunctuation = key.frame.width > layout.letterWidth * 1.2
                 let isUpperLetter = layout.layer == .letters && engine.isUppercase && label.first?.isUppercase == true
-                let baseSize: CGFloat = if isLandscape {
+                let baseSize: CGFloat = if isPhoneLandscape {
                     isUpperLetter ? 18 : 19
                 } else if isWidePunctuation || isUpperLetter {
                     21
@@ -93,7 +93,7 @@ final class KeyboardKeyPlaneView: UIView {
                     22.5
                 }
                 let fontSize = isMechanical ? baseSize * 0.93 : baseSize
-                let yOffset: CGFloat = isUpperLetter ? 0 : (isLandscape ? -0.5 : -1)
+                let yOffset: CGFloat = isUpperLetter ? 0 : (isPhoneLandscape ? -0.5 : -1)
                 drawText(
                     label,
                     in: inkFrame(key.frame),
@@ -125,11 +125,11 @@ final class KeyboardKeyPlaneView: UIView {
                         symbol,
                         in: inkFrame(key.frame),
                         color: ink,
-                        pointSize: isLandscape ? 15.5 : 17.5,
+                        pointSize: isPhoneLandscape ? 15.5 : 17.5,
                         weight: activeAction ? .medium : symbolWeight
                     )
                 } else {
-                    drawText(returnLabel, in: inkFrame(key.frame), font: .systemFont(ofSize: isLandscape ? 14.5 : 15.5, weight: labelWeight), color: ink)
+                    drawText(returnLabel, in: inkFrame(key.frame), font: .systemFont(ofSize: isPhoneLandscape ? 14.5 : 15.5, weight: labelWeight), color: ink)
                 }
             case .shift:
                 let state = engine.shift.state
@@ -141,27 +141,27 @@ final class KeyboardKeyPlaneView: UIView {
                 case .on: "shift.fill"
                 case .locked: "capslock.fill"
                 }
-                drawSymbol(symbol, in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isLandscape ? 16 : 18, weight: symbolWeight)
+                drawSymbol(symbol, in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isPhoneLandscape ? 16 : 18, weight: symbolWeight)
             case .delete:
                 let lit = pressed.contains(.delete)
                 context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
                 let symbol = engine.deleteUndoes ? "arrow.uturn.backward" : lit ? "delete.left.fill" : "delete.left"
-                drawSymbol(symbol, in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isLandscape ? 16 : 18, weight: symbolWeight)
+                drawSymbol(symbol, in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isPhoneLandscape ? 16 : 18, weight: symbolWeight)
             case .layerSwitch:
                 let lit = pressed.contains(key.kind)
                 context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawText(key.label, in: inkFrame(key.frame), font: .systemFont(ofSize: isLandscape ? 14.5 : 15.5, weight: labelWeight), color: palette.keyGlyph)
+                drawText(key.label, in: inkFrame(key.frame), font: .systemFont(ofSize: isPhoneLandscape ? 14.5 : 15.5, weight: labelWeight), color: palette.keyGlyph)
             case .globe:
                 let lit = pressed.contains(.globe)
                 context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawSymbol("globe", in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isLandscape ? 16 : 18, weight: symbolWeight)
+                drawSymbol("globe", in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isPhoneLandscape ? 16 : 18, weight: symbolWeight)
             case .globeSpacer:
                 context.fillKeycap(key.frame, palette: palette, fill: palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawSymbol("globe", in: inkFrame(key.frame), color: palette.keyGlyph.withAlphaComponent(0.35), pointSize: isLandscape ? 16 : 18, weight: symbolWeight)
+                drawSymbol("globe", in: inkFrame(key.frame), color: palette.keyGlyph.withAlphaComponent(0.35), pointSize: isPhoneLandscape ? 16 : 18, weight: symbolWeight)
             }
         }
     }
