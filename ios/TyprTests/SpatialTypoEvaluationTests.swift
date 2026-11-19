@@ -72,11 +72,6 @@ final class SpatialTypoEvaluationTests: XCTestCase {
         try evaluate(seed: 0x545950525f503032, sigma: 0.22, half: 1)
     }
 
-    /// Automatic decisions pinned per half and bucket ("<language> <class> <A|B>") as
-    /// (minimum correct autos, maximum wrong autos), measured on Linux at dev 1a1aca5b; unlisted
-    /// buckets are (0, 0). Since #245 (iikb rule: the likeliest word beating the literal wins, no
-    /// margins), ambiguous structural typos and some OOV strings can lose to a frequent word,
-    /// so wrong autos are capped at today's count instead of zero.
     private static let pinned: [[String: (correct: Int, wrong: Int)]] = [
         ["de neighbour1 A": (4, 0), "de neighbour1 B": (4, 0), "de neighbour2 A": (4, 0), "de neighbour2 B": (4, 0),
          "de missing A": (0, 2), "de missing B": (2, 0), "de extra B": (3, 0),
@@ -91,8 +86,6 @@ final class SpatialTypoEvaluationTests: XCTestCase {
          "en transposition A": (1, 0), "en transposition B": (3, 0),
          "controls outside A": (0, 1), "controls outside B": (0, 1)]
     ]
-    /// Edit-aware (production) autos of the whole half before #245 (dev 11e859e7, same fixtures):
-    /// (correct, wrong).
     private static let baseline: [(correct: Int, wrong: Int)] = [(14, 0), (15, 0)]
 
     private func checkPinned(_ metrics: Metrics, _ bucket: String, half: Int) {
