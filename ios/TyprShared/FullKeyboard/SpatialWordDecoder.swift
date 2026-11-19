@@ -178,7 +178,7 @@ final class SpatialWordDecoder {
         }
     }
     nonisolated enum Refusal: String, CaseIterable, Sendable {
-        case incompleteSearch, noCandidate, belowMargin, ambiguous, editNeedsInvalidLiteral
+        case noCandidate, belowMargin, editNeedsInvalidLiteral
     }
     nonisolated enum AutoDecision: Sendable { case replace(Candidate), refuse(Refusal) }
     nonisolated enum Unavailable: Equatable, Sendable { case evidence, resource }
@@ -226,19 +226,16 @@ final class SpatialWordDecoder {
         }
 
         /// Dictionary/casing, keeps, rejected pairs and field guards remain the caller's job.
+        /// As in iikb's `Corrector.correction`: the likeliest whole word that beats the literal
+        /// wins, without a fixed margin or an ambiguity gap, and the best word found so far counts
+        /// when the search budget ran out. A valid literal yields only to a word its taps fit better.
         func automaticDecision(literalIsValid: Bool, preferring isPreferred: ((Candidate) -> Bool)? = nil) -> AutoDecision {
-            guard complete else { return .refuse(.incompleteSearch) }
             let candidates = ranked(preferring: isPreferred)
-            guard let best = candidates.first else { return .refuse(.noCandidate) }
-            guard !best.isCompletion else { return .refuse(.belowMargin) }
-            if best.edit != .none && literalIsValid { return .refuse(.editNeedsInvalidLiteral) }
-            guard best.score - literalScore >= 3,
-                  best.edit != .none || best.spatialScore - literalSpatialScore >= 2 else {
-                return .refuse(.belowMargin)
+            guard let best = candidates.first(where: { !$0.isCompletion }) else {
+                return .refuse(candidates.isEmpty ? .noCandidate : .belowMargin)
             }
-            guard candidates.count < 2 || rank(best, isPreferred) - rank(candidates[1], isPreferred) >= 1.6 else {
-                return .refuse(.ambiguous)
-            }
+            guard best.score > literalScore else { return .refuse(.belowMargin) }
+            if literalIsValid && best.spatialScore <= literalSpatialScore { return .refuse(.editNeedsInvalidLiteral) }
             return .replace(best)
         }
     }

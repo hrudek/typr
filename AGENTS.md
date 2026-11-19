@@ -38,7 +38,7 @@ commands: [.github/typr/README.md](.github/typr/README.md).
   stored values; the existing fallback for unknown values is enough.
 - No speculative abstractions: generalize only for two real implementations or a
   current test need.
-- The keyboard never touches network, speech model or microphone. Captured audio
+- The keyboard never touches the speech model or microphone. Captured audio
   is never persisted. Transcripts and logs stay out of Git, PRs and issues.
 - Never change bundle IDs, App Group, URL scheme, signing or secrets incidentally.
 - UI copy: sentence case, product name “Typr”.

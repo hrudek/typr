@@ -43,9 +43,10 @@ final class PersonalTypingAimTests: XCTestCase {
                 offsetX: 10, offsetY: -10, sigmaX: 0.3, sigmaY: 0.4, covarianceXY: xy)]).keys["a"])
             let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY
             let radius = hypot(xx - yy, 2 * key.covarianceXY)
-            XCTAssertGreaterThanOrEqual((xx + yy - radius) / 2, 0.22 * 0.22 - 1e-12)
+            let floor = SpatialTouchCalibration.sigmaRange.lowerBound
+            XCTAssertGreaterThanOrEqual((xx + yy - radius) / 2, floor * floor - 1e-12)
             XCTAssertLessThanOrEqual((xx + yy + radius) / 2, 0.25 + 1e-12)
-            XCTAssertGreaterThanOrEqual(xx * yy - key.covarianceXY * key.covarianceXY, pow(0.22, 4) - 1e-12)
+            XCTAssertGreaterThanOrEqual(xx * yy - key.covarianceXY * key.covarianceXY, pow(floor, 4) - 1e-12)
             XCTAssertTrue(key.logDensity(x: 1, y: -1).isFinite)
         }
         XCTAssertTrue(SpatialTouchCalibration(keys: ["a": .init(offsetX: 0, offsetY: 0,
@@ -69,9 +70,10 @@ final class PersonalTypingAimTests: XCTestCase {
         let signature = KeyboardLayoutSignature(grid)
         var layout = PersonalTypingModel.LayoutStats(signature: signature, lastUpdated: Date())
         layout.keys["a"] = .init(n: 20, varianceX: 0.08, varianceY: 0.06, covarianceXY: 0.03)
-        XCTAssertEqual(layout.pooled.sigmaX * layout.pooled.sigmaX, (20 * 0.04 + 20 * 0.08) / 40, accuracy: 1e-12)
-        XCTAssertEqual(layout.pooled.covarianceXY, 0.015, accuracy: 1e-12)
-        XCTAssertEqual(layout.slowKey(layout.keys["a"]).covarianceXY, 0.0225, accuracy: 1e-12)
+        // The pooled prior is worth ten taps (iikb's ν₀), so 20 labels outweigh it two to one.
+        XCTAssertEqual(layout.pooled.sigmaX * layout.pooled.sigmaX, (10 * 0.04 + 20 * 0.08) / 30, accuracy: 1e-12)
+        XCTAssertEqual(layout.pooled.covarianceXY, 0.02, accuracy: 1e-12)
+        XCTAssertEqual(layout.slowKey(layout.keys["a"]).covarianceXY, 2.0 / 3 * 0.03 + 1.0 / 3 * 0.02, accuracy: 1e-12)
         for i in 0..<120 {
             let x = Double(i % 7 - 3) * 0.15
             model.learn([label("a", x, x * 0.8)], layout: grid, source: .keep)
@@ -80,7 +82,6 @@ final class PersonalTypingAimTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(keys["a"]).covarianceXY, 0.02)
         XCTAssertGreaterThan(try XCTUnwrap(keys["z"]).covarianceXY, 0.02, "pooled covariance reaches an unseen key")
         let sparse = PersonalTypingModel()
-        sparse.learn(Array(repeating: label("e", 0.2, 0.1), count: 19), layout: grid, source: .keep)
         XCTAssertNil(sparse.calibration(for: grid))
         sparse.learn([label("t", 0.2, 0.1)], layout: grid, source: .keep)
         XCTAssertGreaterThan(try XCTUnwrap(sparse.calibration(for: grid)?.keys["z"]).offsetX, 0.05)

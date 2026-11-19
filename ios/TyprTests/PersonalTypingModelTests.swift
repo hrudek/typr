@@ -53,21 +53,19 @@ final class PersonalTypingModelTests: XCTestCase {
 
     func testThresholdShrinkageAndCalibrationClamps() throws {
         let model = PersonalTypingModel()
-        model.learn(Array(repeating: try label(0.4), count: 19), layout: layout, source: .keep)
         XCTAssertNil(model.calibration(for: layout))
+        // iikb's priors: the first trusted label already counts, its centre worth one tap.
         model.learn([try label(0.4)], layout: layout, source: .keep)
         var key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
-        // Slow sufficient statistics retain the original shrinkage reference;
-        // fast/pooled inference can already move further after sustained evidence.
         XCTAssertEqual(try stats(model).calibration.offsetX, 0.2, accuracy: 1e-12)
-        XCTAssertEqual(key.offsetX, 0.2, accuracy: 1e-12, "no fast drift before 20 pooled labels")
+        XCTAssertEqual(key.offsetX, 0.2, accuracy: 1e-12, "no fast drift before the first pooled label")
         XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
         model.learn(Array(repeating: try label(0.9), count: 300), layout: layout, source: .keep)
         key = try XCTUnwrap(model.calibration(for: layout)?.keys["a"])
         XCTAssertEqual(key.offsetX, SpatialTouchCalibration.maxOffset)
         XCTAssertTrue(SpatialTouchCalibration.sigmaRange.contains(key.sigmaX))
         model.resetFastAim()
-        XCTAssertEqual(model.calibration(for: layout)?.keys["a"]?.sigmaX, 0.22)
+        XCTAssertEqual(model.calibration(for: layout)?.keys["a"]?.sigmaX, SpatialTouchCalibration.sigmaRange.lowerBound)
         model.reset()
         for _ in 0..<150 {
             model.learn([try label(-0.9), try label(0.9)], layout: layout, source: .keep)

@@ -25,7 +25,8 @@ nonisolated final class SpatialWordRanking {
     static let maxLetters = SpatialWordDecoder.maxLetters
     static let maxGenerated = SpatialWordDecoder.maxGenerated
     static let editSuggestionLimit = SpatialWordDecoder.editSuggestionLimit
-    private static let priorWeight = 0.35
+    /// Full P(taps | word) × P(word), as iikb's decoder scores words.
+    private static let priorWeight = 1.0
     private static let editPenalty = log(0.01)
     private static let boundSlack = 1e-10
     private static let corpusMemoLimit = 4_096
@@ -234,7 +235,9 @@ nonisolated final class SpatialWordRanking {
         }
         func retain(_ candidate: Candidate) {
             guard candidate.word != literal else { return }
-            guard candidate.score > literalScore else { retainBelow(candidate); return }
+            // A tie with the literal (within rounding) keeps the literal: with full prior weight a
+            // stray tap's density can make a word score exactly as the literal does.
+            guard candidate.score > literalScore + Self.scoreQuantum else { retainBelow(candidate); return }
             below.removeValue(forKey: candidate.word)
             if let previous = found[candidate.word], !Self.precedes(candidate, previous) { return }
             found[candidate.word] = candidate

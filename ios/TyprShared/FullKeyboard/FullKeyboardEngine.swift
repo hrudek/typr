@@ -309,13 +309,13 @@ final class FullKeyboardEngine {
     }
 
     /// For callers that refresh right afterwards anyway. Applied manual choices clear the
-    /// word without resetting the fast aggregate aim just trained by independent feedback.
-    private func invalidateTouchEvidence(resetFastAim: Bool = true) {
+    /// word without ending the trusted word sequence.
+    private func invalidateTouchEvidence(endsWordSequence: Bool = true) {
         textRevision &+= 1
         suggestionWorker.cancel()
         cancelPendingSwipe()
         swipeWord = nil
-        autocorrect.discardEvidence(resetFastAim: resetFastAim)
+        autocorrect.discardEvidence(endsWordSequence: endsWordSequence)
         for id in touchOrder {
             touches[id]?.hasUnambiguousPoint = false
         }
@@ -468,7 +468,7 @@ final class FullKeyboardEngine {
             ? casedPrediction(suggestion, before: before).replacement : suggestion.replacement
         prepareStatisticsEdit()
         statistics?.suggestion(replacement, boundaryOriginal: suggestion.boundary?.original)
-        invalidateTouchEvidence(resetFastAim: false)
+        invalidateTouchEvidence(endsWordSequence: false)
         if let original {
             for _ in 0..<original.count {
                 target.deleteBackward()
@@ -891,7 +891,6 @@ final class FullKeyboardEngine {
         let key = touch.key
         guard let character = key.character else { return }
         var attributed = key
-        var deferred: KeyboardKey?
         // Rollover commits previous letters first; their didEdit already prepared this map.
         // Unreported context/model/config changes or invalidated held geometry stay literal.
         if touch.hasUnambiguousPoint, touch.evidenceLayout == layout, !shift.isUppercase,
@@ -903,8 +902,6 @@ final class FullKeyboardEngine {
                 let prefix = PersonalLexiconSnapshot.normalize(current.token ?? "")
                 attributed = attribution.map.attributedKey(at: touch.point, geometric: key, layout: layout,
                                                            prefix: prefix)
-                deferred = attribution.map.deferredKey(at: touch.point, geometric: key, layout: layout,
-                                                       prefix: prefix)
             }
         }
         let inserted = attributed.character ?? character
@@ -919,8 +916,7 @@ final class FullKeyboardEngine {
         autocorrect.clearPendingUndo()
         if touch.hasUnambiguousPoint, touch.evidenceLayout == layout {
             typeCharacter(text, sample: .init(text: text, point: touch.point, key: key,
-                                              attributedKey: attributed == key ? nil : attributed,
-                                              deferredKey: deferred))
+                                              attributedKey: attributed == key ? nil : attributed))
         } else {
             typeCharacter(text)
         }
@@ -1086,7 +1082,7 @@ final class FullKeyboardEngine {
         if let sample {
             autocorrect.touchInput.append(text: text, point: sample.point, key: sample.key,
                                          layout: layout, before: before, after: target.documentContextBeforeInput,
-                                         attributedKey: sample.attributedKey, deferredKey: sample.deferredKey)
+                                         attributedKey: sample.attributedKey)
         } else {
             autocorrect.touchInput.clear()
             if text.last?.isLetter != true { autocorrect.touchInput.clearAtBoundary() }

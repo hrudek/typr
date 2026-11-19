@@ -109,7 +109,8 @@ final class KeyboardLearningSession {
     /// Read-only frozen full-covariance/affine-aim projection; `nil` while off or below threshold.
     func calibration(for layout: KeyboardLayout) -> SpatialTouchCalibration? { model.calibration(for: layout) }
 
-    /// Fast aim never crosses host/field/layout/lifecycle discontinuities. Slow state stays.
+    /// Starts the fast aim over and bumps the generation. Field and host changes keep the aim;
+    /// the learning switch and app resets clear it in the model. Tests use this seam.
     func resetFastAim() {
         breakWordSequence()
         // Repeated evidence invalidation/polls with no active fast state are no-ops.

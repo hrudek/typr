@@ -96,7 +96,7 @@ final class SystemTextChecker: TextChecking {
     }
 }
 
-/// Cautious on-device suggestions and replace-on-space engine combining `UILexicon`, deterministic
+/// On-device suggestions and replace-on-space engine combining `UILexicon`, deterministic
 /// rules, bounded spatial decoding, system spelling and the session's personal protections.
 @MainActor
 final class AutocorrectEngine {
@@ -245,9 +245,11 @@ final class AutocorrectEngine {
     /// No adaptation without a trained model, enabled learning/autocorrect or all selected packs.
     func keyMap(layout: KeyboardLayout, context: String?, permitsCorrection: Bool) -> KeyboardKeyMap? {
         let policy = KeyboardKeyMap.Policy(hitAreas)
+        // A policy reading from the first letter maps a word's start after whitespace too.
+        let startsWord = policy.minimumPrefix == 0 && (context == "" || (context?.last.map(\.isWhitespace) ?? false))
         guard isEnabled, learning.isLearningEnabled, permitsCorrection,
               layout.layer == .letters, layout.field == .text,
-              let token = Self.currentToken(in: context), token.utf8.count <= 256,
+              let token = Self.currentToken(in: context) ?? (startsWord ? "" : nil), token.utf8.count <= 256,
               !protectedLexicon.contains(token),
               (policy.minimumPrefix...31).contains(token.count),
               token.dropFirst().allSatisfy({ $0.isLowercase }),
@@ -256,16 +258,6 @@ final class AutocorrectEngine {
         return KeyboardKeyMap.make(layout: layout, prefix: prefix, calibration: calibration,
                                    languages: suggestionLanguages, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
                                    personal: learning.personalPriors.scan.completions, policy: policy)
-    }
-
-    private func isKnownWord(_ word: String) -> Bool {
-        let normalized = PersonalLexiconSnapshot.normalize(word)
-        let lexicons = spatialDecoder?.resourceSnapshot ?? [:]
-        let personal = learning.personalPriors
-        return suggestionLanguages.contains { lexicons[$0]?.logPrior(for: normalized) != nil }
-            || personal.kept.contains(normalized)
-            || (personal.counts[normalized] ?? 0) >= PersonalCompletionIndex.minimumCount
-            || protectedLexicon.contains(word)
     }
 
     /// Cheap gate for after-separator corpus predictions: autocorrect on, prepared packs for
@@ -497,10 +489,12 @@ final class AutocorrectEngine {
     }
 
     /// Cursor, field, layout or host text changed: no tap, decode or pending word survives.
-    /// Only an applied manual word choice preserves the just-trained fast aggregate aim.
-    func discardEvidence(resetFastAim: Bool = true) {
-        if resetFastAim {
-            learning.resetFastAim()
+    /// The fast aggregate aim stays, as iikb keeps how you aim lately across fields and apps;
+    /// learning on another layout starts that layout's own. Only an applied manual word choice
+    /// keeps the word sequence and its pending pair.
+    func discardEvidence(endsWordSequence: Bool = true) {
+        if endsWordSequence {
+            learning.breakWordSequence()
             pendingPairChoice = nil
         }
         touchInput.clear()
@@ -1328,23 +1322,18 @@ final class AutocorrectEngine {
             return Decision(refusal: .refusedLiteralValid)
         }
 
-        // 3. Context guards: inferred corrections only for plain words of 3+ letters.
+        // 3. Context guards: inferred corrections only for plain words of 2+ letters.
         guard !isAllCaps else { return Decision(refusal: .refusedProtected) }
-        guard token.count >= 3, !token.contains("'"), !token.contains("’") else { return Decision() }
+        guard token.count >= 2, !token.contains("'"), !token.contains("’") else { return Decision() }
 
-        // 4. Protections: Contacts/lexicon terms and words valid in an enabled dictionary.
+        // 4. Protections: Contacts/lexicon terms. A word valid in an enabled dictionary is
+        //    replaced only when its taps fit another word better (iikb's rule), never by
+        //    the spelling fallback.
         guard !lexiconTermKeys.contains(lower) else { return Decision(refusal: .refusedProtected) }
-        guard !dictionaryAcceptsLiteral(token) else { return Decision(refusal: .refusedLiteralValid) }
+        let literalValid = dictionaryAcceptsLiteral(token)
 
-        if hitAreas == .adaptive, let evidence, evidence.text == token, let moved = evidence.adaptiveReading,
-           isKnownWord(moved) {
-            let decision = automatic(moved, token: token, kind: .autoSpatial, counter: .reattributedTaps,
-                                     alignment: (0..<token.count).map { Optional($0) })
-            if decision.text != nil { return decision }
-        }
-
-        // 5. Spatial decoder. Only a complete search may replace; a lowercase-typed German noun
-        //    (`haus`, valid as `Haus`) is protected from becoming a different word.
+        // 5. Spatial decoder. The best word found replaces, also when the budget ran out; a valid
+        //    literal (including a lowercase-typed German noun) yields only to better-fitting taps.
         var refusal: KeyboardDiagnostics.Counter?
         switch spatialOutcome(for: token, evidence: evidence, forSuggestions: forSuggestions) {
         case nil, .unavailable(.evidence)?:
@@ -1352,7 +1341,7 @@ final class AutocorrectEngine {
         case .unavailable(.resource)?:
             refusal = spatialDecoder?.isResourceLoading == true ? .resourceLoading : .refusedMissingResource
         case .result(let result)?:
-            switch result.automaticDecision(literalIsValid: false, preferring: isPreferredCandidate) {
+            switch result.automaticDecision(literalIsValid: literalValid, preferring: isPreferredCandidate) {
             case .replace(let best):
                 let spelling = spatialSpelling(best, token: token)
                 if spelling.validated {
@@ -1366,9 +1355,7 @@ final class AutocorrectEngine {
                 }
             case .refuse(let reason):
                 refusal = switch reason {
-                case .incompleteSearch: .refusedIncompleteSearch
-                case .ambiguous: .refusedAmbiguous
-                case .editNeedsInvalidLiteral: .refusedLiteralValid // Defensive: valid literals are guarded above.
+                case .editNeedsInvalidLiteral: .refusedLiteralValid
                 case .noCandidate, .belowMargin: .refusedBelowMargin
                 }
             }
@@ -1377,6 +1364,7 @@ final class AutocorrectEngine {
             // authorizes any inferred replacement.
             if !result.complete || result.geometryPrefersAlternative { return Decision(refusal: refusal) }
         }
+        if literalValid { return Decision(refusal: refusal ?? .refusedLiteralValid) }
 
         let fixes = preferredLanguage == .english ? [englishSpellingFix, germanSpellingFix]
             : [germanSpellingFix, englishSpellingFix]

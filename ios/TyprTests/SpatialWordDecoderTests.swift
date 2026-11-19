@@ -169,10 +169,14 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertNil(replacement(engine))
     }
 
-    func testValidLiteralKeepAndLanguageOffBlockAutomaticReplacement() {
+    func testValidLiteralYieldsOnlyToBetterTapsAndKeepOrLanguageOffBlockReplacement() {
+        // As in iikb: a valid word typed dead centre stays; its taps aimed at another word replace it.
         let valid = engine(valid: ["gello", "hello", "jello"])
-        track(evidence("gello", aimedAt: "hello"), in: valid)
+        track(evidence("gello", aimedAt: "gello"), in: valid)
         XCTAssertNil(replacement(valid))
+        let missed = engine(valid: ["gello", "hello", "jello"])
+        track(evidence("gello", aimedAt: "hello"), in: missed)
+        XCTAssertEqual(replacement(missed), "hello")
         let kept = engine()
         track(evidence("gello", aimedAt: "hello"), in: kept)
         kept.suppressAndKeep("gello")
@@ -198,7 +202,7 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertNil(replacement(engine, "hslko"), "lowercase frequency entry alone cannot establish noun casing")
     }
 
-    func testAmbiguityAndAcronymsNeverBecomeNewAutomaticFixes() {
+    func testAmbiguityPicksTheLikelierWordAndAcronymsStayLiteral() {
         let decoder = self.decoder()
         var word = evidence("uello", aimedAt: "hello")
         let h = word.layout.key(.character("h"))!.frame
@@ -207,10 +211,11 @@ final class SpatialWordDecoderTests: XCTestCase {
         word.samples[0] = .init(text: sample.text, point: CGPoint(x: (h.midX + j.midX) / 2, y: h.midY), key: sample.key)
         let result = decoder.decode(word, languages: [.english])
         XCTAssertEqual(result?.candidates.prefix(2).map(\.word), ["hello", "jello"])
-        XCTAssertNil(result?.automaticCandidate)
+        // No ambiguity gap: the likeliest word wins, as iikb's corrector picks it.
+        XCTAssertEqual(result?.automaticCandidate?.word, "hello")
         let engine = self.engine()
         track(word, in: engine)
-        XCTAssertNil(replacement(engine, "uello"))
+        XCTAssertEqual(replacement(engine, "uello"), "hello")
         engine.touchInput.clear()
         track(evidence("GELLO", aimedAt: "hello"), in: engine)
         XCTAssertNil(replacement(engine, "GELLO"))
@@ -258,18 +263,20 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertNil(manual.touchInput.evidence(beforeInput: manualTarget.text))
     }
 
-    func testPriorPromotedGeometricallyWorseNeighbourDoesNotVetoSpellingFallback() throws {
+    func testPriorPromotedNeighbourWinsBeforeTheSpellingFallback() throws {
+        // P(taps | word) × P(word): a far likelier word one key away wins although its key
+        // fits the tap worse, so the spelling fallback is not consulted.
         let source = SpatialWordDecoder(lexicons: [.english: lexicon([("help", 10_000_000), ("hello", 1)])])
         let word = evidence("helo", aimedAt: "helo")
         let result = try XCTUnwrap(source.decode(word, languages: [.english]))
         XCTAssertEqual(result.candidates.first?.word, "help")
         XCTAssertFalse(result.geometryPrefersAlternative)
-        XCTAssertNil(result.automaticCandidate)
+        XCTAssertEqual(result.automaticCandidate?.word, "help")
         let ac = AutocorrectEngine(checker: SpatialChecker(valid: ["hello", "help"], guesses: ["hello"]),
                                    spatialDecoder: source)
         track(word, in: ac)
-        XCTAssertEqual(replacement(ac, "helo"), "hello")
-        XCTAssertEqual(ac.learning.diagnostics[.autoSpellingFallback], 1)
+        XCTAssertEqual(replacement(ac, "helo"), "help")
+        XCTAssertEqual(ac.learning.diagnostics[.autoSpellingFallback], 0)
     }
 
     func testEditAutomaticCandidatePrecedesDifferentSpellingGuess() throws {
@@ -327,7 +334,8 @@ final class SpatialWordDecoderTests: XCTestCase {
 
     private func editSuggestionEngine(valid: Set<String> = ["hello"]) -> AutocorrectEngine {
         // The large German corpus keeps the English absent-word floor as the literal's prior.
-        let source = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 10_000), ("world", 1)]),
+        // Prior odds of 50 do not pay for one edit (log .01), so "hello" stays below the literal.
+        let source = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 50), ("world", 1)]),
                                                    .german: lexicon([("morgen", 1_000_000)])])
         return AutocorrectEngine(checker: SpatialChecker(valid: valid), spatialDecoder: source)
     }
@@ -345,6 +353,19 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertFalse(slots[1].isCompletion)
         XCTAssertNil(replacement(ac, "helo"), "edit suggestions are never automatic")
         XCTAssertEqual(ac.learning.diagnostics[.refusedBelowMargin], 1)
+    }
+
+    func testAboveLiteralStructuralCandidateReplacesAutomatically() throws {
+        // Prior odds above 100 pay for one edit: iikb reads "helo" as "hello" on Space.
+        let source = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 10_000), ("world", 1)]),
+                                                   .german: lexicon([("morgen", 1_000_000)])])
+        let ac = AutocorrectEngine(checker: SpatialChecker(valid: ["hello"]), spatialDecoder: source)
+        let word = evidence("helo", aimedAt: "helo")
+        let result = try XCTUnwrap(source.decode(word, languages: [.english]))
+        XCTAssertEqual(result.candidates.first?.word, "hello")
+        track(word, in: ac)
+        XCTAssertEqual(replacement(ac, "helo"), "hello")
+        XCTAssertEqual(ac.learning.diagnostics[.autoSpatialEdit], 1)
     }
 
     func testEditSuggestionsAreSuppressedForTrustedLiterals() {
@@ -526,8 +547,9 @@ final class SpatialWordDecoderTests: XCTestCase {
         let ac = AutocorrectEngine(checker: SpatialChecker(valid: [guess], guesses: [guess]), spatialDecoder: source)
         XCTAssertFalse(try XCTUnwrap(source.decode(word, languages: [.english])).complete)
         track(word, in: ac)
+        // The budget ran out before any word beat the literal; the fallback stays closed.
         XCTAssertNil(replacement(ac, token))
-        XCTAssertEqual(ac.learning.diagnostics[.refusedIncompleteSearch], 1)
+        XCTAssertEqual(ac.learning.diagnostics[.refusedBelowMargin], 1)
         XCTAssertEqual(ac.learning.diagnostics[.autoSpellingFallback], 0)
     }
 
@@ -615,9 +637,9 @@ final class SpatialWordDecoderTests: XCTestCase {
 
     func testStructuralCandidatesStillNeedToBeatTheLiteral() throws {
         // A centred missing-letter typo has no geometric gain over the literal.
-        // Realistic prior ratios do not pay for log(.01); this is not search failure.
+        // Prior odds below 100 do not pay for log(.01); this is not search failure.
         let word = evidence("helo", aimedAt: "helo")
-        let conservative = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 10_000), ("world", 1)])])
+        let conservative = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 50), ("world", 1)])])
         let result = try XCTUnwrap(conservative.decode(word, languages: [.english]))
         XCTAssertTrue(result.complete)
         XCTAssertTrue(result.candidates.isEmpty)
@@ -630,11 +652,11 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertFalse(result.geometryPrefersAlternative)
         let staticResult = try XCTUnwrap(conservative.decode(word, languages: [.english], allowsEdits: false))
         XCTAssertTrue(staticResult.editSuggestions.isEmpty)
-        let valid = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 10_000), ("helo", 1)])])
+        let valid = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 50), ("helo", 1)])])
         XCTAssertTrue(try XCTUnwrap(valid.decode(word, languages: [.english])).editSuggestions.isEmpty,
                       "a corpus-valid literal gets no below-literal edit suggestions")
-        let several = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 10_000), ("helio", 5_000),
-                                                                       ("helot", 2_000), ("world", 1)])])
+        let several = SpatialWordDecoder(lexicons: [.english: lexicon([("hello", 50), ("helio", 25),
+                                                                       ("helot", 10), ("world", 1)])])
         XCTAssertEqual(try XCTUnwrap(several.decode(word, languages: [.english])).editSuggestions.map(\.word),
                        ["hello", "helio"], "at most editSuggestionLimit, best first")
         // Window: more than one edit penalty below the literal (small German corpus sets the floor).
@@ -645,7 +667,7 @@ final class SpatialWordDecoderTests: XCTestCase {
         let suggested = try XCTUnwrap(stronger.decode(word, languages: [.english]))
         XCTAssertTrue(suggested.complete)
         XCTAssertEqual(suggested.candidates.first?.word, "hello")
-        XCTAssertNil(suggested.automaticCandidate, "beating literal is still not the 3-unit auto margin")
+        XCTAssertEqual(suggested.automaticCandidate?.word, "hello", "beating the literal is enough")
     }
 
     func testSubtreePriorIndexRequiresUniqueSpellingsPerNode() throws {
@@ -681,13 +703,21 @@ final class SpatialWordDecoderTests: XCTestCase {
             if case .refuse(let reason) = result.automaticDecision(literalIsValid: valid) { return reason }
             return nil
         }
+        // iikb's rule: the likeliest word that beats the literal wins, without margins or an
+        // ambiguity gap, and the best word found counts when the search budget ran out.
         let strong = candidate("hello", score: 4, spatial: 3)
-        XCTAssertEqual(refusal(result([strong], complete: false)), .incompleteSearch)
+        XCTAssertNil(refusal(result([strong], complete: false)))
         XCTAssertEqual(refusal(result([])), .noCandidate)
-        XCTAssertEqual(refusal(result([candidate("hello", score: 2.9, spatial: 3)])), .belowMargin)
-        XCTAssertEqual(refusal(result([candidate("hello", score: 4, spatial: 1.9)])), .belowMargin)
-        XCTAssertEqual(refusal(result([strong, candidate("jello", score: 2.5, spatial: 3)])), .ambiguous)
-        XCTAssertNil(refusal(result([strong, candidate("jello", score: 2.4, spatial: 3)])))
+        XCTAssertNil(refusal(result([candidate("hello", score: 0.1, spatial: 3)])))
+        XCTAssertNil(refusal(result([candidate("hello", score: 4, spatial: 0.1)])))
+        XCTAssertEqual(refusal(result([candidate("hello", score: 0, spatial: 3)])), .belowMargin)
+        XCTAssertNil(refusal(result([strong, candidate("jello", score: 3.9, spatial: 3)])))
+        let completion = Decoder.Candidate(word: "hellos", language: .english, score: 5, spatialScore: 3,
+                                           edit: .missingLetter(at: 4), alignment: [0, 1, 2, 3, nil])
+        XCTAssertEqual(refusal(result([completion])), .belowMargin, "completions never replace")
+        if case .replace(let best) = result([completion, strong]).automaticDecision(literalIsValid: false) {
+            XCTAssertEqual(best.word, "hello", "the best whole word behind a completion wins")
+        } else { XCTFail("whole word behind a completion") }
         let suggestionOnly = Decoder.Result(candidates: [], literalScore: 0, literalSpatialScore: 0,
                                             literalInLexicon: false, complete: true, visits: 1, generated: 1,
                                             editSuggestions: [candidate("hello", score: -1, spatial: 0, edit: .missingLetter(at: 1))])
@@ -696,11 +726,14 @@ final class SpatialWordDecoderTests: XCTestCase {
         let edited = candidate("hello", score: 4, spatial: -1, edit: .transposition(at: 1))
         XCTAssertEqual(refusal(result([edited]), valid: true), .editNeedsInvalidLiteral)
         XCTAssertNil(refusal(result([edited])))
+        // A valid literal yields only to taps that fit the other word better.
+        XCTAssertEqual(refusal(result([candidate("hello", score: 4, spatial: 0)]), valid: true), .editNeedsInvalidLiteral)
+        XCTAssertNil(refusal(result([candidate("hello", score: 4, spatial: 0.1)]), valid: true))
         XCTAssertFalse(result([candidate("hello", score: 4, spatial: -0.01)]).geometryPrefersAlternative)
         XCTAssertTrue(result([candidate("hello", score: 4, spatial: 0)]).geometryPrefersAlternative)
     }
 
-    func testPreferredLanguageWinsCloseCandidatesOnly() {
+    func testPreferredLanguageBreaksCloseCallsAndTheLiteralMustBeBeaten() {
         typealias Decoder = SpatialWordDecoder
         func candidate(_ word: String, _ language: Decoder.Language, score: Double) -> Decoder.Candidate {
             .init(word: word, language: language, score: score, spatialScore: 3, edit: .none, alignment: [0, 1, 2, 3])
@@ -715,18 +748,19 @@ final class SpatialWordDecoderTests: XCTestCase {
             return nil
         }
         let close = [candidate("work", .english, score: 5), candidate("wird", .german, score: 4.5)]
-        XCTAssertNil(decision(close, preferring: nil))
+        XCTAssertEqual(decision(close, preferring: nil), "work")
         XCTAssertEqual(decision(close, preferring: .english), "work")
         XCTAssertEqual(decision(Array(close.reversed()), preferring: .english), "work")
         let germanAhead = [candidate("wird", .german, score: 5), candidate("work", .english, score: 4.5)]
-        XCTAssertNil(decision(germanAhead, preferring: nil))
+        XCTAssertEqual(decision(germanAhead, preferring: nil), "wird")
         XCTAssertEqual(decision(germanAhead, preferring: .german), "wird")
-        XCTAssertNil(decision(germanAhead, preferring: .english), "A small lead of the other language still refuses")
+        XCTAssertEqual(decision(germanAhead, preferring: .english), "work",
+                       "A small lead of the other language loses to the preferred one")
         let englishClear = [candidate("work", .english, score: 8), candidate("wird", .german, score: 4.5)]
         XCTAssertEqual(decision(englishClear, preferring: .german), "work")
-        XCTAssertEqual(decision([candidate("work", .english, score: 3.5)], preferring: .german), "work")
-        XCTAssertNil(decision([candidate("work", .english, score: 2.9)], preferring: .german),
-                     "The literal margin is unchanged")
+        XCTAssertEqual(decision([candidate("work", .english, score: 0.1)], preferring: .german), "work")
+        XCTAssertNil(decision([candidate("work", .english, score: 0)], preferring: .german),
+                     "The word must still beat the literal")
     }
 
     func testPersonalCandidatesPriorAndCalibrationNormalization() throws {
@@ -943,9 +977,9 @@ final class SpatialWordDecoderTests: XCTestCase {
                                 }
                             }
                         }
-                        let prior = 0.35 * log(Double(count) / total)
+                        let prior = 1.0 * log(Double(count) / total)
                         let score = max(dp[n][m][0], dp[n][m][1]) + prior
-                        if score > result.literalScore { expected[spelling] = max(expected[spelling] ?? -.infinity, score) }
+                        if score > result.literalScore + 1e-9 { expected[spelling] = max(expected[spelling] ?? -.infinity, score) }
                         if dp[n][m][1].isFinite {
                             structural[spelling] = max(structural[spelling] ?? -.infinity, dp[n][m][1] + prior)
                         }

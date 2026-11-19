@@ -91,7 +91,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         print("EVAL R2_3_literal undo_kept=0 restored_kept=0 fresh_settled_kept=1 post_decay_auto=0")
     }
 
-    func testManualFeedbackRetainsFastAimButExternalContextResetsIt() throws {
+    func testFastAimSurvivesManualFeedbackAndExternalContextChanges() throws {
         let session = KeyboardLearningSession()
         let (engine, _) = keyboard(session: session)
         let grid = engine.layout
@@ -104,7 +104,7 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         let slow = PersonalTypingModel(state: session.model.state).calibration(for: grid)
         XCTAssertNotEqual(session.calibration(for: grid), slow, "manual feedback must not immediately erase its own fast updates")
         engine.textDidChange()
-        XCTAssertEqual(session.calibration(for: grid), slow)
+        XCTAssertNotEqual(session.calibration(for: grid), slow, "a field or host change keeps how you aim lately")
     }
 
     func testValidLiteralSettlesOnlyWhenIntactAndNextLetterStarts() {

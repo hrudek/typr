@@ -5,7 +5,7 @@ nonisolated enum KeyboardDesign: String, CaseIterable, Sendable {
     case mechanical
 }
 
-/// Which key a tap near a key edge types. Standard by default.
+/// Which key a tap near a key edge types. Adaptive by default.
 nonisolated enum KeyboardHitAreas: String, CaseIterable, Sendable {
     case standard
     case adaptive
@@ -76,7 +76,7 @@ struct FullKeyboardSettings {
     }
 
     var hitAreas: KeyboardHitAreas {
-        get { defaults?.string(forKey: Key.hitAreas).flatMap(KeyboardHitAreas.init(rawValue:)) ?? .standard }
+        get { defaults?.string(forKey: Key.hitAreas).flatMap(KeyboardHitAreas.init(rawValue:)) ?? .adaptive }
         nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.hitAreas) }
     }
 }
