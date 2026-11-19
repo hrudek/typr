@@ -46,7 +46,7 @@ extension KeyboardBoundaryDecoderTests {
         for (name, languages, fixtures) in modes {
             let phrases = fixtures.enumerated().filter { EvaluationSample.includes($0.offset, every: 2) }.map(\.element)
             let ac = engine(sources, languages: languages)
-            var recall1 = 0, recall3 = 0, strip3 = 0, autos = 0
+            var recall1 = 0, recall3 = 0, strip3 = 0, autos = 0, wrongAutos = 0
             var visits = 0, cells = 0, cached = 0, exhausted = 0
             var timings: [Double] = []
             for phrase in phrases {
@@ -87,14 +87,20 @@ extension KeyboardBoundaryDecoderTests {
                 if chips.contains(where: { $0.replacement.lowercased() == phrase }) { strip3 += 1 }
                 XCTAssertTrue(chips.contains { $0.replacement.lowercased() == phrase },
                               "\(name): \(phrase), noisy=\(noisy), candidates=\(words), chips=\(chips.map(\.replacement))")
-                autos += chips.filter { $0.boundary != nil && $0.willAutoReplace }.count
+                let highlighted = chips.first { $0.boundary != nil && $0.willAutoReplace }?.replacement
+                let applied = ac.replacementOnSpace(beforeInput: noisy, field: .text, autocorrectionType: .default)
+                XCTAssertEqual(applied.flatMap { $0.replacement.contains(" ") ? $0.replacement : nil }, highlighted, noisy)
+                if let replacement = applied?.replacement, replacement.contains(" ") {
+                    autos += 1
+                    if replacement.lowercased() != phrase { wrongAutos += 1 }
+                }
             }
-            XCTAssertEqual(autos, 0)
+            XCTAssertEqual(wrongAutos, 0)
             XCTAssertEqual(recall3, phrases.count)
             XCTAssertEqual(strip3, phrases.count)
             XCTAssertGreaterThanOrEqual(recall1, EvaluationSample.isFull && name == "EN" ? 5 : phrases.count)
             print("EVAL R2_6_multipart_work language=\(name) visits_max=\(visits) visit_cap=\(KeyboardMultipartSegmenter.maximumVisits) cells_max=\(cells) cached_readings_max=\(cached) exhausted_calls=\(exhausted) payload_cap=\(KeyboardMultipartSegmenter.maximumPayloadBytes) mean_ms=\(timings.reduce(0,+)/Double(timings.count)) max_ms=\(timings.max() ?? 0) memory=payload_NOT_RSS")
-            print("EVAL R2_6_multipart language=\(name) n=\(phrases.count) recall1=\(recall1) recall3=\(recall3) strip3=\(strip3) autos=\(autos) errors=one_substitution_per_part NOT-iPhone")
+            print("EVAL R2_6_multipart language=\(name) n=\(phrases.count) recall1=\(recall1) recall3=\(recall3) strip3=\(strip3) autos=\(autos) wrong_autos=\(wrongAutos) errors=one_substitution_per_part NOT-iPhone")
         }
     }
 

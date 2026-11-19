@@ -36,7 +36,7 @@ extension KeyboardBoundaryTouchTests {
         for (language, languages, kinds) in groups {
             let ac = helper.engine(sources, languages: languages)
             for (kind, cases) in kinds {
-                var count = 0, recall1 = 0, recall3 = 0, chipRecall = 0, baseline3 = 0, automatic = 0
+                var count = 0, recall1 = 0, recall3 = 0, chipRecall = 0, baseline3 = 0, automatic = 0, wrongAutomatic = 0
                 var maximumQueries = 0, maximumBytes = 0
                 var times: [Double] = []
                 for fixture in cases {
@@ -63,7 +63,9 @@ extension KeyboardBoundaryTouchTests {
                         let suggestions = ac.suggestions(beforeInput: fixture.observed, field: .text,
                                                          autocorrectionType: .default)
                         if suggestions.contains(where: { $0.replacement.lowercased() == fixture.expected }) { chipRecall += 1 }
-                        automatic += suggestions.filter { $0.boundary != nil && $0.willAutoReplace }.count
+                        let autos = suggestions.filter { $0.boundary != nil && $0.willAutoReplace }
+                        automatic += autos.count
+                        wrongAutomatic += autos.filter { $0.replacement.lowercased() != fixture.expected }.count
                         maximumQueries = max(maximumQueries, result.lexicalQueries)
                         maximumBytes = max(maximumBytes, touch.payloadBytes)
                         XCTAssertEqual(result.candidates, Boundary.retrieve(request, lexicons: sources).candidates)
@@ -76,13 +78,13 @@ extension KeyboardBoundaryTouchTests {
                 times.sort()
                 let p50 = times[times.count / 2], p95 = times[min(times.count - 1, times.count * 95 / 100)]
                 let ratio1 = Double(recall1) / Double(count), ratio3 = Double(recall3) / Double(count)
-                print("EVAL P6_quality language=\(language) kind=\(kind) n=\(count) recall1=\(ratio1) recall3=\(ratio3) chip_recall3=\(Double(chipRecall) / Double(count)) baseline_recall3=\(Double(baseline3) / Double(count)) boundary_autos=\(automatic) p50_ms=\(p50) p95_ms=\(p95) max_ms=\(times.last!) lexical_queries_max=\(maximumQueries) touch_bytes_max=\(maximumBytes)")
+                print("EVAL P6_quality language=\(language) kind=\(kind) n=\(count) recall1=\(ratio1) recall3=\(ratio3) chip_recall3=\(Double(chipRecall) / Double(count)) baseline_recall3=\(Double(baseline3) / Double(count)) boundary_autos=\(automatic) wrong_autos=\(wrongAutomatic) p50_ms=\(p50) p95_ms=\(p95) max_ms=\(times.last!) lexical_queries_max=\(maximumQueries) touch_bytes_max=\(maximumBytes)")
                 XCTAssertGreaterThanOrEqual(recall3, baseline3)
                 let minimum = kind == "letter_space" ? count / 2 : count
                 XCTAssertGreaterThanOrEqual(recall1, minimum, "\(language)/\(kind) rank-one regression")
                 XCTAssertGreaterThanOrEqual(recall3, minimum, "\(language)/\(kind) retrieval regression")
                 XCTAssertGreaterThanOrEqual(chipRecall, minimum, "\(language)/\(kind) chip regression")
-                XCTAssertEqual(automatic, 0)
+                XCTAssertEqual(wrongAutomatic, 0)
             }
         }
     }
@@ -109,7 +111,6 @@ extension KeyboardBoundaryTouchTests {
             var falseChips = 0, autos = 0, calls = 0
             for text in controls {
                 // Normal Space centre plus top-edge adversarial points, with both words valid.
-                // A geometry-only chip may be ambiguous; autos must remain zero regardless.
                 for topEdge in [false, true] {
                     var touch = try joinTouch(text, aimed: "b")
                     if !topEdge {
@@ -119,15 +120,18 @@ extension KeyboardBoundaryTouchTests {
                     install(touch, in: ac)
                     let chips = ac.suggestions(beforeInput: text, field: .text, autocorrectionType: .default)
                     falseChips += chips.filter { $0.boundary != nil }.count
-                    autos += chips.filter { $0.boundary != nil && $0.willAutoReplace }.count
-                    XCTAssertNil(ac.replacementOnSpace(beforeInput: text, field: .text, autocorrectionType: .default), text)
+                    let applied = ac.replacementOnSpace(beforeInput: text, field: .text, autocorrectionType: .default)
+                    if !topEdge {
+                        autos += chips.filter { $0.boundary != nil && $0.willAutoReplace }.count
+                        XCTAssertNil(applied, text)
+                    } else if let applied {
+                        XCTAssertEqual(applied.replacement, "about", text)
+                    }
                     calls += 1
                 }
             }
-            // The deliberately ambiguous valid "a out" can offer "about" at the top edge;
-            // this is exactly why there is no automatic boundary policy. State the bound.
             let chipBound = language == "EN" ? 1 : 0
-            print("EVAL P6_controls personal_lexicon=\(imported) language=\(language) n=\(calls) false_boundary_chips=\(falseChips) false_boundary_chip_bound=\(chipBound) false_automatic_changes=\(autos) automatic_policy=suggestion_only")
+            print("EVAL P6_controls personal_lexicon=\(imported) language=\(language) n=\(calls) false_boundary_chips=\(falseChips) false_boundary_chip_bound=\(chipBound) false_automatic_changes_space_centre=\(autos) automatic_policy=tap_evidence")
             XCTAssertLessThanOrEqual(falseChips, chipBound)
             XCTAssertEqual(autos, 0)
         }

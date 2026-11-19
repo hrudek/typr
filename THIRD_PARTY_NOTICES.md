@@ -300,6 +300,14 @@ known literal yields only to better-fitting taps) and its contraction odds (`apo
 MIT, **Copyright (c) 2026 Bassim Shahidy**. The full existing iikb notice above covers
 this rewritten adaptation; no iikb code file, data or model is included.
 
+Boundary runs translate, from the same `Corrector.swift` (`missedSpaces`, `spacedOut`, `joined`,
+`splitLogOdds` = ln 100) and `LanguageModel.swift` (novel spelling probability
+novelty × (1/letters)^(length+1)) at iikb `e05a0ab8a670478d97765d26ffb8493ed5b7ab66`:
+the run of up to four words read against the whole word, a letter key touching the Space
+bar read as Space at its Space likelihood, the automatic split odds, and the price of an
+unlisted literal. Rewritten for Typr's bounded segmenter, MIT, **Copyright (c) 2026 Bassim
+Shahidy**, covered by the iikb notice above.
+
 R2-1 additionally reviews/translates the independent name/protection-layer idea
 from `Packages/KeyboardModules/Sources/KeyboardCore/Correction/Corrector.swift`
 (`setNames`, name handling before split/correction), with normalized lexical

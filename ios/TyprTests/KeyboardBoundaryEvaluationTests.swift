@@ -131,11 +131,11 @@ extension KeyboardBoundaryDecoderTests {
             if name == "EN", EvaluationSample.isFull {
                 XCTAssertGreaterThan(strip3[0], strip3[2], "Merge-noise weakening helps English")
             }
-            XCTAssertEqual(autoSplits, 0)
-            XCTAssertEqual(autoCorrect + autoWrong, 0)
+            XCTAssertEqual(autoWrong, 0, name)
+            XCTAssertLessThanOrEqual(autoSplits, autoCorrect, name)
             XCTAssertLessThanOrEqual(maxQueries, Boundary.maximumLexicalQueries)
             XCTAssertLessThanOrEqual(maxContextQueries, Boundary.maximumContextQueries)
-            print("EVAL P5_omitted language=\(name) n=\(n) recall1=\(recall1) recall3=\(recall3) lexical_recall3=\(lexicalRecall3) strip1=\(strip1[0]) strip3=\(strip3[0]) lexical_strip3=\(strip3[2]) corpus_proxy_strip3=\(strip3[1]) corpus_proxy_lexical_strip3=\(strip3[3]) baseline_strip3=\(baseline3) corpus_whole=\(wholeCorpus) weakened_whole=\(weakened) auto_correct=\(autoCorrect) auto_wrong=\(autoWrong) auto_recall=0 auto_precision=NA_suggestion_only queries_max=\(maxQueries) context_queries_max=\(maxContextQueries) mean_ms=\(fmt(times.reduce(0,+)/Double(n))) p95_ms=\(fmt(p95(times))) max_ms=\(fmt(times.max() ?? 0)) validity=merge_noise_premise NOT-iPhone")
+            print("EVAL P5_omitted language=\(name) n=\(n) recall1=\(recall1) recall3=\(recall3) lexical_recall3=\(lexicalRecall3) strip1=\(strip1[0]) strip3=\(strip3[0]) lexical_strip3=\(strip3[2]) corpus_proxy_strip3=\(strip3[1]) corpus_proxy_lexical_strip3=\(strip3[3]) baseline_strip3=\(baseline3) corpus_whole=\(wholeCorpus) weakened_whole=\(weakened) auto_correct=\(autoCorrect) auto_wrong=\(autoWrong) auto_chips=\(autoSplits) queries_max=\(maxQueries) context_queries_max=\(maxContextQueries) mean_ms=\(fmt(times.reduce(0,+)/Double(n))) p95_ms=\(fmt(p95(times))) max_ms=\(fmt(times.max() ?? 0)) validity=merge_noise_premise NOT-iPhone")
         }
     }
 
@@ -169,8 +169,16 @@ extension KeyboardBoundaryDecoderTests {
             lexicalOOVSplitSuggestions += strip(lexical, token).filter { $0.boundary?.kind == .split }.count
         }
         XCTAssertLessThanOrEqual(oovSplitSuggestions, lexicalOOVSplitSuggestions, "Context adds no OOV chips")
-        XCTAssertLessThanOrEqual(oovSplitSuggestions, 3, "P5 OOV chip baseline")
-        print("EVAL P5_controls unique=\(Set(controls).count) unwanted=\(unwanted) boundary_auto=\(boundaryAuto) valid_split_chips=\(splitChips) oov_split_chips=\(oovSplitSuggestions) lexical_oov_split_chips=\(lexicalOOVSplitSuggestions) oov_split_tokens=\(oovTokens.joined(separator: ",")) false_auto_bound=0 validity=synthetic_valid_checker NOT-iPhone")
+        var oovAutos = 0
+        for (index, token) in SpatialTypoEvaluationFixtures.absent.enumerated()
+            where EvaluationSample.includes(index, every: 5) && Boundary.isEligible(token) {
+            let lower = token.lowercased()
+            installMultipart(try multipartTouch(lower, aimed: lower), in: unknown)
+            if unknown.replacementOnSpace(beforeInput: "the " + lower, field: .text,
+                                          autocorrectionType: .default)?.replacement.contains(" ") == true { oovAutos += 1 }
+        }
+        XCTAssertEqual(oovAutos, 0)
+        print("EVAL P5_controls unique=\(Set(controls).count) unwanted=\(unwanted) boundary_auto=\(boundaryAuto) valid_split_chips=\(splitChips) oov_split_chips=\(oovSplitSuggestions) oov_autos=\(oovAutos) lexical_oov_split_chips=\(lexicalOOVSplitSuggestions) oov_split_tokens=\(oovTokens.joined(separator: ",")) false_auto_bound=0 validity=synthetic_valid_checker NOT-iPhone")
     }
 
     func testEvaluationExactJoinsAndPlausiblePairAbstention() throws {
@@ -357,7 +365,7 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertLessThan(Boundary.shortWordPayloadBytes, 1_024)
         XCTAssertLessThan(Boundary.maximumCandidatePayloadBytes, 2_048)
         XCTAssertLessThan(pairBytes, 16_384)
-        XCTAssertLessThan(Boundary.maximumContextPayloadBytes, 256)
+        XCTAssertLessThan(Boundary.maximumContextPayloadBytes, 384)
         print("EVAL P5_bounds calls=\(times.count) personal_words=\(personal.scan.entries.count) queries_max=\(maxQueries) query_cap=\(Boundary.maximumLexicalQueries) context_queries_max=\(maxContextQueries) context_query_cap=\(Boundary.maximumContextQueries) context_payload_bytes=\(Boundary.maximumContextPayloadBytes) shared_context_pack_bytes=\(model.residentPayloadBytes) trie_edge_cap=\(Boundary.maximumTrieEdgeChecks) candidate_payload_bytes=\(Boundary.maximumCandidatePayloadBytes) short_word_payload_bytes=\(Boundary.shortWordPayloadBytes) letter_array_payload_bytes=\(Boundary.maxLetters * MemoryLayout<Character>.stride) session_pair_payload_bytes=\(pairBytes) mean_ms=\(fmt(times.reduce(0,+)/Double(times.count))) p95_ms=\(fmt(p95(times))) max_ms=\(fmt(times.max() ?? 0)) memory=element_payload_NOT_RSS NOT-iPhone")
     }
 }

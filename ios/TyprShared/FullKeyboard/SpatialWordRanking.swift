@@ -413,7 +413,7 @@ nonisolated final class SpatialWordRanking {
                               editSuggestions: below.values.filter { found[$0.word] == nil }.sorted(by: Self.precedes)))
     }
 
-    private static func strayLogDensity(_ layout: KeyboardLayout) -> Double? {
+    static func strayLogDensity(_ layout: KeyboardLayout) -> Double? {
         guard let key = layout.key(.character("a"))?.frame else { return nil }
         let bounds = layout.keys.reduce(CGRect.null) { $0.union($1.frame) }
         let pitch = Double((key.width + layout.metrics.gap) * (key.height + layout.metrics.rowGap))

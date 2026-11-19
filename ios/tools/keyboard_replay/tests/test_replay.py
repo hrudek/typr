@@ -92,6 +92,15 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual(report["reproduction"]["literalMatches"], 1)
         self.assertEqual(report["score"]["known"]["wordErrors"], 0)
 
+    def test_a_run_without_spaces_splits_at_the_separator(self):
+        export = self.fresh_fixture()
+        export["words"] = [w for w in export["words"] if w["literal"] == "iloveyou"]
+        export["learning"]["layouts"] = {}
+        for word in export["words"]:
+            word["commit"]["text"] = word["literal"]
+        report = self.report("--show-words", export=export)
+        self.assertEqual([line["replayed"] for line in report["words"]], ["I love you"])
+
     def test_edits_replay_in_order_up_to_the_first_boundary(self):
         retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
         self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
