@@ -16,10 +16,11 @@ nonisolated enum KeyboardBoundaryDecoder {
     static let maximumLexicalQueries = 144
     static let maximumTrieEdgeChecks = maximumLexicalQueries * maxLetters * 30 * 2
     // Conditional and unconditional mixture lookups: "a" and "i", whole literal, both parts at every
-    // exact and letter-as-Space split, and every word of the finished multi-part runs.
+    // exact and letter-as-Space split, every word of the finished multi-part runs, a join's
+    // first word and its five joined words.
     // Each lookup uses ≤2 packs, ≤14 binary-search steps per key and ≤16 retained row edges.
     static let maximumContextQueries = 2 + 2 + 4 * (maxLetters - 1) + 4 * (maxLetters - 2)
-        + 2 * KeyboardMultipartSegmenter.beamWidth * KeyboardMultipartSegmenter.maximumParts
+        + 2 * KeyboardMultipartSegmenter.beamWidth * KeyboardMultipartSegmenter.maximumParts + 2 + 4 * 5
     static let maximumLanguageEvidenceQueries = 2 * (maxLetters - 1) + 2 * (maxLetters - 2)
         + 2 * KeyboardMultipartSegmenter.beamWidth * (KeyboardMultipartSegmenter.maximumParts - 1)
     /// Log odds a boundary edit needs over the whole-word reading to apply at the separator
@@ -32,17 +33,20 @@ nonisolated enum KeyboardBoundaryDecoder {
 
     struct Context: Equatable, Sendable {
         let previous: String?
+        let earlier: String?
         let weightDE: Double
 
-        init(previous: String?, weightDE: Double) {
-            self.previous = previous.flatMap {
-                $0.utf8.count <= 128 && $0.count <= 32 ? KeyboardContextModel.key($0) : nil
+        init(previous: String?, weightDE: Double, earlier: String? = nil) {
+            func bounded(_ word: String?) -> String? {
+                word.flatMap { $0.utf8.count <= 128 && $0.count <= 32 ? KeyboardContextModel.key($0) : nil }
             }
+            self.previous = bounded(previous)
+            self.earlier = bounded(earlier)
             self.weightDE = min(1, max(0, weightDE.isFinite ? weightDE : 0.5))
         }
     }
 
-    static var maximumContextPayloadBytes: Int { MemoryLayout<Context>.stride + 128 }
+    static var maximumContextPayloadBytes: Int { MemoryLayout<Context>.stride + 256 }
 
     struct Job: Equatable, Sendable {
         let token: String
@@ -75,8 +79,9 @@ nonisolated enum KeyboardBoundaryDecoder {
         /// Independent likelihood protection for dictionary-valid parts on MainActor,
         /// including valid names/words absent from the ranking lexicons.
         var betterThanSeparateTap = false
-        /// The separator may apply it: a split of a run no lexicon lists, at `automaticLogOdds`
-        /// over the whole reading, or a Space tap read as a letter. MainActor protections still veto.
+        /// The separator may apply it: `automaticLogOdds` over the whole reading, with corpus-pair or
+        /// tap support; a split only of a run no lexicon lists and, spelled as typed, not read as
+        /// German (a German compound). MainActor protections still veto.
         var automatic = false
     }
 
@@ -108,10 +113,22 @@ nonisolated enum KeyboardBoundaryDecoder {
 
     /// An unlisted literal as a novel word spelled letter by letter, as iikb's `LanguageModel`
     /// prices it: novelty × (1/letters)^(length+1), with novelty at iikb's cold start of 1/2.
-    /// One flat floor would make a long run of letters likelier than the words it spells.
     static func novelSpelling(_ token: String, languages: Set<Language>) -> Double {
         let letters = languages.contains(.german) ? SpatialWordLexicon.alphabet.count : 26
         return log(0.5) - Double(token.count + 1) * log(Double(letters))
+    }
+
+    /// `finer` only adds spaces inside the words of `coarser`, a likelier reading of the same letters.
+    static func subdivides(_ finer: Candidate, _ coarser: Candidate) -> Bool {
+        guard finer.kind == .split, coarser.kind == .split, finer.replacement != coarser.replacement,
+              finer.replacement.count > coarser.replacement.count,
+              finer.replacement.filter({ $0 != " " }) == coarser.replacement.filter({ $0 != " " }) else { return false }
+        func spaces(_ text: String) -> Set<Int> {
+            var offsets: Set<Int> = [], letters = 0
+            for character in text { if character == " " { offsets.insert(letters) } else { letters += 1 } }
+            return offsets
+        }
+        return spaces(coarser.replacement).isSubset(of: spaces(finer.replacement))
     }
 
     static func shortWords(languages: Set<Language>) -> [String] {
@@ -149,27 +166,41 @@ nonisolated enum KeyboardBoundaryDecoder {
         var found: [Candidate] = []
         var multipart: KeyboardMultipartSegmenter.Result?
         var needsMultipart = false
+        var wholePrior: Double?
+        var exactSplits: Set<String> = []
+        func withholdGermanCompounds() {
+            guard job.languages.contains(.german) else { return }
+            for index in found.indices where found[index].automatic && exactSplits.contains(found[index].replacement) {
+                let words = found[index].replacement.split(separator: " ").map(String.init)
+                func reading(_ language: Language, _ short: Set<String>) -> Double {
+                    guard job.languages.contains(language) else { return -.infinity }
+                    return words.reduce(0) {
+                        $0 + (lexicons[language]?.logPrior(for: $1) ?? (short.contains($1) ? shortPrior : -.infinity))
+                    }
+                }
+                if reading(.german, germanShort) >= reading(.english, englishShort) { found[index].automatic = false }
+            }
+        }
         func result() -> Retrieval {
-            Retrieval(job: job, candidates: found, lexicalQueries: queries, contextQueries: contextQueries,
+            withholdGermanCompounds()
+            return Retrieval(job: job, candidates: found, lexicalQueries: queries, contextQueries: contextQueries,
                       languageEvidenceQueries: languageEvidenceQueries,
                       multipartVisits: multipart?.visits ?? 0, multipartCells: multipart?.cells ?? 0,
                       multipartCachedReadings: multipart?.cachedReadings ?? 0,
                       multipartExhausted: multipart?.exhausted ?? false,
                       includesMultipart: includeMultipart || !needsMultipart)
         }
-        var wholePrior: Double?
-        /// `supported`: evidence for the boundary itself beyond word frequency, either the
-        /// split words' corpus pairs (positive lift between them) or a tap that fits Space better
-        /// than its letter. Frequent words alone would split every unlisted compound.
-        func retain(_ candidate: Candidate, supported: Bool = false) {
+        func retain(_ candidate: Candidate, supported: Bool = false, exact: Bool = false) {
             var candidate = candidate
-            candidate.automatic = candidate.kind == .split
-                ? supported && wholePrior == nil && candidate.score - candidate.baseline >= automaticLogOdds
-                : candidate.spatial
+            candidate.automatic = (candidate.kind == .split ? wholePrior == nil : candidate.spatial)
+                && supported && candidate.score - candidate.baseline >= automaticLogOdds
+            if exact { exactSplits.insert(candidate.replacement) }
             if let old = found.firstIndex(where: { $0.replacement == candidate.replacement }) {
                 guard candidate.score > found[old].score else { return }
                 found.remove(at: old)
             }
+            if found.contains(where: { $0.score >= candidate.score && subdivides(candidate, $0) }) { return }
+            found.removeAll { $0.score <= candidate.score && subdivides($0, candidate) }
             found.append(candidate)
             found.sort {
                 let a = ($0.score * 1e9).rounded(), b = ($1.score * 1e9).rounded()
@@ -230,8 +261,6 @@ nonisolated enum KeyboardBoundaryDecoder {
             precondition(languageEvidenceQueries <= maximumLanguageEvidenceQueries)
             return contextModel.evidence(left) * contextModel.evidence(right) < 0
         }
-        /// Sentence context of a run: its first word after the previous one (`total` only), each
-        /// next word after its predecessor (`inner` and `total`).
         func runLift(_ words: [String]) -> (total: Double, inner: Double) {
             guard contextModel != nil else { return (0, 0) }
             var inner = 0.0
@@ -241,7 +270,6 @@ nonisolated enum KeyboardBoundaryDecoder {
             }
             return (contextLift(words[0]) + inner, inner)
         }
-        // The word lists start at two letters.
         let short = shortWords(languages: job.languages)
         for word in short where word.count == 1 && contextModel != nil {
             shortPriors[word] = max(shortPrior, log(probability(word, after: nil)))
@@ -291,7 +319,7 @@ nonisolated enum KeyboardBoundaryDecoder {
                                  replacement: left + " " + right, score: score, baseline: baseline,
                                  strongPair: strongPair,
                                  weakWhole: strongPair && wholePrior != nil && literalBaseline > competitorBaseline),
-                       supported: rightLift > 0)
+                       supported: rightLift > 0, exact: true)
             }
         }
         // Spatial cases share the exact lookup budget and the top-three retention. Only
@@ -332,22 +360,26 @@ nonisolated enum KeyboardBoundaryDecoder {
                     || (job.personal.counts[first] ?? 0) > 0 || (job.personal.counts[token] ?? 0) > 0
                 if !protection, let asSpace = KeyboardBoundaryTouch.spaceDensity(space.point, layout: layout,
                                                                                   calibration: job.calibration) {
-                    let a = prior(first), b = wholePrior
-                    // Two known words require better tap likelihood too (iikb's separate
-                    // reading protection). Frequency alone can never reinterpret their Space.
-                    let baseline = (a ?? floor) + (b ?? floor)
+                    let a = prior(first)
+                    let earlier = job.context?.earlier
+                    func earlierLift(_ word: String) -> Double {
+                        guard let earlier else { return 0 }
+                        return logLift(probability(word, after: earlier), probability(word, after: nil))
+                    }
+                    let baseline = (a ?? novelSpelling(first, languages: job.languages)) + earlierLift(first)
+                        + wholeBaseline
                     for key in adjacent {
                         guard let letter = key.character,
                               let density = KeyboardBoundaryTouch.letterDensity(space.point, key: key, layout: layout,
                                                                               calibration: job.calibration),
-                              (a == nil || b == nil || density > asSpace),
+                              (a == nil || wholePrior == nil || density > asSpace),
                               let joined = prior(first + letter + token) else { continue }
-                        let score = joined + density - asSpace
+                        let score = joined + earlierLift(first + letter + token) + density - asSpace
                         if score > baseline + joinMargin {
                             retain(Candidate(kind: .join, original: touch.original,
                                              replacement: first + letter + token,
                                              score: score, baseline: baseline, spatial: true,
-                                             betterThanSeparateTap: density > asSpace))
+                                             betterThanSeparateTap: density > asSpace), supported: true)
                         }
                     }
                 }
@@ -401,7 +433,7 @@ nonisolated enum KeyboardBoundaryDecoder {
                 guard score > wholeBaseline else { continue }
                 retain(Candidate(kind: .split, original: job.token, replacement: run.words.joined(separator: " "),
                                  score: score, baseline: wholeBaseline, spatial: run.consumesTap),
-                       supported: lift.inner > 0 || run.spaceFits)
+                       supported: lift.inner > 0 || run.spaceFits, exact: !run.consumesTap && !run.edited)
             }
         }
         return result()

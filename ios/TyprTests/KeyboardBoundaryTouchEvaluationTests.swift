@@ -111,7 +111,6 @@ extension KeyboardBoundaryTouchTests {
             var falseChips = 0, autos = 0, calls = 0
             for text in controls {
                 // Normal Space centre plus top-edge adversarial points, with both words valid.
-                // Only a tap that fits a letter better than Space may join two valid words.
                 for topEdge in [false, true] {
                     var touch = try joinTouch(text, aimed: "b")
                     if !topEdge {
@@ -131,8 +130,6 @@ extension KeyboardBoundaryTouchTests {
                     calls += 1
                 }
             }
-            // The deliberately ambiguous valid "a out" offers and, as iikb, applies "about" when
-            // the tap lies on b's edge rather than the Space bar. State the bound.
             let chipBound = language == "EN" ? 1 : 0
             print("EVAL P6_controls personal_lexicon=\(imported) language=\(language) n=\(calls) false_boundary_chips=\(falseChips) false_boundary_chip_bound=\(chipBound) false_automatic_changes_space_centre=\(autos) automatic_policy=tap_evidence")
             XCTAssertLessThanOrEqual(falseChips, chipBound)

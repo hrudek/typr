@@ -118,7 +118,9 @@ func makeFixture(words data: WordData, to url: URL) async throws {
     word("most"); center("kf"); press(.space); press(.returnKey)
     word("even"); center("kf"); press(.space); press(.returnKey)
     center("jn"); press(.space); press(.returnKey)
-    word("and"); center("iloveyou"); press(.space); press(.returnKey)
+    word("and"); center("iloveyou")
+    await engine.waitForSuggestions()
+    press(.space); press(.returnKey)
     type("today")
     engine.endTypingLogWord("dismiss")
 

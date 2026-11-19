@@ -290,6 +290,7 @@ final class Replayer {
         case .none:
             return .success(ReplayedWord(literal: literal, committed: literal))
         case .separator(let separator):
+            await engine.waitForSuggestions()
             press(separator == "\n" ? .returnKey : .space)
         case .pick(let to, let chip):
             // The first acceptance may only sync the session's learning and republish the strip.

@@ -138,11 +138,30 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
             XCTAssertFalse(Boundary.retrieve(request, lexicons: sources).candidates.contains { $0.spatial })
         }
         var centered = try word("greatvday")
-        // A tap centred on v fits v better than Space: reading it as Space is only offered.
         XCTAssertFalse(Boundary.retrieve(job(KeyboardBoundaryTouch(current: centered)), lexicons: sources)
             .candidates.contains { $0.replacement == "great day" && $0.automatic })
         centered.learningIntact = false
         XCTAssertFalse(KeyboardBoundaryTouch(current: centered).isUsable)
+    }
+
+    func testJoinWeighsSentenceContextAndTheWholeRival() throws {
+        let sources = try helper.resources()
+        let model = try XCTUnwrap(BundledKeyboardData.contextModel)
+        var input = job(try joinTouch("ne er", aimed: "v"), languages: [.english])
+        func never(_ whole: SpatialWordDecoder.Outcome?) -> Boundary.Candidate? {
+            Boundary.retrieve(input, lexicons: sources, whole: whole, model: model)
+                .candidates.first { $0.replacement == "never" }
+        }
+        input.context = .init(previous: "ne", weightDE: 0, earlier: "think")
+        let afterThink = try XCTUnwrap(never(nil))
+        XCTAssertTrue(afterThink.automatic)
+        input.context = .init(previous: "ne", weightDE: 0, earlier: "the")
+        XCTAssertNotEqual(try XCTUnwrap(never(nil)).score, afterThink.score)
+        let rival = SpatialWordDecoder.Candidate(word: "our", language: .english, score: 100,
+                                                 spatialScore: 100, edit: .none, alignment: [])
+        let reading = SpatialWordDecoder.Result(candidates: [rival], literalScore: -20, literalSpatialScore: 0,
+                                               literalInLexicon: true, complete: true, visits: 1, generated: 1)
+        XCTAssertNil(never(.result(reading)), "A far likelier reading of the second word keeps both words")
     }
 
     func testWindowInvalidationAndCombinedCap() throws {

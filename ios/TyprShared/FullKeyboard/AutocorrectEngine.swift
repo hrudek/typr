@@ -18,7 +18,7 @@ nonisolated struct KeyboardSuggestion: Equatable, Sendable {
     var ownership: KeyboardSuggestionOwnership?
     /// Placed by personal completion ranking (#101); counted separately when picked, text-free.
     var isPersonal = false
-    /// Manual-only exact suffix replacement; never trains tap labels or phrase counts.
+    /// Exact suffix replacement, picked or applied by the separator; never trains tap labels or phrase counts.
     var boundary: KeyboardBoundaryDecoder.Candidate?
     /// An alternative for the word just swiped: swaps it in place, never learned.
     var isSwipe = false
@@ -213,7 +213,6 @@ final class AutocorrectEngine {
     /// Phrase pairs never enter the letter/apostrophe-only persistent rejection schema.
     private var boundaryRejections: [RejectedCorrection] = []
     private var reversibleBoundary: KeyboardBoundaryDecoder.Candidate?
-    /// The boundary edit `replacementOnSpace` just returned, until the engine records it.
     private var appliedBoundary: KeyboardBoundaryDecoder.Candidate?
     static let boundaryRejectionLimit = 64
     var boundaryRejectionCount: Int { boundaryRejections.count }
@@ -362,11 +361,10 @@ final class AutocorrectEngine {
         let touch = touchInput.boundaryEvidence(beforeInput: beforeInput)
         return .init(token: token, previous: previous, languages: suggestionLanguages,
                      personal: learning.personalPriors, kept: learning.protections.kept,
-                     context: context.map { .init(previous: $0.previous, weightDE: $0.state.weightDE) },
+                     context: context.map { .init(previous: $0.previous, weightDE: $0.state.weightDE, earlier: $0.earlier) },
                      touch: touch, calibration: touch.flatMap { learning.calibration(for: $0.current.layout) })
     }
 
-    /// The cased text a boundary candidate writes, or nil when a MainActor protection vetoes it.
     private func boundaryReplacement(_ candidate: KeyboardBoundaryDecoder.Candidate, token: String) -> String? {
         let parts = candidate.original.split(separator: " ").map(String.init)
         let protected = parts.contains {
@@ -390,9 +388,6 @@ final class AutocorrectEngine {
         }.joined(separator: " ")
     }
 
-    /// The boundary edit the separator applies: the best admitted candidate, if the decoder
-    /// marked it automatic. Needs this run's own taps; a capitalized word inside a sentence
-    /// is a name, as in iikb's `Corrector.correction`.
     private func automaticBoundary(in retrieval: KeyboardBoundaryDecoder.Retrieval, beforeInput: String?)
         -> (candidate: KeyboardBoundaryDecoder.Candidate, replacement: String)? {
         let job = retrieval.job
@@ -412,7 +407,6 @@ final class AutocorrectEngine {
         return nil
     }
 
-    /// The job carries the taps of the run it reads.
     private func ownsTaps(_ job: KeyboardBoundaryDecoder.Job) -> Bool {
         job.touch.map { $0.isUsable && $0.current.text == job.token } ?? false
     }
@@ -1142,11 +1136,11 @@ final class AutocorrectEngine {
         let context = wordContext(before: beforeInput, token: token)
         appliedBoundary = nil
         if let job = boundaryJob(beforeInput: beforeInput), ownsTaps(job) {
-            let retrieval = heldBoundary(job, evidence: evidence).flatMap { $0.includesMultipart ? $0 : nil }
+            let retrieval = heldBoundary(job, evidence: evidence)
                 ?? KeyboardBoundaryDecoder.retrieve(job, lexicons: spatialDecoder?.resourceSnapshot ?? [:],
                                                      whole: spatialOutcome(for: token, evidence: evidence,
                                                                            forSuggestions: false, context: context),
-                                                     model: contextResources.model)
+                                                     model: contextResources.model, includeMultipart: false)
             if let run = automaticBoundary(in: retrieval, beforeInput: beforeInput) {
                 appliedBoundary = run.candidate
                 learning.breakWordSequence()

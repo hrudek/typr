@@ -169,7 +169,6 @@ extension KeyboardBoundaryDecoderTests {
             lexicalOOVSplitSuggestions += strip(lexical, token).filter { $0.boundary?.kind == .split }.count
         }
         XCTAssertLessThanOrEqual(oovSplitSuggestions, lexicalOOVSplitSuggestions, "Context adds no OOV chips")
-        // An unlisted compound may offer its parts, as iikb does; the separator never applies them.
         var oovAutos = 0
         for (index, token) in SpatialTypoEvaluationFixtures.absent.enumerated()
             where EvaluationSample.includes(index, every: 5) && Boundary.isEligible(token) {
@@ -366,7 +365,7 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertLessThan(Boundary.shortWordPayloadBytes, 1_024)
         XCTAssertLessThan(Boundary.maximumCandidatePayloadBytes, 2_048)
         XCTAssertLessThan(pairBytes, 16_384)
-        XCTAssertLessThan(Boundary.maximumContextPayloadBytes, 256)
+        XCTAssertLessThan(Boundary.maximumContextPayloadBytes, 384)
         print("EVAL P5_bounds calls=\(times.count) personal_words=\(personal.scan.entries.count) queries_max=\(maxQueries) query_cap=\(Boundary.maximumLexicalQueries) context_queries_max=\(maxContextQueries) context_query_cap=\(Boundary.maximumContextQueries) context_payload_bytes=\(Boundary.maximumContextPayloadBytes) shared_context_pack_bytes=\(model.residentPayloadBytes) trie_edge_cap=\(Boundary.maximumTrieEdgeChecks) candidate_payload_bytes=\(Boundary.maximumCandidatePayloadBytes) short_word_payload_bytes=\(Boundary.shortWordPayloadBytes) letter_array_payload_bytes=\(Boundary.maxLetters * MemoryLayout<Character>.stride) session_pair_payload_bytes=\(pairBytes) mean_ms=\(fmt(times.reduce(0,+)/Double(times.count))) p95_ms=\(fmt(p95(times))) max_ms=\(fmt(times.max() ?? 0)) memory=element_payload_NOT_RSS NOT-iPhone")
     }
 }

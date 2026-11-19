@@ -3,8 +3,6 @@ import UIKit
 import XCTest
 @testable import Typr
 
-/// Runs typed without (or with wrong) spaces, decided at the separator against the whole-word
-/// reading. Constructed public phrases and synthetic key-centre taps, not collected typing.
 extension KeyboardBoundaryDecoderTests {
     func runKeyboard(_ languages: Set<Language> = [.english], text: String = "") throws
         -> (FullKeyboardEngine, FixtureTextTarget) {
@@ -33,7 +31,6 @@ extension KeyboardBoundaryDecoderTests {
         }
     }
 
-    /// The letter's own key, at its edge towards `toward`: still that key, but likelier the other.
     func typeNear(_ keyboard: FullKeyboardEngine, _ letter: String, toward: String) throws {
         let key = try XCTUnwrap(keyboard.layout.key(.character(letter))).frame
         let other = try XCTUnwrap(keyboard.layout.key(.character(toward))).frame
@@ -41,13 +38,11 @@ extension KeyboardBoundaryDecoderTests {
         press(keyboard, at: CGPoint(x: x, y: key.midY))
     }
 
-    /// A bottom-row letter hit at its lower edge, just above the Space bar.
     func typeAboveSpace(_ keyboard: FullKeyboardEngine, _ letter: String) throws {
         let key = try XCTUnwrap(keyboard.layout.key(.character(letter))).frame
         press(keyboard, at: CGPoint(x: key.midX, y: key.maxY - 1))
     }
 
-    /// Space hit at its top edge below `letter`, or at its centre.
     func typeSpace(_ keyboard: FullKeyboardEngine, below letter: String? = nil) throws {
         let space = try XCTUnwrap(keyboard.layout.key(.space)).frame
         guard let letter else { return press(keyboard, at: CGPoint(x: space.midX, y: space.midY)) }
@@ -55,13 +50,15 @@ extension KeyboardBoundaryDecoderTests {
         press(keyboard, at: CGPoint(x: key.midX, y: space.minY + 1))
     }
 
-    func testRunWithoutSpacesSplitsAtTheSeparatorAndOneUndoRestoresIt() throws {
+    func testRunWithoutSpacesSplitsAtTheSeparatorAndOneUndoRestoresIt() async throws {
         let (keyboard, target) = try runKeyboard()
         let ac = keyboard.autocorrect
         let state = ac.learning.model.state
         let labels = ac.learning.diagnostics.acceptedLabels
         try typeRun(keyboard, "iloveyou")
         XCTAssertEqual(target.text, "iloveyou", "Nothing changes before the separator")
+        await keyboard.waitForSuggestions()
+        XCTAssertTrue(keyboard.suggestions.contains { $0.replacement == "I love you" && $0.willAutoReplace })
         try typeSpace(keyboard)
         XCTAssertEqual(target.text, "I love you ")
         try typeRun(keyboard, "so")
@@ -71,6 +68,7 @@ extension KeyboardBoundaryDecoderTests {
 
         let (undone, undoneTarget) = try runKeyboard()
         try typeRun(undone, "iloveyou")
+        await undone.waitForSuggestions()
         try typeSpace(undone)
         XCTAssertEqual(undoneTarget.text, "I love you ")
         undone.deleteBackward()
@@ -80,24 +78,26 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertEqual(undoneTarget.text, "iloveyou ", "An undone run is not split again")
     }
 
-    func testThreeWordRunWithATypoInOnePart() throws {
+    func testThreeWordRunWithATypoInOnePart() async throws {
         let (keyboard, target) = try runKeyboard()
         try typeRun(keyboard, "thisisg")
         try typeNear(keyboard, "i", toward: "o")
         try typeRun(keyboard, "od")
         XCTAssertEqual(target.text, "thisisgiod")
+        await keyboard.waitForSuggestions()
         try typeSpace(keyboard)
         XCTAssertEqual(target.text, "this is good ")
         keyboard.deleteBackward()
         XCTAssertEqual(target.text, "thisisgiod")
     }
 
-    func testBottomRowLetterHitInsteadOfSpace() throws {
+    func testBottomRowLetterHitInsteadOfSpace() async throws {
         let (keyboard, target) = try runKeyboard()
         try typeRun(keyboard, "love")
         try typeAboveSpace(keyboard, "b")
         try typeRun(keyboard, "you")
         XCTAssertEqual(target.text, "lovebyou")
+        await keyboard.waitForSuggestions()
         try typeSpace(keyboard)
         XCTAssertEqual(target.text, "love you ")
         keyboard.deleteBackward()
@@ -163,7 +163,6 @@ extension KeyboardBoundaryDecoderTests {
         try typeSpace(keyboard)
         XCTAssertEqual(target.text, "wonderful ")
         let sources = try resources()
-        // A split no likelier than the whole reading by the automatic odds stays a chip.
         let candidate = SpatialWordDecoder.Candidate(word: "great", language: .english, score: -20,
                                                     spatialScore: 0, edit: .none, alignment: [])
         let reading = SpatialWordDecoder.Result(candidates: [candidate], literalScore: -40, literalSpatialScore: 0,
@@ -181,7 +180,6 @@ extension KeyboardBoundaryDecoderTests {
         let ac = engine(sources, languages: [.english], model: try contextModel())
         let touch = try multipartTouch("iloveyou", aimed: "iloveyou")
         installMultipart(touch, in: ac)
-        // A worker result for other taps is not this run's: neither the strip nor Space uses it.
         var other = job("iloveyou", languages: [.english])
         other.touch = try multipartTouch("iloveyou", aimed: "ilivryou")
         let stale = Boundary.Retrieval(job: other, candidates: [.init(kind: .split, original: "iloveyou",
@@ -189,19 +187,48 @@ extension KeyboardBoundaryDecoderTests {
         let chips = ac.suggestions(beforeInput: "iloveyou", field: .text, autocorrectionType: .default,
                                    boundaryRetrieval: stale)
         XCTAssertFalse(chips.contains { $0.replacement == "il ove you" })
-        XCTAssertEqual(ac.replacementOnSpace(beforeInput: "iloveyou", field: .text,
-                                             autocorrectionType: .default)?.replacement, "I love you")
+        let applied = ac.replacementOnSpace(beforeInput: "iloveyou", field: .text, autocorrectionType: .default)
+        XCTAssertNotEqual(applied?.replacement, "il ove you")
+        XCTAssertEqual(applied?.replacement, chips.first { $0.willAutoReplace }?.replacement)
         installMultipart(touch, in: ac)
         XCTAssertNil(ac.replacementOnSpace(beforeInput: "iloveyou", field: .text, autocorrectionType: .no))
         ac.touchInput.clear()
         XCTAssertNil(ac.replacementOnSpace(beforeInput: "iloveyou", field: .text, autocorrectionType: .default),
                      "Without this run's taps nothing is applied")
-        // The caret moved: the taps no longer belong to the run before it.
         let (keyboard, target) = try runKeyboard()
         try typeRun(keyboard, "iloveyou")
         keyboard.textDidChange()
         try typeSpace(keyboard)
         XCTAssertEqual(target.text, "iloveyou ")
+    }
+
+    func testHighlightMatchesSpaceBeforeTheWorkerAnswers() throws {
+        for text in ["iloveyou", "thisisgood", "haveaniceday", "greatdaytoday"] {
+            let ac = engine(try resources(), languages: [.english], model: try contextModel())
+            installMultipart(try multipartTouch(text, aimed: text), in: ac)
+            let chips = ac.suggestions(beforeInput: text, field: .text, autocorrectionType: .default)
+            let space = ac.replacementOnSpace(beforeInput: text, field: .text, autocorrectionType: .default)
+            XCTAssertEqual(chips.first { $0.willAutoReplace }?.replacement, space?.replacement, text)
+        }
+    }
+
+    func testUnlistedGermanCompoundsStayAsTyped() async throws {
+        let compounds = ["gutenachtlied", "gutenachtritual", "gutenachtgeschichte", "gutenachtkuss",
+                         "gutenmorgenkaffee", "gutenmorgenlied", "nachhauseweg", "zuhausebleiben",
+                         "kaffeetrinken", "fensterbankpflanze", "feierabendbier", "kindergeburtstagsfeier",
+                         "sonntagsspaziergang", "heuteabend", "morgenroutine", "zusammenleben"]
+        for (index, word) in compounds.enumerated() where EvaluationSample.includes(index, every: 2) {
+            let (keyboard, target) = try runKeyboard([.german])
+            try typeRun(keyboard, word)
+            await keyboard.waitForSuggestions()
+            try typeSpace(keyboard)
+            XCTAssertEqual(target.text, word + " ", word)
+        }
+        let (keyboard, target) = try runKeyboard([.german, .english])
+        try typeRun(keyboard, "gutenachtritual")
+        await keyboard.waitForSuggestions()
+        try typeSpace(keyboard)
+        XCTAssertEqual(target.text, "gutenachtritual ")
     }
 
     func testRunSearchStaysWithinItsBudgets() throws {
