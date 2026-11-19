@@ -146,17 +146,18 @@ final class TapStatisticsTests: XCTestCase {
     }
 
     @MainActor
-    func testPhysicalSummaryDoesNotInvertClampedDecoderSpread() throws {
-        let signature = KeyboardLayoutSignature(KeyboardLayout(width: 392))
+    func testSummaryShowsTheDensityInferenceUses() throws {
+        let layout = KeyboardLayout(width: 392)
+        let signature = KeyboardLayoutSignature(layout)
         var state = PersonalTypingModel.State()
         state.layouts[signature.id] = .init(signature: signature, lastUpdated: Date(), keys: [
             "a": .init(n: 64, meanX: 0.1, varianceX: 0.04, varianceY: 0.03)
-        ])
-        let physical = try XCTUnwrap(PersonalTypingModel.summarize(state, physicalTouch: true).layouts.first?.keys.first)
-        let decoder = try XCTUnwrap(PersonalTypingModel.summarize(state).layouts.first?.keys.first)
-        XCTAssertLessThan(physical.sigmaX, decoder.sigmaX)
-        XCTAssertEqual(physical.offsetX, decoder.offsetX)
-        XCTAssertLessThanOrEqual(physical.sigmaX, 0.5)
+        ], global: .init(n: 64, meanX: 0.1, varianceX: 0.04, varianceY: 0.03))
+        let summary = try XCTUnwrap(PersonalTypingModel.summarize(state).layouts.first?.keys.first)
+        let used = try XCTUnwrap(PersonalTypingModel(state: state).calibration(for: layout)?.keys["a"])
+        XCTAssertEqual(summary.offsetX, used.offsetX, accuracy: 1e-12)
+        XCTAssertEqual(summary.sigmaX, used.sigmaX, accuracy: 1e-12)
+        XCTAssertEqual(summary.sigmaY, used.sigmaY, accuracy: 1e-12)
     }
 
     @MainActor

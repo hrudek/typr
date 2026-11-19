@@ -825,11 +825,13 @@ final class SpatialWordDecoderTests: XCTestCase {
         let first = shifted.samples[0]
         let pitch = first.key.frame.width + shifted.layout.metrics.gap
         shifted.samples[0] = .init(text: first.text, point: CGPoint(x: first.point.x + 0.25 * pitch, y: first.point.y), key: first.key)
-        let offset = SpatialTouchCalibration(keys: ["h": .init(offsetX: 0.25, offsetY: 0, sigmaX: 0.35, sigmaY: 0.35)])
+        let prior = SpatialTouchCalibration.prior
+        let offset = SpatialTouchCalibration(keys: ["h": .init(offsetX: 0.25, offsetY: 0,
+                                                               sigmaX: prior.sigmaX, sigmaY: prior.sigmaY)])
         let calibrated = try XCTUnwrap(decoder.decode(shifted, languages: [.english], calibration: offset))
         let staticResult = try XCTUnwrap(decoder.decode(shifted, languages: [.english]))
         XCTAssertEqual(calibrated.literalSpatialScore - staticResult.literalSpatialScore,
-                       0.25 * 0.25 / (2 * 0.35 * 0.35), accuracy: 1e-10)
+                       5.5 * log1p(0.25 * 0.25 / (9 * prior.sigmaX * prior.sigmaX)), accuracy: 1e-10)
     }
 
     func testTwoThousandCountedDictionaryWordsHaveIdenticalColdAndCachedResults() throws {
@@ -958,12 +960,13 @@ final class SpatialWordDecoderTests: XCTestCase {
                 var row: [Character: Double] = [:]
                 for letter in letters {
                     let frame = try XCTUnwrap(word.layout.key(.character(String(letter)))).frame
-                    let key = calibration?.keys[letter] ?? .init(offsetX: 0, offsetY: 0, sigmaX: 0.35, sigmaY: 0.35)
+                    let key = calibration?.keys[letter] ?? SpatialTouchCalibration.prior
                     let dx = Double(sample.point.x - frame.midX) / Double(frame.width + word.layout.metrics.gap) - key.offsetX
                     let dy = Double(sample.point.y - frame.midY) / Double(frame.height + word.layout.metrics.rowGap) - key.offsetY
                     let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY, xy = key.covarianceXY
                     let det = xx * yy - xy * xy
-                    row[letter] = -0.5 * (yy * dx * dx - 2 * xy * dx * dy + xx * dy * dy) / det
+                    let distance = (yy * dx * dx - 2 * xy * dx * dy + xx * dy * dy) / det
+                    row[letter] = -(key.degrees / 2 + 1) * log1p(distance / key.degrees)
                         - log(2 * Double.pi * sqrt(det))
                 }
                 scores.append(row)

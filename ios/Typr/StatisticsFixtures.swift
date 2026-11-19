@@ -66,7 +66,7 @@ enum StatisticsFixture: String {
             }
             usage.heat = [heat]
         }
-        let learning = KeyboardLearningSnapshot(model: PersonalTypingModel.summarize(state, physicalTouch: true),
+        let learning = KeyboardLearningSnapshot(model: PersonalTypingModel.summarize(state),
             diagnostics: KeyboardDiagnostics(), learningFile: .init(bytes: nil, modifiedAt: nil),
             diagnosticsFile: .init(bytes: nil, modifiedAt: nil), isPersistent: true)
         return (usage, learning)

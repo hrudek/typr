@@ -45,18 +45,19 @@ final class PersonalTypingAimTests: XCTestCase {
             let radius = hypot(xx - yy, 2 * key.covarianceXY)
             let floor = SpatialTouchCalibration.sigmaRange.lowerBound
             XCTAssertGreaterThanOrEqual((xx + yy - radius) / 2, floor * floor - 1e-12)
-            XCTAssertLessThanOrEqual((xx + yy + radius) / 2, 0.25 + 1e-12)
+            XCTAssertLessThanOrEqual((xx + yy + radius) / 2, 1 + 1e-12)
             XCTAssertGreaterThanOrEqual(xx * yy - key.covarianceXY * key.covarianceXY, pow(floor, 4) - 1e-12)
             XCTAssertTrue(key.logDensity(x: 1, y: -1).isFinite)
         }
         XCTAssertTrue(SpatialTouchCalibration(keys: ["a": .init(offsetX: 0, offsetY: 0,
             sigmaX: 0.3, sigmaY: 0.3, covarianceXY: .nan)]).keys.isEmpty)
-        let diagonal = SpatialTouchCalibration.Key(offsetX: 0.1, offsetY: -0.1, sigmaX: 0.35, sigmaY: 0.35)
+        let diagonal = SpatialTouchCalibration.Key(offsetX: 0.1, offsetY: -0.1, sigmaX: 0.35, sigmaY: 0.35, degrees: 9)
         XCTAssertEqual(diagonal.logDensity(x: 0.3, y: 0.2),
-                       -0.5 * (0.2 * 0.2 + 0.3 * 0.3) / (0.35 * 0.35) - log(2 * Double.pi * 0.35 * 0.35), accuracy: 1e-12)
+                       -5.5 * log1p((0.2 * 0.2 + 0.3 * 0.3) / (0.35 * 0.35) / 9) - log(2 * Double.pi * 0.35 * 0.35),
+                       accuracy: 1e-12)
         // Numerical integration checks normalized density, including a tilted cloud.
         let tilted = try XCTUnwrap(SpatialTouchCalibration(keys: ["a": .init(offsetX: 0, offsetY: 0,
-            sigmaX: 0.35, sigmaY: 0.35, covarianceXY: 0.06)]).keys["a"])
+            sigmaX: 0.15, sigmaY: 0.15, covarianceXY: 0.01)]).keys["a"])
         var mass = 0.0
         for i in -150...150 { for j in -150...150 {
             mass += exp(tilted.logDensity(x: Double(i) * 0.01, y: Double(j) * 0.01)) * 0.0001
@@ -70,10 +71,13 @@ final class PersonalTypingAimTests: XCTestCase {
         let signature = KeyboardLayoutSignature(grid)
         var layout = PersonalTypingModel.LayoutStats(signature: signature, lastUpdated: Date())
         layout.keys["a"] = .init(n: 20, varianceX: 0.08, varianceY: 0.06, covarianceXY: 0.03)
-        // The pooled prior is worth ten taps (iikb's ν₀), so 20 labels outweigh it two to one.
-        XCTAssertEqual(layout.pooled.sigmaX * layout.pooled.sigmaX, (10 * 0.04 + 20 * 0.08) / 30, accuracy: 1e-12)
-        XCTAssertEqual(layout.pooled.covarianceXY, 0.02, accuracy: 1e-12)
-        XCTAssertEqual(layout.slowKey(layout.keys["a"]).covarianceXY, 2.0 / 3 * 0.03 + 1.0 / 3 * 0.02, accuracy: 1e-12)
+        // The pooled prior's scatter is worth ν₀ − 3 = 7 taps of .20-pitch spread (iikb).
+        XCTAssertEqual(layout.pooled.xx, (7 * 0.04 + 20 * 0.08) / 27, accuracy: 1e-12)
+        XCTAssertEqual(layout.pooled.xy, 20 * 0.03 / 27, accuracy: 1e-12)
+        // κ = 21, ν = 30: predictive scale (κ + 1) / (κ (ν − 1)) · Ψ.
+        XCTAssertEqual(layout.slowKey(layout.keys["a"]).covarianceXY,
+                       (7 * layout.pooled.xy + 20 * 0.03) * 22 / (21 * 29), accuracy: 1e-12)
+        XCTAssertEqual(layout.slowKey(layout.keys["a"]).degrees, 29)
         for i in 0..<120 {
             let x = Double(i % 7 - 3) * 0.15
             model.learn([label("a", x, x * 0.8)], layout: grid, source: .keep)

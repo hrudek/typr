@@ -151,11 +151,11 @@ final class KeyboardLearningStore {
     }
 
     static func readSnapshot(directory: URL? = KeyboardLearningStore.sharedDirectory,
-                             defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup),
-                             physicalTouch: Bool = false) -> KeyboardLearningSnapshot {
+                             defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup))
+        -> KeyboardLearningSnapshot {
         let store = KeyboardLearningStore(directory: directory, defaults: defaults)
         let (model, diagnostics) = store.load()
-        return KeyboardLearningSnapshot(model: PersonalTypingModel.summarize(model ?? .init(), physicalTouch: physicalTouch), diagnostics: diagnostics,
+        return KeyboardLearningSnapshot(model: PersonalTypingModel.summarize(model ?? .init()), diagnostics: diagnostics,
             learningFile: store.fileInfo(Self.learningName), diagnosticsFile: store.fileInfo(Self.diagnosticsName),
             isPersistent: store.isPersistent, modelAvailable: !store.learningReadFailed)
     }

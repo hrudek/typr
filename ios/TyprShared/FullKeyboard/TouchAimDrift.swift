@@ -121,6 +121,6 @@ nonisolated struct TouchAimDrift: Equatable, Sendable {
             xx += weights[i] * dx * dx; yy += weights[i] * dy * dy; xy += weights[i] * dx * dy
         }
         return .init(offsetX: slow.offsetX + x, offsetY: slow.offsetY + y,
-                     sigmaX: sqrt(xx), sigmaY: sqrt(yy), covarianceXY: xy)
+                     sigmaX: sqrt(xx), sigmaY: sqrt(yy), covarianceXY: xy, degrees: slow.degrees)
     }
 }

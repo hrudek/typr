@@ -124,7 +124,7 @@ final class PersonalTypingAimEvaluationTests: XCTestCase {
     private func originMainCalibration(_ state: PersonalTypingModel.State) -> SpatialTouchCalibration? {
         guard let layout = state.layouts[KeyboardLayoutSignature(grid).id] else { return nil }
         var keys: [Character: SpatialTouchCalibration.Key] = [:]
-        let prior = SpatialTouchCalibration.staticSigma * SpatialTouchCalibration.staticSigma
+        let prior = 0.35 * 0.35
         for (letter, stats) in layout.keys where stats.n >= 20 {
             let shrink = Double(stats.n) / Double(stats.n + 20)
             func clampOffset(_ value: Double) -> Double { max(-0.25, min(0.25, shrink * value)) }
