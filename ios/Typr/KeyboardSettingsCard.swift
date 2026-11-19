@@ -10,6 +10,7 @@ struct KeyboardSettingsCard: View {
     @State private var hitAreas: KeyboardHitAreas
     @State private var autocorrectGerman: Bool
     @State private var autocorrectEnglish: Bool
+    @State private var autocorrectLanguageOrder: [SpatialWordDecoder.Language]
 
     static let swipeNotice = "Swipe typing powered by FUTO Swipe."
 
@@ -22,6 +23,7 @@ struct KeyboardSettingsCard: View {
         _hitAreas = State(initialValue: keyboard.hitAreas)
         _autocorrectGerman = State(initialValue: typr.autocorrectGerman)
         _autocorrectEnglish = State(initialValue: typr.autocorrectEnglish)
+        _autocorrectLanguageOrder = State(initialValue: typr.autocorrectLanguageOrder)
     }
 
     private var keyboardSettings: FullKeyboardSettings { FullKeyboardSettings(defaults: defaults) }
@@ -44,7 +46,8 @@ struct KeyboardSettingsCard: View {
                     NavigationLink(value: SettingsDestination.autocorrectLanguages) {
                         SettingsLink(title: "Autocorrect languages", detail: "Choose the languages autocorrect uses",
                                      value: AutocorrectLanguageSettingsCard.summary(
-                                        german: autocorrectGerman, english: autocorrectEnglish))
+                                        order: autocorrectLanguageOrder, german: autocorrectGerman,
+                                        english: autocorrectEnglish))
                     }
                     .buttonStyle(.plain)
                     .enabled(autocorrect)
@@ -96,6 +99,7 @@ struct KeyboardSettingsCard: View {
         hitAreas = keyboardSettings.hitAreas
         autocorrectGerman = typrSettings.autocorrectGerman
         autocorrectEnglish = typrSettings.autocorrectEnglish
+        autocorrectLanguageOrder = typrSettings.autocorrectLanguageOrder
     }
 }
 
@@ -151,42 +155,105 @@ extension BottomKey {
 }
 
 struct AutocorrectLanguageSettingsCard: View {
+    typealias Language = SpatialWordDecoder.Language
+
     @Environment(\.scenePhase) private var scenePhase
+    @State private var order = TyprSettings().autocorrectLanguageOrder
     @State private var german = TyprSettings().autocorrectGerman
     @State private var english = TyprSettings().autocorrectEnglish
 
-    /// ISO 639-1 language codes, uppercased for display and sorted by code.
-    static func summary(german: Bool, english: Bool) -> String {
-        let codes = [(german, "DE"), (english, "EN")].compactMap { $0.0 ? $0.1 : nil }
+    /// Uppercased ISO 639-1 codes of the selected languages, in the stored order.
+    static func summary(order: [Language], german: Bool, english: Bool) -> String {
+        let codes = order.filter { $0 == .german ? german : english }.map { $0.rawValue.uppercased() }
         return codes.isEmpty ? "None" : codes.joined(separator: ", ")
     }
 
+    static func moving(_ language: Language, onto target: Language, in order: [Language]) -> [Language] {
+        guard language != target, let targetIndex = order.firstIndex(of: target) else { return order }
+        var moved = order.filter { $0 != language }
+        moved.insert(language, at: targetIndex)
+        return moved
+    }
+
     static let footer = "For autocorrect only. Your dictation language stays as it is."
+    static let orderFooter = "Autocorrect prefers the top language. Drag a language to move it."
     static let noneSelected = "No autocorrect languages selected."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SettingsSection {
-                SettingsChoiceRow(title: "Deutsch", isSelected: german) {
-                    german.toggle()
-                    TyprSettings().autocorrectGerman = german
-                }
-                SettingsDivider()
-                SettingsChoiceRow(title: "English", isSelected: english) {
-                    english.toggle()
-                    TyprSettings().autocorrectEnglish = english
+                ForEach(Array(order.enumerated()), id: \.element) { index, language in
+                    if index > 0 { SettingsDivider() }
+                    row(language, at: index)
                 }
             }
             if !german && !english { SettingsFooter(Self.noneSelected) }
+            SettingsFooter(Self.orderFooter)
             SettingsFooter(Self.footer)
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
     }
 
+    private func row(_ language: Language, at index: Int) -> some View {
+        HStack(spacing: 0) {
+            SettingsChoiceRow(title: language.title, isSelected: isSelected(language)) { toggle(language) }
+                .accessibilityActions {
+                    if index > 0 {
+                        Button("Move up") { move(language, onto: order[index - 1]) }
+                    }
+                    if index < order.count - 1 {
+                        Button("Move down") { move(language, onto: order[index + 1]) }
+                    }
+                }
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(TyprTheme.textMuted)
+                .padding(.trailing, 16)
+                .accessibilityHidden(true)
+        }
+        .background(TyprTheme.bgBase, in: RoundedRectangle(cornerRadius: TyprTheme.cardRadius))
+        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: TyprTheme.cardRadius))
+        .draggable(language.rawValue)
+        .dropDestination(for: String.self) { items, _ in
+            guard let dragged = items.first.flatMap(Language.init(rawValue:)) else { return false }
+            move(dragged, onto: language)
+            return true
+        }
+    }
+
+    private func isSelected(_ language: Language) -> Bool {
+        language == .german ? german : english
+    }
+
+    private func toggle(_ language: Language) {
+        switch language {
+        case .german:
+            german.toggle()
+            TyprSettings().autocorrectGerman = german
+        case .english:
+            english.toggle()
+            TyprSettings().autocorrectEnglish = english
+        }
+    }
+
+    private func move(_ language: Language, onto target: Language) {
+        withAnimation { order = Self.moving(language, onto: target, in: order) }
+        TyprSettings().autocorrectLanguageOrder = order
+    }
+
     private func refresh() {
+        order = TyprSettings().autocorrectLanguageOrder
         german = TyprSettings().autocorrectGerman
         english = TyprSettings().autocorrectEnglish
+    }
+}
+
+private extension SpatialWordDecoder.Language {
+    var title: String {
+        switch self {
+        case .german: "Deutsch"
+        case .english: "English"
+        }
     }
 }
 
