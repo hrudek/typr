@@ -891,6 +891,7 @@ final class FullKeyboardEngine {
         let key = touch.key
         guard let character = key.character else { return }
         var attributed = key
+        var deferred: KeyboardKey?
         // Rollover commits previous letters first; their didEdit already prepared this map.
         // Unreported context/model/config changes or invalidated held geometry stay literal.
         if touch.hasUnambiguousPoint, touch.evidenceLayout == layout, !shift.isUppercase,
@@ -899,9 +900,11 @@ final class FullKeyboardEngine {
            autocorrect.isEnabled, autocorrect.learning.isLearningEnabled, let attribution {
             let current = suggestionOwnership
             if attribution.ownership == current {
-                attributed = attribution.map.attributedKey(
-                    at: touch.point, geometric: key, layout: layout,
-                    prefix: PersonalLexiconSnapshot.normalize(current.token ?? ""))
+                let prefix = PersonalLexiconSnapshot.normalize(current.token ?? "")
+                attributed = attribution.map.attributedKey(at: touch.point, geometric: key, layout: layout,
+                                                           prefix: prefix)
+                deferred = attribution.map.deferredKey(at: touch.point, geometric: key, layout: layout,
+                                                       prefix: prefix)
             }
         }
         let inserted = attributed.character ?? character
@@ -916,7 +919,8 @@ final class FullKeyboardEngine {
         autocorrect.clearPendingUndo()
         if touch.hasUnambiguousPoint, touch.evidenceLayout == layout {
             typeCharacter(text, sample: .init(text: text, point: touch.point, key: key,
-                                              attributedKey: attributed == key ? nil : attributed))
+                                              attributedKey: attributed == key ? nil : attributed,
+                                              deferredKey: deferred))
         } else {
             typeCharacter(text)
         }
@@ -1082,7 +1086,7 @@ final class FullKeyboardEngine {
         if let sample {
             autocorrect.touchInput.append(text: text, point: sample.point, key: sample.key,
                                          layout: layout, before: before, after: target.documentContextBeforeInput,
-                                         attributedKey: sample.attributedKey)
+                                         attributedKey: sample.attributedKey, deferredKey: sample.deferredKey)
         } else {
             autocorrect.touchInput.clear()
             if text.last?.isLetter != true { autocorrect.touchInput.clearAtBoundary() }
@@ -1307,6 +1311,7 @@ final class FullKeyboardEngine {
         guard let typingLog else { return }
         guard typingLogAllowed else { typingLog.discard(); return }
         typingLog.languages = autocorrect.suggestionLanguages.map(\.rawValue).sorted()
+        typingLog.hitAreas = autocorrect.hitAreas.rawValue
         event(typingLog)
     }
 

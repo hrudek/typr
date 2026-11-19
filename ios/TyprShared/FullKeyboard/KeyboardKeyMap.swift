@@ -1,13 +1,13 @@
 import Foundation
 import CoreGraphics
 
-/// Invisible, conservative horizontal letter attribution, not a layout or word decoder.
+/// Invisible letter attribution, not a layout or word decoder.
 /// KeyMap/posterior × prefix continuation idea translated from iikb Correction/KeyMap.swift
 /// and Typing/TypingEngine+Words.swift at 09a2e9cdfbe851adff6c4646333c0a3f74ba8765
 /// (MIT, © 2026 Bassim Shahidy). Typr owns the bounds, abstention and trust policy.
 nonisolated struct KeyboardKeyMap: Sendable {
     static let keyLimit = 26
-    /// Value policy is internal, not a user switch. Evaluations compare frozen alternatives.
+    /// Standard is conservative; Adaptive adds the iikb-style deferred move. The Hit areas setting picks one.
     struct Policy: Sendable {
         let boundaryFraction: Double
         let novelFloor: Double
@@ -15,18 +15,29 @@ nonisolated struct KeyboardKeyMap: Sendable {
         let densityMargin: Double
         let posteriorMargin: Double
         let requiresConsistency: Bool
-        /// Evaluation-only alternatives; production always uses conservative.
+        /// Evaluation-only alternative to the conservative gap band.
         var includesKeyEdges: Bool = false
+        /// Adds `deferredKey`: every reachable letter key competes, but only when the literal letter
+        /// ends every known word and only toward letters continuing at least `commonShare` of a
+        /// language's word mass.
+        var scoresReachableKeys: Bool = false
+        var commonShare: Double = 0
 
         static let conservative = Policy(boundaryFraction: 0.015, novelFloor: 0.90,
                                          minimumPrefix: 4, densityMargin: log(4),
                                          posteriorMargin: log(16), requiresConsistency: true)
+        static let adaptive = Policy(boundaryFraction: 0.015, novelFloor: 0.90,
+                                     minimumPrefix: 4, densityMargin: log(4),
+                                     posteriorMargin: log(16), requiresConsistency: true,
+                                     scoresReachableKeys: true, commonShare: 3e-4)
     }
     static let boundaryFraction = Policy.conservative.boundaryFraction
     struct Entry: Sendable {
         let key: KeyboardKey
         let density: SpatialTouchCalibration.Key
         let logPrior: Double
+        let continues: Bool
+        let continuesCommonWords: Bool
     }
     let layout: KeyboardLayout
     let prefix: String
@@ -35,7 +46,7 @@ nonisolated struct KeyboardKeyMap: Sendable {
     var payloadBytes: Int { entries.count * MemoryLayout<Entry>.stride }
 
     init(layout: KeyboardLayout, prefix: String, calibration: SpatialTouchCalibration,
-         priors: [Double], policy: Policy = .conservative) {
+         priors: [Double], shares: [Double]? = nil, policy: Policy = .conservative) {
         self.layout = layout
         self.prefix = prefix
         self.policy = policy
@@ -45,8 +56,43 @@ nonisolated struct KeyboardKeyMap: Sendable {
                   let density = calibration.keys[letter], priors.count == Self.keyLimit else { return nil }
             // Limit the prior odds between any two letters to four, even for rare/novel words.
             let gain = log(max(1.0 / 52, priors[index]) * 26)
-            return Entry(key: key, density: density, logPrior: max(-log(2), min(log(2), gain)))
+            return Entry(key: key, density: density, logPrior: max(-log(2), min(log(2), gain)),
+                         continues: priors[index] > policy.novelFloor / 26,
+                         continuesCommonWords: shares.map { $0[index] >= policy.commonShare } ?? false)
         }.prefix(Self.keyLimit).map { $0 }
+    }
+
+    /// The map for the next tap after `prefix`, or nil where the policy abstains for the whole tap.
+    static func make(layout: KeyboardLayout, prefix: String, calibration: SpatialTouchCalibration,
+                     languages: Set<SpatialWordDecoder.Language>,
+                     lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon],
+                     personal: PersonalCompletionIndex?, policy: Policy) -> KeyboardKeyMap? {
+        guard let priors = priors(prefix: prefix, languages: languages, lexicons: lexicons,
+                                  personal: personal, policy: policy) else { return nil }
+        let shares = policy.scoresReachableKeys
+            ? continuationShares(prefix: prefix, languages: languages, lexicons: lexicons) : nil
+        return KeyboardKeyMap(layout: layout, prefix: prefix, calibration: calibration, priors: priors,
+                              shares: shares, policy: policy)
+    }
+
+    /// Each next letter's share of all words in the enabled language where it is most common.
+    static func continuationShares(prefix: String, languages: Set<SpatialWordDecoder.Language>,
+                                   lexicons: [SpatialWordDecoder.Language: SpatialWordLexicon]) -> [Double] {
+        var shares = [Double](repeating: 0, count: keyLimit)
+        for language in languages {
+            guard let lexicon = lexicons[language] else { continue }
+            let total = lexicon.nextLetterMass(after: "").reduce(0, +)
+            guard total > 0 else { continue }
+            var folded = [Double](repeating: 0, count: keyLimit)
+            for (index, mass) in lexicon.nextLetterMass(after: prefix).enumerated() {
+                let letter = KeyboardLetterMap.holder(of: SpatialWordLexicon.alphabet[index])
+                if let holder = SpatialWordLexicon.alphabet.firstIndex(of: letter), holder < keyLimit {
+                    folded[holder] += mass / total
+                }
+            }
+            for index in shares.indices { shares[index] = max(shares[index], folded[index]) }
+        }
+        return shares
     }
 
     /// Unknown source prefixes contribute uniform mass, never an English-only fallback.
@@ -91,25 +137,51 @@ nonisolated struct KeyboardKeyMap: Sendable {
         return mixed.map { policy.novelFloor / 26 + (1 - policy.novelFloor) * $0 }
     }
 
-    /// Call at actual insertion, not touch-down. Caller also validates text/config/model epoch.
-    /// Same-row immediate neighbors only; outer/function/space/punctuation cells cannot donate.
+    /// The key typed at insertion, by either policy. Call at actual insertion, not touch-down;
+    /// the caller also validates text/config/model epoch. Only the same-row immediate neighbour
+    /// across the gap band can win; outer/function/space/punctuation cells cannot donate.
     func attributedKey(at point: CGPoint, geometric: KeyboardKey,
                        layout current: KeyboardLayout, prefix currentPrefix: String) -> KeyboardKey {
+        guard let (hit, pitchX, score) = scoring(at: point, geometric: geometric, layout: current,
+                                                 prefix: currentPrefix) else { return geometric }
+        return gapKey(at: point, literal: hit, pitchX: pitchX, score: score)
+    }
+
+    /// Adaptive's move for a tap `attributedKey` kept literal: any letter key the tap reaches,
+    /// other rows included. Autocorrect may apply it when the word ends.
+    func deferredKey(at point: CGPoint, geometric: KeyboardKey,
+                     layout current: KeyboardLayout, prefix currentPrefix: String) -> KeyboardKey? {
+        guard policy.scoresReachableKeys,
+              let (hit, pitchX, score) = scoring(at: point, geometric: geometric, layout: current,
+                                                 prefix: currentPrefix),
+              gapKey(at: point, literal: hit, pitchX: pitchX, score: score) == geometric else { return nil }
+        let reached = reachableKey(at: point, literal: hit, score: score)
+        return reached == geometric ? nil : reached
+    }
+
+    private func scoring(at point: CGPoint, geometric: KeyboardKey, layout current: KeyboardLayout,
+                         prefix currentPrefix: String) -> (Entry, Double, (Entry) -> Double)? {
         guard current == layout, currentPrefix == prefix, prefix.count >= policy.minimumPrefix,
               layout.layer == .letters,
               layout.field == .text, point.x.isFinite, point.y.isFinite,
               layout.hitTest(point) == geometric,
-              (policy.includesKeyEdges || !geometric.frame.contains(point)),
-              abs(point.x - geometric.frame.midX) > geometric.frame.width * 0.35,
-              let hit = entries.first(where: { $0.key == geometric }),
-              abs(point.y - geometric.frame.midY) <= geometric.frame.height * 0.30 else { return geometric }
+              let hit = entries.first(where: { $0.key == geometric }) else { return nil }
         let pitchX = Double(geometric.frame.width + layout.metrics.gap)
         let pitchY = Double(geometric.frame.height + layout.metrics.rowGap)
-        guard pitchX > 0, pitchY > 0 else { return geometric }
-        func score(_ entry: Entry) -> Double {
+        guard pitchX > 0, pitchY > 0 else { return nil }
+        let score = { (entry: Entry) -> Double in
             entry.density.logDensity(x: Double(point.x - entry.key.frame.midX) / pitchX,
                                      y: Double(point.y - entry.key.frame.midY) / pitchY)
         }
+        return (hit, pitchX, score)
+    }
+
+    private func gapKey(at point: CGPoint, literal hit: Entry, pitchX: Double,
+                        score: (Entry) -> Double) -> KeyboardKey {
+        let geometric = hit.key
+        guard policy.includesKeyEdges || !geometric.frame.contains(point),
+              abs(point.x - geometric.frame.midX) > geometric.frame.width * 0.35,
+              abs(point.y - geometric.frame.midY) <= geometric.frame.height * 0.30 else { return geometric }
         let literalDensity = score(hit)
         let literalScore = literalDensity + hit.logPrior
         var best = geometric
@@ -143,5 +215,27 @@ nonisolated struct KeyboardKeyMap: Sendable {
             if posterior > bestScore { best = entry.key; bestScore = posterior }
         }
         return best
+    }
+
+    private func reachableKey(at point: CGPoint, literal hit: Entry,
+                              score: (Entry) -> Double) -> KeyboardKey {
+        guard !hit.continues else { return hit.key }
+        let literalDensity = score(hit)
+        var best = hit.key
+        var bestScore = literalDensity + hit.logPrior + policy.posteriorMargin
+        for entry in entries where entry.continuesCommonWords && entry.key != hit.key
+            && layout.reaches(point, letter: entry.key.character!) {
+            let density = score(entry)
+            guard density > literalDensity + policy.densityMargin else { continue }
+            let posterior = density + entry.logPrior
+            if posterior > bestScore { best = entry.key; bestScore = posterior }
+        }
+        return best
+    }
+}
+
+extension KeyboardKeyMap.Policy {
+    init(_ hitAreas: KeyboardHitAreas) {
+        self = hitAreas == .adaptive ? .adaptive : .conservative
     }
 }

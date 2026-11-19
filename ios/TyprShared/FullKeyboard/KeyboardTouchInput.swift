@@ -9,6 +9,8 @@ nonisolated struct KeyboardTouchWord: Equatable, Sendable {
         /// Original geometric hit; never silently relabeled by the attribution map.
         let key: KeyboardKey
         var attributedKey: KeyboardKey? = nil
+        /// Adaptive hit areas: the key this literal tap may mean, offered to autocorrect at the boundary.
+        var deferredKey: KeyboardKey? = nil
     }
 
     let layout: KeyboardLayout
@@ -16,6 +18,15 @@ nonisolated struct KeyboardTouchWord: Equatable, Sendable {
     var learningIntact = true
     var retyped: [Int: TouchLabel] = [:]
     var text: String { samples.map(\.text).joined() }
+
+    /// The word with its first deferred tap moved, or nil without one.
+    var adaptiveReading: String? {
+        guard let index = samples.firstIndex(where: { $0.deferredKey != nil }),
+              let letter = samples[index].deferredKey?.character else { return nil }
+        var texts = samples.map(\.text)
+        texts[index] = texts[index].first?.isUppercase == true ? letter.uppercased() : letter
+        return texts.joined()
+    }
 }
 
 /// Keeps only a bounded, contiguous word whose characters all came from unambiguous key taps.
@@ -38,15 +49,6 @@ final class KeyboardTouchInput {
     func clear() { word = nil; previous = nil; space = nil; editedWord = false; forgetErased() }
 
     private func forgetErased() { erased = [:]; erasedLayout = nil }
-
-    /// iikb KeyGrid.reaches (73c2ed9016b802e5bf017a2d595d037d1e748ccf, MIT © 2026 Bassim Shahidy).
-    static func reaches(_ point: CGPoint, letter: String, in layout: KeyboardLayout) -> Bool {
-        guard let key = layout.key(.character(letter)) else { return false }
-        let cell = key.frame.insetBy(dx: -layout.metrics.gap / 2, dy: -layout.metrics.rowGap / 2)
-        let dx = max(cell.minX - point.x, 0, point.x - cell.maxX)
-        let dy = max(cell.minY - point.y, 0, point.y - cell.maxY)
-        return dx <= cell.width / 4 && dy <= cell.height / 4
-    }
 
     func boundaryEvidence(beforeInput: String?) -> KeyboardBoundaryTouch? {
         guard let current = evidence(beforeInput: beforeInput) else { return nil }
@@ -81,7 +83,7 @@ final class KeyboardTouchInput {
     }
 
     func append(text: String, point: CGPoint, key: KeyboardKey, layout: KeyboardLayout,
-                before: String?, after: String?, attributedKey: KeyboardKey? = nil) {
+                before: String?, after: String?, attributedKey: KeyboardKey? = nil, deferredKey: KeyboardKey? = nil) {
         if text == " " {
             let completed = evidence(beforeInput: before)
             clearAtBoundary() // A second space never carries a window forward.
@@ -122,10 +124,11 @@ final class KeyboardTouchInput {
         let letter = text.lowercased()
         if let tap = erased.removeValue(forKey: position), erasedLayout == layout,
            tap.text.lowercased() != letter, let character = letter.first,
-           Self.reaches(tap.point, letter: letter, in: layout) {
+           layout.reaches(tap.point, letter: letter) {
             word?.retyped[position] = TouchLabel(point: tap.point, letter: character)
         }
-        word?.samples.append(.init(text: text, point: point, key: key, attributedKey: attributedKey))
+        word?.samples.append(.init(text: text, point: point, key: key, attributedKey: attributedKey,
+                                   deferredKey: deferredKey))
         if (previous?.samples.count ?? 0) + (word?.samples.count ?? 0) + 1 > KeyboardBoundaryTouch.maxSamples {
             previous = nil; space = nil
         }
