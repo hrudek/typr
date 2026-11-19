@@ -1157,7 +1157,6 @@ final class AutocorrectEngine {
         return nil
     }
 
-    /// One decode per (evidence, languages, context, learning generation, resources), shared by strip and boundary.
     private func spatialOutcome(for token: String, evidence: KeyboardTouchWord?, forSuggestions: Bool,
                                 context: KeyboardContextModel.WordContext?) -> SpatialWordDecoder.Outcome? {
         guard isEnabled, let evidence, evidence.text == token,

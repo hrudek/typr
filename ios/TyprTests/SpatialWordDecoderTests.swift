@@ -961,7 +961,6 @@ final class SpatialWordDecoderTests: XCTestCase {
                     let key = calibration?.keys[letter] ?? .init(offsetX: 0, offsetY: 0, sigmaX: 0.35, sigmaY: 0.35)
                     let dx = Double(sample.point.x - frame.midX) / Double(frame.width + word.layout.metrics.gap) - key.offsetX
                     let dy = Double(sample.point.y - frame.midY) / Double(frame.height + word.layout.metrics.rowGap) - key.offsetY
-                    // Independent inverse/determinant reference, not logDensity().
                     let xx = key.sigmaX * key.sigmaX, yy = key.sigmaY * key.sigmaY, xy = key.covarianceXY
                     let det = xx * yy - xy * xy
                     row[letter] = -0.5 * (yy * dx * dx - 2 * xy * dx * dy + xx * dy * dy) / det

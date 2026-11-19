@@ -1,7 +1,5 @@
 import UIKit
 
-/// Typr: German layer for `AutocorrectEngine` (umlaut digraphs, ß, German typo costs).
-/// All German logic lives here so the upstream engine file only carries small hooks.
 @MainActor
 final class GermanAutocorrect {
     /// `nil` when the device has no German dictionary; only the built-in table works then.
