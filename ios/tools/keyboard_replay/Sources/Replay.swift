@@ -156,12 +156,9 @@ final class Replayer {
     private let english: LexiconChecker
     private let german: GermanAutocorrect
     private let learning: PersonalTypingModel.State?
-    private let learningStore: URL
-    private var stored: Adjustment?
     private let protected: ProtectedPersonalLexicon
 
-    /// `learningStore`: a private directory that receives the export's learning.
-    init(words: WordData, export: TypingLogExport, learningStore: URL) throws {
+    init(words: WordData, export: TypingLogExport) throws {
         self.words = words
         var builder = ProtectedPersonalLexicon.Builder()
         export.protectedWords.forEach { builder.add($0) }
@@ -174,7 +171,6 @@ final class Replayer {
             throw ReplayError("The export's learning is invalid")
         }
         learning = export.learning
-        self.learningStore = learningStore
     }
 
     static func skipReason(_ word: TypingLogWord) -> SkipReason? {
@@ -228,22 +224,9 @@ final class Replayer {
         return builder.build()
     }
 
-    /// The session reads the adjusted learning and never writes it back.
-    private func session(_ adjustment: Adjustment) throws -> KeyboardLearningSession {
+    private func session(_ adjustment: Adjustment) -> KeyboardLearningSession {
         guard let learning else { return KeyboardLearningSession(store: nil, defaults: nil) }
-        if stored != adjustment {
-            var diagnostics = KeyboardDiagnostics()
-            guard KeyboardLearningStore(directory: learningStore, defaults: nil)
-                .save(model: adjusted(learning, adjustment), diagnostics: &diagnostics) else {
-                throw ReplayError("The export's learning is invalid")
-            }
-            stored = adjustment
-        }
-        var opening = true
-        let session = KeyboardLearningSession(store: KeyboardLearningStore(directory: learningStore, defaults: nil),
-                                              defaults: nil, allowsPersistence: { opening })
-        opening = false
-        return session
+        return KeyboardLearningSession(state: adjusted(learning, adjustment))
     }
 
     /// `context`: the text before the word in its field, as far as the log tells.
@@ -251,7 +234,7 @@ final class Replayer {
                 hitAreas: KeyboardHitAreas) async throws -> Result<ReplayedWord, SkipReason> {
         guard let logged = word.layout, let layout = logged.keyboardLayout else { return .failure(.unknownLayout) }
         let languages = Set(word.languages.compactMap(Language.init(rawValue:)))
-        let autocorrect = AutocorrectEngine(checker: english, learning: try session(prepared.adjustment),
+        let autocorrect = AutocorrectEngine(checker: english, learning: session(prepared.adjustment),
                                             spatialDecoder: decoder, contextResources: contextResources)
         autocorrect.loadProtectedLexicon(protected(unless: prepared.adjustment.unkept))
         autocorrect.hitAreas = hitAreas

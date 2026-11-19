@@ -58,12 +58,7 @@ func run(_ arguments: [String]) async throws {
     guard let input else { throw ReplayError(usage) }
     let export = try readExport(input)
 
-    let scratch = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
-        .appendingPathComponent("typr-replay-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false,
-                                            attributes: [.posixPermissions: 0o700])
-    defer { try? FileManager.default.removeItem(at: scratch) }
-    let replayer = try Replayer(words: words, export: export, learningStore: scratch)
+    let replayer = try Replayer(words: words, export: export)
 
     var results: [Result<(PreparedWord, [ReplayedWord]), SkipReason>] = []
     var previous: [String] = []

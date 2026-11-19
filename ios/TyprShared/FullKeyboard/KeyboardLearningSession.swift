@@ -95,6 +95,12 @@ final class KeyboardLearningSession {
         if isPersistent { observer = KeyboardLearningObserver { [weak self] in self?.refresh() } }
     }
 
+    /// A RAM-only session starting from `state` that never saves; for the desktop typing replay.
+    convenience init(state: PersonalTypingModel.State) {
+        self.init(store: nil, defaults: nil)
+        model = PersonalTypingModel(state: state, isLearningEnabled: model.isLearningEnabled)
+    }
+
     var isLearningEnabled: Bool { model.isLearningEnabled }
     /// Keeps and rejected pairs protect regardless of the switch.
     var protections: PersonalLexiconSnapshot { model.lexicon }

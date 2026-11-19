@@ -180,10 +180,16 @@ class ReplayTests(unittest.TestCase):
     def test_prints_the_report_and_writes_nothing(self):
         empty = self.dir / "cwd"
         empty.mkdir(exist_ok=True)
-        result = self.run_tool(cwd=empty)
-        self.assertEqual(result.returncode, 0)
+        temporary = self.dir / "tmp"
+        temporary.mkdir(exist_ok=True)
+        temporary.chmod(0o500)
+        self.addCleanup(temporary.chmod, 0o700)
+        result = subprocess.run([self.binary, str(FIXTURE)], capture_output=True, text=True, cwd=empty,
+                                env={**os.environ, "TMPDIR": str(temporary)}, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Standard vs meant word", result.stdout)
         self.assertEqual(list(empty.iterdir()), [])
+        self.assertEqual(list(temporary.iterdir()), [])
         rejected = self.run_tool("--out", str(empty / "report.txt"), cwd=empty)
         self.assertEqual(rejected.returncode, 1)
         self.assertIn("Usage:", rejected.stderr)

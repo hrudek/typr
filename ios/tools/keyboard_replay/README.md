@@ -1,8 +1,9 @@
 # Keyboard replay
 
 Replays the typing log from your iPhone through the keyboard's own engine and reports how often
-each hit-area setting commits the word you meant. Nothing leaves your computer and nothing is
-written unless you ask for it.
+each hit-area setting commits the word you meant. Nothing leaves your computer. The only files
+written are the build in its build folder; the replay itself keeps everything in memory and prints
+the report.
 
 ## 1. Export on the iPhone
 
