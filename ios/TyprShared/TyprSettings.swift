@@ -54,12 +54,12 @@ struct TyprSettings {
     }
 
     /// Both autocorrect languages, preferred first; selected or not. Deutsch first by default;
-    /// anything but both languages once falls back to the default.
+    /// anything but exactly both languages falls back to the default.
     var autocorrectLanguageOrder: [SpatialWordDecoder.Language] {
         get {
-            let order = (defaults?.stringArray(forKey: Key.autocorrectLanguageOrder) ?? [])
-                .compactMap(SpatialWordDecoder.Language.init(rawValue:))
-            return order.count == 2 && Set(order).count == 2 ? order : [.german, .english]
+            let stored = defaults?.stringArray(forKey: Key.autocorrectLanguageOrder) ?? []
+            guard stored.sorted() == ["de", "en"] else { return [.german, .english] }
+            return stored.compactMap(SpatialWordDecoder.Language.init(rawValue:))
         }
         nonmutating set { defaults?.set(newValue.map(\.rawValue), forKey: Key.autocorrectLanguageOrder) }
     }

@@ -714,7 +714,6 @@ final class SpatialWordDecoderTests: XCTestCase {
             }
             return nil
         }
-        // `wirk`: English `work` slightly ahead of German `wird`, ambiguous without a preference.
         let close = [candidate("work", .english, score: 5), candidate("wird", .german, score: 4.5)]
         XCTAssertNil(decision(close, preferring: nil))
         XCTAssertEqual(decision(close, preferring: .english), "work")

@@ -1003,7 +1003,6 @@ final class AutocorrectEngine {
 
         // Spelling guesses or prefix completions from `UITextChecker`.
         if pool.count < poolLimit && token.count >= 2 {
-            // Typr: German-valid words count as valid; the preferred language's guesses come first.
             let valid = Self.shorthandAllowlist.contains(lower) || literalIsValid(token)
             if !valid {
                 let english = englishEnabled ? rankedGuesses(for: token) : []
@@ -1379,7 +1378,6 @@ final class AutocorrectEngine {
             if !result.complete || result.geometryPrefersAlternative { return Decision(refusal: refusal) }
         }
 
-        // 6. Spelling-only fallback, preferred language first.
         let fixes = preferredLanguage == .english ? [englishSpellingFix, germanSpellingFix]
             : [germanSpellingFix, englishSpellingFix]
         guard let fix = fixes.lazy.compactMap({ $0(token) }).first else { return Decision(refusal: refusal) }

@@ -193,7 +193,7 @@ final class GermanAutocorrectTests: XCTestCase {
         XCTAssertEqual(settings.autocorrectLanguageOrder, [.german, .english])
         settings.autocorrectLanguageOrder = [.english, .german]
         XCTAssertEqual(TyprSettings(defaults: defaults).autocorrectLanguageOrder, [.english, .german])
-        let invalid: [Any] = [["en"], ["en", "en"], ["fr", "en"], "en"]
+        let invalid: [Any] = [["en"], ["en", "en"], ["fr", "en"], ["en", "de", "fr"], ["en", "fr", "de"], "en"]
         for stored in invalid {
             defaults.set(stored, forKey: "typr.autocorrectLanguageOrder")
             XCTAssertEqual(settings.autocorrectLanguageOrder, [.german, .english], "\(stored)")
