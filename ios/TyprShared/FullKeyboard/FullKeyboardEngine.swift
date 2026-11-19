@@ -10,6 +10,7 @@ protocol KeyboardTextTarget: AnyObject {
     var autocorrectionType: UITextAutocorrectionType? { get }
     var isSecureTextEntry: Bool? { get }
     var keyboardType: UIKeyboardType? { get }
+    var inlinePredictionType: UITextInlinePredictionType? { get }
     var returnKeyType: UIReturnKeyType? { get }
     var enablesReturnKeyAutomatically: Bool? { get }
     var keyboardAppearance: UIKeyboardAppearance? { get }
@@ -21,6 +22,7 @@ protocol KeyboardTextTarget: AnyObject {
 extension KeyboardTextTarget {
     var autocorrectionType: UITextAutocorrectionType? { .default }
     var isSecureTextEntry: Bool? { false }
+    var inlinePredictionType: UITextInlinePredictionType? { .default }
     var enablesReturnKeyAutomatically: Bool? { false }
     func adjustTextPosition(byCharacterOffset offset: Int) {}
 }
@@ -39,6 +41,7 @@ final class DocumentProxyTextTarget: KeyboardTextTarget {
     var autocorrectionType: UITextAutocorrectionType? { proxy().autocorrectionType }
     var isSecureTextEntry: Bool? { proxy().isSecureTextEntry }
     var keyboardType: UIKeyboardType? { proxy().keyboardType }
+    var inlinePredictionType: UITextInlinePredictionType? { proxy().inlinePredictionType }
     var returnKeyType: UIReturnKeyType? { proxy().returnKeyType }
     var enablesReturnKeyAutomatically: Bool? { proxy().enablesReturnKeyAutomatically }
     var keyboardAppearance: UIKeyboardAppearance? { proxy().keyboardAppearance }
@@ -112,6 +115,8 @@ final class FullKeyboardEngine {
     private let swipeDecoder: SwipeDecoding
     private(set) var suggestions: [KeyboardSuggestion] = []
     private let suggestionWorker: KeyboardSuggestionWorker
+    /// Optional model next words, merged into the count-based predictions for the same context.
+    var modelPredictions: ModelPredictionSession?
     private let suggestionEngineID = UUID()
     private var textRevision: UInt64 = 0
     private(set) var suggestionsAreActive = true
@@ -340,6 +345,7 @@ final class FullKeyboardEngine {
         // the bounded personal snapshot after trusted-word changes.
         let evidence = autocorrect.touchInput.evidence(beforeInput: target.documentContextBeforeInput)
         let ownership = suggestionOwnership
+        modelPredictions?.keep(only: ModelPredictionRequest(before: ownership.context))
         // Current before returning to the event loop, independent of strip/worker readiness.
         attribution = autocorrect.keyMap(layout: layout, context: ownership.context,
                                         permitsCorrection: ownership.permitsCorrection).map { (ownership, $0) }
@@ -384,14 +390,44 @@ final class FullKeyboardEngine {
             guard let self, self.textRevision == ownership.revision,
                   result.request.ownership == ownership,
                   self.suggestionOwnership == ownership, self.showsStrip else { return }
-            let next = self.autocorrect.finishSuggestions(result).map { suggestion in
-                // After-space predictions show (and insert) the host's auto-capitalization.
-                var owned = ownership.token == nil ? self.casedPrediction(suggestion, before: ownership.context) : suggestion
-                owned.ownership = ownership
-                return owned
-            }
+            let next = self.ownedSuggestions(self.autocorrect.finishSuggestions(result), ownership: ownership)
             self.publishSuggestions(next, ownership: ownership, evidence: evidence, final: true)
+            if ownership.token == nil { self.addModelPredictions(to: next, ownership: ownership, evidence: evidence) }
         })
+    }
+
+    private func ownedSuggestions(_ suggestions: [KeyboardSuggestion],
+                                  ownership: KeyboardSuggestionOwnership) -> [KeyboardSuggestion] {
+        suggestions.map { suggestion in
+            // After-space predictions show (and insert) the host's auto-capitalization.
+            var owned = ownership.token == nil ? casedPrediction(suggestion, before: ownership.context) : suggestion
+            owned.ownership = ownership
+            return owned
+        }
+    }
+
+    /// Restricted fields (no inline predictions, numbers and punctuation) never reach a model;
+    /// secure, URL, email, number pad and no-autocorrect fields never get this far.
+    private func addModelPredictions(to counted: [KeyboardSuggestion], ownership: KeyboardSuggestionOwnership,
+                                     evidence: KeyboardTouchWord?) {
+        guard let modelPredictions, target.inlinePredictionType != .no,
+              target.keyboardType != .numbersAndPunctuation,
+              let request = ModelPredictionRequest(before: ownership.context) else { return }
+        if let words = modelPredictions.words(for: request) {
+            publishModelPredictions(words, counted: counted, ownership: ownership, evidence: evidence)
+            return
+        }
+        modelPredictions.request(request) { [weak self] words in
+            guard let self, self.textRevision == ownership.revision, self.suggestionsAreActive,
+                  self.showsStrip, self.suggestionOwnership == ownership else { return }
+            self.publishModelPredictions(words, counted: counted, ownership: ownership, evidence: evidence)
+        }
+    }
+
+    private func publishModelPredictions(_ words: [String], counted: [KeyboardSuggestion],
+                                         ownership: KeyboardSuggestionOwnership, evidence: KeyboardTouchWord?) {
+        publishSuggestions(ownedSuggestions(ModelPredictionSession.merge(words, into: counted), ownership: ownership),
+                           ownership: ownership, evidence: evidence, final: true)
     }
 
     private func publishSuggestions(_ next: [KeyboardSuggestion], ownership: KeyboardSuggestionOwnership?,
@@ -413,6 +449,7 @@ final class FullKeyboardEngine {
     func cancelSuggestions() {
         textRevision &+= 1
         suggestionWorker.cancel()
+        modelPredictions?.cancel()
         publishSuggestions([], ownership: nil, evidence: nil, final: false)
     }
 

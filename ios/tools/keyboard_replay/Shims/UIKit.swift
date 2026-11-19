@@ -4,6 +4,7 @@
 
 public enum UITextAutocapitalizationType: Sendable { case none, words, sentences, allCharacters }
 public enum UITextAutocorrectionType: Sendable { case `default`, no, yes }
+public enum UITextInlinePredictionType: Sendable { case `default`, no, yes }
 public enum UIKeyboardType: Sendable {
     case `default`, asciiCapable, numbersAndPunctuation, URL, numberPad, phonePad, namePhonePad
     case emailAddress, decimalPad, twitter, webSearch, asciiCapableNumberPad
@@ -42,6 +43,7 @@ public protocol UITextDocumentProxy {
     var autocorrectionType: UITextAutocorrectionType { get }
     var isSecureTextEntry: Bool { get }
     var keyboardType: UIKeyboardType { get }
+    var inlinePredictionType: UITextInlinePredictionType { get }
     var returnKeyType: UIReturnKeyType { get }
     var enablesReturnKeyAutomatically: Bool { get }
     var keyboardAppearance: UIKeyboardAppearance { get }
