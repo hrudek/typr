@@ -9,6 +9,8 @@ Replays a Typr typing log export through the keyboard's own engine.
 Types the invented test text through the engine and writes it as an export to FILE.
        keyboard-replay --touch-posterior
 Prints the learned touch densities after fixed labels as JSON, for the touch-model tests.
+       keyboard-replay --model-predictions
+Prints the prediction bar with fake model providers as JSON, for the model-prediction tests.
 """
 
 func readExport(_ path: String) throws -> TypingLogExport {
@@ -36,6 +38,7 @@ func run(_ arguments: [String]) async throws {
     var input: String?
     var showWords = false, json = false
     var fixture: URL?
+    var modelPredictions = false
     var rest = arguments[...]
     while let argument = rest.popFirst() {
         switch argument {
@@ -46,6 +49,7 @@ func run(_ arguments: [String]) async throws {
             fixture = URL(fileURLWithPath: path)
         case "-h", "--help": print(usage); return
         case "--touch-posterior": print(try touchPosteriorReport(), terminator: ""); return
+        case "--model-predictions": modelPredictions = true
         default:
             guard input == nil, !argument.hasPrefix("-") else { throw ReplayError(usage) }
             input = argument
@@ -55,6 +59,9 @@ func run(_ arguments: [String]) async throws {
         throw ReplayError("Cannot locate the WordData folder next to keyboard-replay")
     }
     let words = try WordData(directory: executable.deletingLastPathComponent().appendingPathComponent("WordData"))
+    if modelPredictions {
+        return print(try await modelPredictionReport(words: words), terminator: "")
+    }
     if let fixture {
         return try await makeFixture(words: words, to: fixture)
     }

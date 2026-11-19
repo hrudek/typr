@@ -194,6 +194,7 @@ final class FixtureTextTarget: KeyboardTextTarget {
     var autocorrectionType: UITextAutocorrectionType? = .default
     var isSecureTextEntry: Bool? = false
     var keyboardType: UIKeyboardType? = .default
+    var inlinePredictionType: UITextInlinePredictionType? = .default
     var returnKeyType: UIReturnKeyType? = .default
     var enablesReturnKeyAutomatically: Bool? = false
 
