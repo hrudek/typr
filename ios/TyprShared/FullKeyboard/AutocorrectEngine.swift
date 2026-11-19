@@ -112,6 +112,11 @@ final class AutocorrectEngine {
         var boundary: KeyboardBoundaryDecoder.Candidate? = nil
     }
 
+    struct PendingUndo: Equatable {
+        let correction: AppliedCorrection
+        let window: KeyboardUndoWindow
+    }
+
     /// One completed word awaiting trust: RAM only, never persisted, logged or exported.
     // Delayed word feedback adapted from AVGVSTVS96/iikb
     // Packages/KeyboardModules/Sources/KeyboardCore/Typing/TypingEngine+Words.swift (MIT).
@@ -206,7 +211,7 @@ final class AutocorrectEngine {
     private var reversibleBoundary: KeyboardBoundaryDecoder.Candidate?
     static let boundaryRejectionLimit = 64
     var boundaryRejectionCount: Int { boundaryRejections.count }
-    private(set) var lastCorrection: AppliedCorrection?
+    private var lastCorrection: PendingUndo?
     private(set) var pendingFeedback: PendingFeedback?
     /// Manual choices also wait until the next unambiguous letter before pair training.
     private var pendingPairChoice: (word: String, epoch: Int)?
@@ -422,23 +427,33 @@ final class AutocorrectEngine {
         lastCorrection = nil
     }
 
-    func recordAppliedKeep(_ word: String, wasNew: Bool) {
-        lastCorrection = AppliedCorrection(original: word, insertedText: word + " ", keptWordWasNew: wasNew)
+    func recordAppliedKeep(_ word: String, wasNew: Bool, at now: TimeInterval) {
+        record(AppliedCorrection(original: word, insertedText: word + " ", keptWordWasNew: wasNew), at: now)
     }
 
-    func recordAppliedCorrection(original: String, insertedText: String) {
-        lastCorrection = AppliedCorrection(original: original, insertedText: insertedText,
-                                           kind: pendingFeedback?.kind ?? .autoRule, context: rejectionContext)
+    func recordAppliedCorrection(original: String, insertedText: String, at now: TimeInterval) {
+        record(AppliedCorrection(original: original, insertedText: insertedText,
+                                 kind: pendingFeedback?.kind ?? .autoRule, context: rejectionContext), at: now)
     }
 
-    func recordAppliedBoundary(_ candidate: KeyboardBoundaryDecoder.Candidate, replacement: String) {
-        lastCorrection = AppliedCorrection(original: candidate.original, insertedText: replacement + " ",
-                                           boundary: candidate)
+    func recordAppliedBoundary(_ candidate: KeyboardBoundaryDecoder.Candidate, replacement: String,
+                               at now: TimeInterval) {
+        record(AppliedCorrection(original: candidate.original, insertedText: replacement + " ",
+                                 boundary: candidate), at: now)
     }
 
-    func consumePendingUndo() -> AppliedCorrection? {
-        defer { lastCorrection = nil }
+    private func record(_ correction: AppliedCorrection, at now: TimeInterval) {
+        lastCorrection = PendingUndo(correction: correction, window: KeyboardUndoWindow(openedAt: now))
+    }
+
+    func pendingUndo(at now: TimeInterval) -> PendingUndo? {
+        guard let lastCorrection, lastCorrection.window.isOpen(at: now) else { return nil }
         return lastCorrection
+    }
+
+    func consumePendingUndo(at now: TimeInterval) -> AppliedCorrection? {
+        defer { lastCorrection = nil }
+        return pendingUndo(at: now)?.correction
     }
 
     /// Explicit keep: protects the spelling for this engine and in the personal lexicon.

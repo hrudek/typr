@@ -146,7 +146,8 @@ final class KeyboardKeyPlaneView: UIView {
                 let lit = pressed.contains(.delete)
                 context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)
                 guard !hideGlyphs else { continue }
-                drawSymbol(lit ? "delete.left.fill" : "delete.left", in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isLandscape ? 16 : 18, weight: symbolWeight)
+                let symbol = engine.deleteUndoes ? "arrow.uturn.backward" : lit ? "delete.left.fill" : "delete.left"
+                drawSymbol(symbol, in: inkFrame(key.frame), color: palette.keyGlyph, pointSize: isLandscape ? 16 : 18, weight: symbolWeight)
             case .layerSwitch:
                 let lit = pressed.contains(key.kind)
                 context.fillKeycap(key.frame, palette: palette, fill: lit ? palette.keyPressedFill : palette.keyFill, radius: radius)

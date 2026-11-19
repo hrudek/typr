@@ -203,6 +203,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     func syncSettings() {
         // Learning switch and app reset epochs; never per keystroke.
         engine.autocorrect.syncLearning()
+        engine.refreshDeleteUndo()
         applySuggestionBarSetting()
         let wantsDesign = designOverride ?? FullKeyboardSettings().design
         if wantsDesign != design {
