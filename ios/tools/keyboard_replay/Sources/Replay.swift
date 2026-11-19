@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 typealias Language = SpatialWordDecoder.Language
 
@@ -83,25 +84,76 @@ final class Replayer {
     private let contextResources: KeyboardContextResources
     private let english: LexiconChecker
     private let german: GermanAutocorrect
-    private let learningStore: URL?
+    private let learning: PersonalTypingModel.State?
+    private let learningStore: URL
+    private var storedTaught: Taught?
+    private let taught: [Taught]
+    private let protected: ProtectedPersonalLexicon
 
-    /// `learningStore`: a private directory that receives the export's touch model.
-    init(words: WordData, touchModel: PersonalTypingModel.State?, learningStore: URL) throws {
+    /// What the log shows the user teaching first at or after a word: an undone correction becomes a
+    /// rejection and its literal a kept word once typed again, a keep pick a kept word. None of it
+    /// existed yet while that word was typed.
+    struct Taught: Equatable {
+        var rejections: Set<RejectedCorrection> = []
+        var keeps: Set<String> = []
+    }
+
+    /// `learningStore`: a private directory that receives the export's learning.
+    init(words: WordData, export: TypingLogExport, learningStore: URL) throws {
         self.words = words
+        var builder = ProtectedPersonalLexicon.Builder()
+        export.protectedWords.forEach { builder.add($0) }
+        protected = builder.build()
         decoder = SpatialWordDecoder(lexicons: words.lexicons)
         contextResources = KeyboardContextResources(model: words.context)
         english = LexiconChecker(words.lexicons[.english])
         german = GermanAutocorrect(checker: LexiconChecker(words.lexicons[.german]))
-        if let touchModel {
-            var diagnostics = KeyboardDiagnostics()
-            guard KeyboardLearningStore(directory: learningStore, defaults: nil)
-                .save(model: touchModel, diagnostics: &diagnostics) else {
-                throw ReplayError("The export's touch model is invalid")
-            }
-            self.learningStore = learningStore
-        } else {
-            self.learningStore = nil
+        if let learning = export.learning, learning.validated() == nil {
+            throw ReplayError("The export's learning is invalid")
         }
+        learning = export.learning
+        self.learningStore = learningStore
+        var introduced: [Taught] = []
+        var all = Taught()
+        for word in export.words {
+            var new = Taught()
+            for correction in word.corrections {
+                if correction.kind == .undo, let from = correction.from, let to = correction.to {
+                    new.rejections.insert(RejectedCorrection(typed: to, replacement: from))
+                    new.keeps.insert(PersonalLexiconSnapshot.normalize(to))
+                }
+                if correction.kind == .pick, correction.chip == "keep", let to = correction.to {
+                    new.keeps.insert(PersonalLexiconSnapshot.normalize(to))
+                }
+            }
+            new.rejections.subtract(all.rejections)
+            new.keeps.subtract(all.keeps)
+            all.rejections.formUnion(new.rejections)
+            all.keeps.formUnion(new.keeps)
+            introduced.append(new)
+        }
+        var pending = all
+        taught = introduced.map { new in
+            defer {
+                pending.rejections.subtract(new.rejections)
+                pending.keeps.subtract(new.keeps)
+            }
+            return pending
+        }
+    }
+
+    private func learning(before index: Int) -> PersonalTypingModel.State? {
+        guard var state = learning else { return nil }
+        state.rejected.removeAll { taught[index].rejections.contains($0) }
+        state.kept = state.kept.filter { !taught[index].keeps.contains($0.key) }
+        return state
+    }
+
+    /// In a bundled word list of the word's languages, imported, or kept before the word was typed.
+    func isKnown(_ index: Int, _ word: TypingLogWord) -> Bool {
+        let languages = Set(word.languages.compactMap(Language.init(rawValue:)))
+        return words.isKnown(word.meant, in: languages) || protected.contains(word.meant)
+            || learning(before: index)?.kept[PersonalLexiconSnapshot.normalize(word.meant)] != nil
     }
 
     static func skipReason(_ word: TypingLogWord) -> SkipReason? {
@@ -117,9 +169,17 @@ final class Replayer {
         return nil
     }
 
-    /// Each session reads the same snapshot and never writes it back.
-    private func learning() -> KeyboardLearningSession {
-        guard let learningStore else { return KeyboardLearningSession(store: nil, defaults: nil) }
+    /// The session reads the learning as it stood before the word and never writes it back.
+    private func session(before index: Int) throws -> KeyboardLearningSession {
+        guard let state = learning(before: index) else { return KeyboardLearningSession(store: nil, defaults: nil) }
+        if storedTaught != taught[index] {
+            var diagnostics = KeyboardDiagnostics()
+            guard KeyboardLearningStore(directory: learningStore, defaults: nil)
+                .save(model: state, diagnostics: &diagnostics) else {
+                throw ReplayError("The export's learning is invalid")
+            }
+            storedTaught = taught[index]
+        }
         var opening = true
         let session = KeyboardLearningSession(store: KeyboardLearningStore(directory: learningStore, defaults: nil),
                                               defaults: nil, allowsPersistence: { opening })
@@ -128,12 +188,15 @@ final class Replayer {
     }
 
     /// `context`: the text before the word in its field, as far as the log tells.
-    func replay(_ word: TypingLogWord, context: String, hitAreas: HitAreas) -> Result<ReplayedWord, SkipReason> {
+    /// `index`: the word's position in the export.
+    func replay(_ word: TypingLogWord, at index: Int, context: String,
+                hitAreas: HitAreas) throws -> Result<ReplayedWord, SkipReason> {
         if let reason = Self.skipReason(word) { return .failure(reason) }
         guard let logged = word.layout, let layout = logged.keyboardLayout else { return .failure(.unknownLayout) }
         let languages = Set(word.languages.compactMap(Language.init(rawValue:)))
-        let autocorrect = AutocorrectEngine(checker: english, learning: learning(), spatialDecoder: decoder,
+        let autocorrect = AutocorrectEngine(checker: english, learning: try session(before: index), spatialDecoder: decoder,
                                             contextResources: contextResources)
+        autocorrect.loadProtectedLexicon(protected)
         autocorrect.englishEnabled = languages.contains(.english)
         autocorrect.german = languages.contains(.german) ? german : nil
         let target = ReplayTarget(text: context)

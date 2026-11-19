@@ -6,6 +6,8 @@ Replays a Typr typing log export through the keyboard's own engine and compares 
   --show-words  list the words that changed between settings or did not reproduce (private text)
   --json        print the report as JSON
   --out FILE    write the report to FILE (outside every Git checkout) instead of stdout
+       keyboard-replay --make-fixture FILE
+Types the invented test text through the engine and writes it as an export to FILE.
 """
 
 /// Private text must not land where `git add` could pick it up, including through a symlink.
@@ -33,7 +35,8 @@ func readExport(_ path: String) throws -> TypingLogExport {
     }
     guard header.format == TypingLogExport.format else { throw ReplayError("\(path) is not a Typr typing log export") }
     guard header.version == TypingLogExport.version else {
-        throw ReplayError("Export version \(header.version.map(String.init) ?? "?") is not supported (expected \(TypingLogExport.version))")
+        throw ReplayError("Export version \(header.version.map(String.init) ?? "?") is not supported"
+                          + " (expected \(TypingLogExport.version)); export again from the matching Typr build")
     }
     do { return try TypingLogExport.decoder().decode(TypingLogExport.self, from: data) } catch {
         throw ReplayError("\(path) does not match the typing log format: \(error)")
@@ -45,6 +48,7 @@ func run(_ arguments: [String]) throws {
     var input: String?
     var showWords = false, json = false
     var out: URL?
+    var fixture: URL?
     var rest = arguments[...]
     while let argument = rest.popFirst() {
         switch argument {
@@ -53,41 +57,51 @@ func run(_ arguments: [String]) throws {
         case "--out":
             guard let path = rest.popFirst() else { throw ReplayError(usage) }
             out = URL(fileURLWithPath: path)
+        case "--make-fixture":
+            guard let path = rest.popFirst() else { throw ReplayError(usage) }
+            fixture = URL(fileURLWithPath: path)
         case "-h", "--help": print(usage); return
         default:
             guard input == nil, !argument.hasPrefix("-") else { throw ReplayError(usage) }
             input = argument
         }
     }
-    guard let input else { throw ReplayError(usage) }
-    if let out { try requireOutsideCheckout(out) }
-
-    let export = try readExport(input)
     guard let executable = Bundle.main.executableURL?.resolvingSymlinksInPath() else {
         throw ReplayError("Cannot locate the WordData folder next to keyboard-replay")
     }
     let words = try WordData(directory: executable.deletingLastPathComponent().appendingPathComponent("WordData"))
+    if let fixture { return try makeFixture(words: words, to: fixture) }
+    guard let input else { throw ReplayError(usage) }
+    if let out { try requireOutsideCheckout(out) }
+    let export = try readExport(input)
 
     let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("typr-replay-\(UUID().uuidString)")
     try requireOutsideCheckout(scratch)
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: false,
                                             attributes: [.posixPermissions: 0o700])
     defer { try? FileManager.default.removeItem(at: scratch) }
-    let replayer = try Replayer(words: words, touchModel: export.touchModel, learningStore: scratch)
+    let replayer = try Replayer(words: words, export: export, learningStore: scratch)
 
     var results: [Result<[ReplayedWord], SkipReason>] = []
     var previous: [String] = []
-    for word in export.words {
+    for (index, word) in export.words.enumerated() {
         let context = previous.joined()
-        results.append(Result { try HitAreas.allCases.map { try replayer.replay(word, context: context, hitAreas: $0).get() } }
-            .mapError { $0 as! SkipReason })
+        var replays: [ReplayedWord] = []
+        var skip: SkipReason?
+        for hitAreas in HitAreas.allCases {
+            switch try replayer.replay(word, at: index, context: context, hitAreas: hitAreas) {
+            case .success(let replay): replays.append(replay)
+            case .failure(let reason): skip = reason
+            }
+        }
+        results.append(skip.map { .failure($0) } ?? .success(replays))
         if Replayer.separators.contains(word.end), !word.meant.isEmpty {
             previous = Array((previous + [word.meant + word.end]).suffix(3))
         } else {
             previous = []
         }
     }
-    let report = Report.build(words: export.words, results: results, data: words, showWords: showWords)
+    let report = Report.build(words: export.words, results: results, isKnown: replayer.isKnown, showWords: showWords)
     let text: String
     if json {
         let encoder = JSONEncoder()

@@ -45,23 +45,53 @@ class ReplayTests(unittest.TestCase):
 
     def test_fixture_reproduces_what_the_keyboard_committed(self):
         report = self.report()
-        self.assertEqual(report["exported"], 22)
-        self.assertEqual(report["replayed"], 20)
+        self.assertEqual(report["exported"], 25)
+        self.assertEqual(report["replayed"], 23)
         self.assertEqual(report["skipped"], {"swipe": 1, "tap without point": 1})
         reproduction = report["reproduction"]["standard"]
         self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
-        self.assertEqual(reproduction["literals"], 20)
+        self.assertEqual(reproduction["literals"], 23)
         self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
-        self.assertEqual(reproduction["commits"], 18)
+        self.assertEqual(reproduction["commits"], 21)
         self.assertEqual(reproduction["commitsNotComparable"], 1)
+
+    def test_reproduction_leads_the_report(self):
+        lines = self.run_tool().stdout.splitlines()
+        self.assertEqual(lines[1], "Reproduction (Standard): committed word matches the iPhone for 21/21 words, 100.0%")
+        self.assertEqual(lines[2], "  not compared: 0 fixed by system spelling, 1 picked or edited after the separator")
+
+    def test_a_fresh_fixture_reproduces_with_the_current_keyboard_code(self):
+        fresh = self.dir / "fresh.json"
+        made = subprocess.run([self.binary, "--make-fixture", str(fresh)], capture_output=True, text=True, timeout=60)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        reproduction = self.report(export=json.loads(fresh.read_text()))["reproduction"]["standard"]
+        self.assertEqual(reproduction["commitMatches"], reproduction["commits"])
+        self.assertEqual(reproduction["literalMatches"], reproduction["literals"])
+
+    def test_imported_words_are_protected_as_on_the_iphone(self):
+        export = copy.deepcopy(self.fixture)
+        export["protectedWords"] = []
+        report = self.report("--show-words", export=export)
+        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 20)
+        self.assertEqual([(line["meant"], line["replayed"]["standard"]) for line in report["words"]], [("Ive", "I've")])
+
+    def test_learning_from_an_undo_applies_only_after_it(self):
+        export = copy.deepcopy(self.fixture)
+        first = next(w for w in export["words"] if w["meant"] == "teh")
+        self.assertEqual(first["commit"]["text"], "the")
+        first["corrections"] = []
+        report = self.report("--show-words", export=export)
+        self.assertEqual([(line["meant"], line["replayed"]["standard"]) for line in report["words"]], [("teh", "teh")])
 
     def test_scores_against_the_meant_word(self):
         standard = self.report()["variants"]["standard"]
-        # The undone `teh` -> `the` is the only miss; names, compounds and `teh` are unknown.
+        # The undone `teh` -> `the` is the only miss. Unknown: the two compounds, Brisolde (nobody
+        # taught it), `I` (not in the lists) and the first `teh`, typed before the undo kept it.
         self.assertEqual(standard["known"]["wordErrors"], 0)
         self.assertEqual(standard["unknown"]["wordErrors"], 1)
         self.assertEqual(standard["unknown"]["letterErrors"], 2)
-        self.assertEqual(standard["known"]["words"] + standard["unknown"]["words"], 20)
+        self.assertEqual(standard["unknown"]["words"], 5)
+        self.assertEqual(standard["known"]["words"] + standard["unknown"]["words"], 23)
 
     def test_words_are_listed_only_on_request(self):
         export = copy.deepcopy(self.fixture)
@@ -70,7 +100,7 @@ class ReplayTests(unittest.TestCase):
         self.assertNotIn("words", self.report(export=export))
         self.assertNotIn("Kalvenor", self.run_tool(export=export).stdout)
         report = self.report("--show-words", export=export)
-        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 17)
+        self.assertEqual(report["reproduction"]["standard"]["commitMatches"], 20)
         self.assertEqual([line["meant"] for line in report["words"]], ["Kalvenor"])
 
     def test_spelling_corrections_are_not_compared(self):
@@ -79,7 +109,7 @@ class ReplayTests(unittest.TestCase):
         word["commit"]["correction"] = "spelling"
         reproduction = self.report(export=export)["reproduction"]["standard"]
         self.assertEqual(reproduction["systemSpelling"], 1)
-        self.assertEqual(reproduction["commits"], 17)
+        self.assertEqual(reproduction["commits"], 20)
 
     def test_unusable_layouts_are_skipped(self):
         export = copy.deepcopy(self.fixture)
@@ -97,7 +127,9 @@ class ReplayTests(unittest.TestCase):
             "not json": "{",
             "not an object": "[]",
             "other format": json.dumps({"format": "x", "version": 1}),
-            "newer version": json.dumps({**self.fixture, "version": 2}),
+            "older version": json.dumps({**self.fixture, "version": 1}),
+            "newer version": json.dumps({**self.fixture, "version": 3}),
+            "invalid learning": json.dumps({**self.fixture, "learning": {**self.fixture["learning"], "schemaVersion": 99}}),
             "bad word": json.dumps({**self.fixture, "words": [{"at": "yesterday"}]}),
         }
         for name, text in cases.items():

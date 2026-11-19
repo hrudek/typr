@@ -2,37 +2,122 @@
   "appBuild" : "fixture",
   "exportedAt" : "2026-09-21T14:23:20Z",
   "format" : "typr-typing-log",
-  "touchModel" : {
+  "learning" : {
     "bigrams" : {
       "following" : {
-
+        "and" : {
+          "teh" : 1
+        },
+        "fahre" : {
+          "ich" : 1
+        },
+        "fahre ich" : {
+          "mit" : 1
+        },
+        "ich" : {
+          "mit" : 1
+        },
+        "ich mit" : {
+          "kalvenor" : 1
+        },
+        "ive" : {
+          "and" : 1
+        },
+        "ive and" : {
+          "teh" : 1
+        },
+        "kalvenor" : {
+          "zum" : 1
+        },
+        "mit" : {
+          "kalvenor" : 1
+        },
+        "mit kalvenor" : {
+          "zum" : 1
+        },
+        "morgen" : {
+          "fahre" : 1
+        },
+        "morgen fahre" : {
+          "ich" : 1
+        },
+        "quiet" : {
+          "and" : 1
+        }
       },
-      "updates" : 0
+      "updates" : 13
     },
     "counts" : {
-
+      "and" : {
+        "count" : 2,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "fahre" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "ich" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "ive" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "kalvenor" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "mit" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "morgen" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "quiet" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "teh" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "the" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "was" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      },
+      "zum" : {
+        "count" : 1,
+        "lastUpdated" : "2026-11-19T06:29:50Z"
+      }
     },
     "kept" : {
-
+      "teh" : "2026-11-19T06:29:50Z"
     },
     "layouts" : {
       "portrait-392-strip-no-globe" : {
         "global" : {
-          "covarianceXY" : 0.0011347078988959275,
-          "meanX" : 0.14075635273874806,
-          "meanY" : 0.07565151647488295,
+          "covarianceXY" : 0.0009666822496819346,
+          "meanX" : 0.13958263165865986,
+          "meanY" : 0.07382849290337862,
           "n" : 256,
-          "varianceX" : 0.008642130943093235,
-          "varianceY" : 0.0016432040830520662
+          "varianceX" : 0.007647626217743795,
+          "varianceY" : 0.0016230905431197107
         },
         "keys" : {
           "a" : {
-            "covarianceXY" : 0.0008920194437362553,
-            "meanX" : 0.15043239492833324,
-            "meanY" : 0.0770290369997481,
-            "n" : 43,
-            "varianceX" : 0.0009094165358062838,
-            "varianceY" : 0.0009186751532604171
+            "covarianceXY" : 0.0007498296893870434,
+            "meanX" : 0.14818891350393062,
+            "meanY" : 0.07465134881657791,
+            "n" : 45,
+            "varianceX" : 0.0008055707493129113,
+            "varianceY" : 0.0011169730306747046
           },
           "b" : {
             "covarianceXY" : 0.0007322784048852757,
@@ -51,20 +136,20 @@
             "varianceY" : 0.0007363648876073925
           },
           "d" : {
-            "covarianceXY" : 0.0007729811266924586,
-            "meanX" : 0.15216460170216384,
-            "meanY" : 0.08103477953632077,
-            "n" : 41,
-            "varianceX" : 0.0007899388396266008,
-            "varianceY" : 0.000767504929597826
+            "covarianceXY" : 0.0007041676974136233,
+            "meanX" : 0.1507573318132556,
+            "meanY" : 0.07928376067399318,
+            "n" : 42,
+            "varianceX" : 0.0007655293588916184,
+            "varianceY" : 0.0006657145484286967
           },
           "e" : {
-            "covarianceXY" : 0.0006795934046337342,
-            "meanX" : 0.15772186915815883,
-            "meanY" : 0.08098496579088538,
-            "n" : 45,
-            "varianceX" : 0.001122688838460363,
-            "varianceY" : 0.0007889258330104633
+            "covarianceXY" : 0.000677520373059218,
+            "meanX" : 0.15838155577597976,
+            "meanY" : 0.0827317480626685,
+            "n" : 48,
+            "varianceX" : 0.001175323729695678,
+            "varianceY" : 0.0008226648201114913
           },
           "f" : {
             "covarianceXY" : 0.0006870933220054448,
@@ -83,20 +168,20 @@
             "varianceY" : 0.0006981280845375562
           },
           "h" : {
-            "covarianceXY" : 0.0004917793973390908,
-            "meanX" : 0.15311727736720898,
-            "meanY" : 0.08038474268172466,
-            "n" : 44,
-            "varianceX" : 0.0010493340872060025,
-            "varianceY" : 0.0008647658900249359
+            "covarianceXY" : 0.000383081708556127,
+            "meanX" : 0.15180559894488072,
+            "meanY" : 0.08207877724611957,
+            "n" : 45,
+            "varianceX" : 0.0011017175644132278,
+            "varianceY" : 0.0009718180068826498
           },
           "i" : {
-            "covarianceXY" : 0.0006098231488708871,
-            "meanX" : 0.14933488690148958,
-            "meanY" : 0.07905731653956387,
-            "n" : 43,
-            "varianceX" : 0.0008458123036193939,
-            "varianceY" : 0.0008994182770370201
+            "covarianceXY" : 0.0006936774931530799,
+            "meanX" : 0.14996352705883279,
+            "meanY" : 0.07721828681510663,
+            "n" : 44,
+            "varianceX" : 0.0007667485418285425,
+            "varianceY" : 0.0007417736247269751
           },
           "j" : {
             "covarianceXY" : 0.00073227840488527,
@@ -107,20 +192,20 @@
             "varianceY" : 0.0006967394770408144
           },
           "k" : {
-            "covarianceXY" : 0.00073227840488527,
-            "meanX" : 0.1511761658031092,
-            "meanY" : 0.07955357142857143,
-            "n" : 40,
-            "varianceX" : 0.0007696300840291035,
-            "varianceY" : 0.0006967394770408144
+            "covarianceXY" : 0.0006963916781895898,
+            "meanX" : 0.15215522981332463,
+            "meanY" : 0.07909327778055773,
+            "n" : 41,
+            "varianceX" : 0.0007892012720089445,
+            "varianceY" : 0.0006882206409554016
           },
           "l" : {
-            "covarianceXY" : 0.00073227840488527,
-            "meanX" : 0.1511761658031092,
-            "meanY" : 0.07955357142857143,
-            "n" : 40,
-            "varianceX" : 0.0007696300840291035,
-            "varianceY" : 0.0006967394770408144
+            "covarianceXY" : 0.0007453106108233183,
+            "meanX" : 0.14945922142093634,
+            "meanY" : 0.07910375116708758,
+            "n" : 41,
+            "varianceX" : 0.0008687745390239767,
+            "varianceY" : 0.0006878393619649873
           },
           "m" : {
             "covarianceXY" : 0.0006822050006066315,
@@ -131,20 +216,20 @@
             "varianceY" : 0.0008933189775610331
           },
           "n" : {
-            "covarianceXY" : 0.0006938735460557508,
-            "meanX" : 0.15044735981278193,
-            "meanY" : 0.0798352231124806,
-            "n" : 42,
-            "varianceX" : 0.0007439587021954744,
-            "varianceY" : 0.0006660674391817869
+            "covarianceXY" : 0.0007343845203042108,
+            "meanX" : 0.15250677878124183,
+            "meanY" : 0.07784340801062353,
+            "n" : 44,
+            "varianceX" : 0.0008666183412765837,
+            "varianceY" : 0.0007935159941869994
           },
           "o" : {
-            "covarianceXY" : 0.0006553291121760445,
-            "meanX" : 0.15287177705003943,
-            "meanY" : 0.0786823687293006,
-            "n" : 41,
-            "varianceX" : 0.0008658625185936322,
-            "varianceY" : 0.000710105596988003
+            "covarianceXY" : 0.0006540820106255156,
+            "meanX" : 0.15308437775732164,
+            "meanY" : 0.08032933254424035,
+            "n" : 42,
+            "varianceX" : 0.0008470999058316157,
+            "varianceY" : 0.0008044104029857993
           },
           "p" : {
             "covarianceXY" : 0.00073227840488527,
@@ -155,20 +240,20 @@
             "varianceY" : 0.0006967394770408144
           },
           "q" : {
-            "covarianceXY" : 0.0007410824766215552,
-            "meanX" : 0.1495594917021056,
-            "meanY" : 0.07914123537674471,
+            "covarianceXY" : 0.0006906456116756914,
+            "meanX" : 0.15259454589000884,
+            "meanY" : 0.07913456624566075,
             "n" : 41,
-            "varianceX" : 0.000855404024519155,
-            "varianceY" : 0.0006865466720447734
+            "varianceX" : 0.0008313307014015581,
+            "varianceY" : 0.0006867684449915717
           },
           "r" : {
-            "covarianceXY" : 0.000626767479133481,
-            "meanX" : 0.14859188186974182,
-            "meanY" : 0.0799682517607064,
-            "n" : 42,
-            "varianceX" : 0.0008782192919345073,
-            "varianceY" : 0.0008745272260913343
+            "covarianceXY" : 0.0005540107580509065,
+            "meanX" : 0.1496556765644302,
+            "meanY" : 0.07866606858645632,
+            "n" : 43,
+            "varianceX" : 0.0009053252718736959,
+            "varianceY" : 0.0009254079864346956
           },
           "s" : {
             "covarianceXY" : 0.0006971977120116697,
@@ -179,28 +264,28 @@
             "varianceY" : 0.0007542848723129818
           },
           "t" : {
-            "covarianceXY" : 0.0006868998017854011,
-            "meanX" : 0.1487305576726589,
-            "meanY" : 0.07695705735929982,
-            "n" : 44,
-            "varianceX" : 0.0010662040652141217,
-            "varianceY" : 0.0008778968021071258
+            "covarianceXY" : 0.0007908811247635263,
+            "meanX" : 0.1441549514049128,
+            "meanY" : 0.07788403537940716,
+            "n" : 45,
+            "varianceX" : 0.0011004397716597506,
+            "varianceY" : 0.000789203800018336
           },
           "u" : {
-            "covarianceXY" : 0.0019124731747616453,
-            "meanX" : 0.13615453178827253,
-            "meanY" : 0.07574706081982288,
+            "covarianceXY" : 0.001976685546649457,
+            "meanX" : 0.13474470308966485,
+            "meanY" : 0.07612501565908356,
             "n" : 43,
-            "varianceX" : 0.013769004559567867,
-            "varianceY" : 0.0008632171314022663
+            "varianceX" : 0.0135932334428675,
+            "varianceY" : 0.0008414209559291499
           },
           "v" : {
-            "covarianceXY" : 0.0007322784048852757,
-            "meanX" : 0.15117616580310864,
-            "meanY" : 0.0795535714285714,
-            "n" : 40,
-            "varianceX" : 0.0007696300840291037,
-            "varianceY" : 0.000696739477040825
+            "covarianceXY" : 0.0007471797198724697,
+            "meanX" : 0.1508507661294141,
+            "meanY" : 0.07791628937028623,
+            "n" : 42,
+            "varianceX" : 0.0009134441044604889,
+            "varianceY" : 0.0007257545912164719
           },
           "w" : {
             "covarianceXY" : 0.0007112170038907351,
@@ -235,7 +320,7 @@
             "varianceY" : 0.0007918177989049628
           }
         },
-        "lastUpdated" : "2026-11-19T06:06:33Z",
+        "lastUpdated" : "2026-11-19T06:29:50Z",
         "signature" : {
           "orientation" : "portrait",
           "showsGlobe" : false,
@@ -246,18 +331,28 @@
           "covarianceXY" : 0,
           "meanX" : 0,
           "meanY" : 0,
-          "n" : 14,
+          "n" : 17,
           "varianceX" : 0,
           "varianceY" : 0
         }
       }
     },
     "rejected" : [
-
+      {
+        "context" : "house was",
+        "globalRemaining" : 59,
+        "remaining" : 251,
+        "replacement" : "the",
+        "typed" : "teh"
+      }
     ],
     "schemaVersion" : 5
   },
-  "version" : 1,
+  "protectedWords" : [
+    "Kalvenor",
+    "Ive"
+  ],
+  "version" : 2,
   "words" : [
     {
       "at" : "2026-09-21T14:13:20Z",
@@ -1288,102 +1383,7 @@
       "at" : "2026-09-21T14:13:33Z",
       "commit" : {
         "kind" : "literal",
-        "text" : "world"
-      },
-      "corrections" : [
-        {
-          "erased" : [
-            {
-              "key" : "t",
-              "t" : 320,
-              "text" : "t",
-              "x" : 181.62,
-              "y" : 61.66
-            }
-          ],
-          "kind" : "backspace"
-        }
-      ],
-      "end" : " ",
-      "hitAreas" : "standard",
-      "languages" : [
-        "de",
-        "en"
-      ],
-      "layout" : {
-        "bottomRow" : [
-          "space",
-          "period",
-          "typr"
-        ],
-        "field" : "text",
-        "globeKey" : "switches",
-        "horizontalInset" : 0,
-        "layer" : "letters",
-        "metrics" : {
-          "gap" : 6,
-          "keyHeight" : 45,
-          "keysBottom" : 5,
-          "keysTop" : 0,
-          "numberRowHeight" : 0,
-          "rowGap" : 11,
-          "side" : 6.5,
-          "stripBottom" : 2,
-          "stripHeight" : 33,
-          "stripTop" : 0
-        },
-        "numberRow" : false,
-        "orientation" : "portrait",
-        "periodKey" : false,
-        "showsGlobe" : false,
-        "showsStrip" : true,
-        "width" : 393
-      },
-      "literal" : "world",
-      "meant" : "world",
-      "taps" : [
-        {
-          "key" : "w",
-          "t" : 0,
-          "text" : "w",
-          "x" : 66.84,
-          "y" : 61.4
-        },
-        {
-          "key" : "o",
-          "t" : 160,
-          "text" : "o",
-          "x" : 339.53,
-          "y" : 60.78
-        },
-        {
-          "key" : "r",
-          "t" : 640,
-          "text" : "r",
-          "x" : 144.63,
-          "y" : 58.71
-        },
-        {
-          "key" : "l",
-          "t" : 800,
-          "text" : "l",
-          "x" : 356.78,
-          "y" : 115.14
-        },
-        {
-          "key" : "d",
-          "t" : 960,
-          "text" : "d",
-          "x" : 125.75,
-          "y" : 117.85
-        }
-      ]
-    },
-    {
-      "at" : "2026-09-21T14:13:34Z",
-      "commit" : {
-        "kind" : "literal",
-        "text" : "quiet"
+        "text" : "Ive"
       },
       "corrections" : [
 
@@ -1423,48 +1423,34 @@
         "showsStrip" : true,
         "width" : 393
       },
-      "literal" : "quiet",
-      "meant" : "quiet",
+      "literal" : "Ive",
+      "meant" : "Ive",
       "taps" : [
         {
-          "key" : "q",
-          "t" : 0,
-          "text" : "q",
-          "x" : 26.08,
-          "y" : 61.01
-        },
-        {
-          "key" : "u",
-          "t" : 160,
-          "text" : "u",
-          "x" : 263.2,
-          "y" : 59.68
-        },
-        {
           "key" : "i",
-          "t" : 320,
-          "text" : "i",
-          "x" : 296.63,
-          "y" : 66.27
+          "t" : 0,
+          "text" : "I",
+          "x" : 298.44,
+          "y" : 61.4
+        },
+        {
+          "key" : "v",
+          "t" : 160,
+          "text" : "v",
+          "x" : 204.43,
+          "y" : 172.78
         },
         {
           "key" : "e",
-          "t" : 480,
+          "t" : 320,
           "text" : "e",
-          "x" : 108.03,
-          "y" : 59.67
-        },
-        {
-          "key" : "t",
-          "t" : 640,
-          "text" : "t",
-          "x" : 185.75,
-          "y" : 58.6
+          "x" : 104.42,
+          "y" : 61.66
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:35Z",
+      "at" : "2026-09-21T14:13:33Z",
       "commit" : {
         "kind" : "literal",
         "text" : "and"
@@ -1514,27 +1500,346 @@
           "key" : "a",
           "t" : 0,
           "text" : "a",
-          "x" : 50.34,
-          "y" : 120.01
+          "x" : 48.13,
+          "y" : 114.71
         },
         {
           "key" : "n",
           "t" : 160,
           "text" : "n",
-          "x" : 278.84,
-          "y" : 174.04
+          "x" : 279.58,
+          "y" : 171.14
         },
         {
           "key" : "d",
           "t" : 320,
           "text" : "d",
-          "x" : 126.7,
-          "y" : 121.36
+          "x" : 125.75,
+          "y" : 117.85
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:34Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "teh"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "teh",
+      "meant" : "teh",
+      "taps" : [
+        {
+          "key" : "t",
+          "t" : 0,
+          "text" : "t",
+          "x" : 180.48,
+          "y" : 61.01
+        },
+        {
+          "key" : "e",
+          "t" : 160,
+          "text" : "e",
+          "x" : 108.8,
+          "y" : 59.68
+        },
+        {
+          "key" : "h",
+          "t" : 320,
+          "text" : "h",
+          "x" : 238.73,
+          "y" : 122.27
         }
       ]
     },
     {
       "at" : "2026-09-21T14:13:35Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "world"
+      },
+      "corrections" : [
+        {
+          "erased" : [
+            {
+              "key" : "t",
+              "t" : 320,
+              "text" : "t",
+              "x" : 185.44,
+              "y" : 64.01
+            }
+          ],
+          "kind" : "backspace"
+        }
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "world",
+      "meant" : "world",
+      "taps" : [
+        {
+          "key" : "w",
+          "t" : 0,
+          "text" : "w",
+          "x" : 69.43,
+          "y" : 59.67
+        },
+        {
+          "key" : "o",
+          "t" : 160,
+          "text" : "o",
+          "x" : 340.15,
+          "y" : 58.6
+        },
+        {
+          "key" : "r",
+          "t" : 640,
+          "text" : "r",
+          "x" : 143.74,
+          "y" : 62.04
+        },
+        {
+          "key" : "l",
+          "t" : 800,
+          "text" : "l",
+          "x" : 358.3,
+          "y" : 121.36
+        },
+        {
+          "key" : "d",
+          "t" : 960,
+          "text" : "d",
+          "x" : 123.32,
+          "y" : 119.15
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:36Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "quiet"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "quiet",
+      "meant" : "quiet",
+      "taps" : [
+        {
+          "key" : "q",
+          "t" : 0,
+          "text" : "q",
+          "x" : 30.88,
+          "y" : 60.99
+        },
+        {
+          "key" : "u",
+          "t" : 160,
+          "text" : "u",
+          "x" : 260.86,
+          "y" : 60.59
+        },
+        {
+          "key" : "i",
+          "t" : 320,
+          "text" : "i",
+          "x" : 298.03,
+          "y" : 62.27
+        },
+        {
+          "key" : "e",
+          "t" : 480,
+          "text" : "e",
+          "x" : 107.44,
+          "y" : 64.78
+        },
+        {
+          "key" : "t",
+          "t" : 640,
+          "text" : "t",
+          "x" : 180.27,
+          "y" : 61.74
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:37Z",
+      "commit" : {
+        "kind" : "literal",
+        "text" : "and"
+      },
+      "corrections" : [
+
+      ],
+      "end" : " ",
+      "hitAreas" : "standard",
+      "languages" : [
+        "de",
+        "en"
+      ],
+      "layout" : {
+        "bottomRow" : [
+          "space",
+          "period",
+          "typr"
+        ],
+        "field" : "text",
+        "globeKey" : "switches",
+        "horizontalInset" : 0,
+        "layer" : "letters",
+        "metrics" : {
+          "gap" : 6,
+          "keyHeight" : 45,
+          "keysBottom" : 5,
+          "keysTop" : 0,
+          "numberRowHeight" : 0,
+          "rowGap" : 11,
+          "side" : 6.5,
+          "stripBottom" : 2,
+          "stripHeight" : 33,
+          "stripTop" : 0
+        },
+        "numberRow" : false,
+        "orientation" : "portrait",
+        "periodKey" : false,
+        "showsGlobe" : false,
+        "showsStrip" : true,
+        "width" : 393
+      },
+      "literal" : "and",
+      "meant" : "and",
+      "taps" : [
+        {
+          "key" : "a",
+          "t" : 0,
+          "text" : "a",
+          "x" : 46.54,
+          "y" : 121.31
+        },
+        {
+          "key" : "n",
+          "t" : 160,
+          "text" : "n",
+          "x" : 278.99,
+          "y" : 170.49
+        },
+        {
+          "key" : "d",
+          "t" : 320,
+          "text" : "d",
+          "x" : 123.84,
+          "y" : 117.42
+        }
+      ]
+    },
+    {
+      "at" : "2026-09-21T14:13:38Z",
       "commit" : {
         "correction" : "rule",
         "kind" : "autocorrect",
@@ -1585,13 +1890,13 @@
           "key" : "i",
           "t" : 0,
           "text" : "i",
-          "x" : 297.02,
-          "y" : 63.15
+          "x" : 299.54,
+          "y" : 64.59
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:36Z",
+      "at" : "2026-09-21T14:13:38Z",
       "commit" : {
         "kind" : "literal",
         "text" : "Brisolde"
@@ -1641,62 +1946,62 @@
           "key" : "b",
           "t" : 0,
           "text" : "B",
-          "x" : 243.18,
-          "y" : 172.99
+          "x" : 243.41,
+          "y" : 177.84
         },
         {
           "key" : "r",
           "t" : 160,
           "text" : "r",
-          "x" : 145.06,
-          "y" : 60.59
+          "x" : 144.99,
+          "y" : 62.37
         },
         {
           "key" : "i",
           "t" : 320,
           "text" : "i",
-          "x" : 298.03,
-          "y" : 62.27
+          "x" : 300.26,
+          "y" : 58.47
         },
         {
           "key" : "s",
           "t" : 480,
           "text" : "s",
-          "x" : 88.14,
-          "y" : 120.78
+          "x" : 85.55,
+          "y" : 114.5
         },
         {
           "key" : "o",
           "t" : 640,
           "text" : "o",
-          "x" : 334.67,
-          "y" : 61.74
+          "x" : 339.32,
+          "y" : 61.51
         },
         {
           "key" : "l",
           "t" : 800,
           "text" : "l",
-          "x" : 355.34,
-          "y" : 121.31
+          "x" : 354.17,
+          "y" : 114.56
         },
         {
           "key" : "d",
           "t" : 960,
           "text" : "d",
-          "x" : 124.59,
-          "y" : 114.49
+          "x" : 125.57,
+          "y" : 115.38
         },
         {
           "key" : "e",
           "t" : 1120,
           "text" : "e",
-          "x" : 104.54,
-          "y" : 61.42
+          "x" : 104.72,
+          "y" : 63.45
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:37Z",
+      "at" : "2026-09-21T14:13:39Z",
       "commit" : {
         "kind" : "literal",
         "text" : "fine"
@@ -1711,29 +2016,29 @@
               "key" : "f",
               "t" : 0,
               "text" : "f",
-              "x" : 164.44,
-              "y" : 120.59
+              "x" : 161.04,
+              "y" : 122.47
             },
             {
               "key" : "i",
               "t" : 160,
               "text" : "i",
-              "x" : 301.31,
-              "y" : 65.84
+              "x" : 295.64,
+              "y" : 59.09
             },
             {
               "key" : "n",
               "t" : 320,
               "text" : "n",
-              "x" : 280.09,
-              "y" : 174.37
+              "x" : 279.92,
+              "y" : 170.61
             },
             {
               "key" : "e",
               "t" : 480,
               "text" : "e",
-              "x" : 107.26,
-              "y" : 58.47
+              "x" : 102.66,
+              "y" : 63.32
             }
           ],
           "kind" : "backspace"
@@ -1781,41 +2086,41 @@
           "key" : "g",
           "t" : 1600,
           "text" : "g",
-          "x" : 201.35,
-          "y" : 114.5
+          "x" : 203.77,
+          "y" : 118.5
         },
         {
           "key" : "r",
           "t" : 1760,
           "text" : "r",
-          "x" : 146.32,
-          "y" : 61.51
+          "x" : 147.39,
+          "y" : 58.69
         },
         {
           "key" : "e",
           "t" : 1920,
           "text" : "e",
-          "x" : 103.27,
-          "y" : 58.56
+          "x" : 108.41,
+          "y" : 59.24
         },
         {
           "key" : "a",
           "t" : 2080,
           "text" : "a",
-          "x" : 48.37,
-          "y" : 115.38
+          "x" : 47.57,
+          "y" : 119.49
         },
         {
           "key" : "t",
           "t" : 2240,
           "text" : "t",
-          "x" : 181.92,
-          "y" : 63.45
+          "x" : 181.51,
+          "y" : 63.02
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:40Z",
+      "at" : "2026-09-21T14:13:42Z",
       "commit" : {
         "kind" : "literal",
         "text" : "Sonnenblumenfeld"
@@ -1865,118 +2170,118 @@
           "key" : "s",
           "t" : 0,
           "text" : "S",
-          "x" : 83.84,
-          "y" : 122.47
+          "x" : 83.58,
+          "y" : 114.42
         },
         {
           "key" : "o",
           "t" : 160,
           "text" : "o",
-          "x" : 334.24,
-          "y" : 59.09
+          "x" : 334.4,
+          "y" : 65.78
         },
         {
           "key" : "n",
           "t" : 320,
           "text" : "n",
-          "x" : 279.92,
-          "y" : 170.61
+          "x" : 282.62,
+          "y" : 176.54
         },
         {
           "key" : "n",
           "t" : 480,
           "text" : "n",
-          "x" : 276.36,
-          "y" : 175.32
+          "x" : 278.49,
+          "y" : 172.56
         },
         {
           "key" : "e",
           "t" : 640,
           "text" : "e",
-          "x" : 107.27,
-          "y" : 62.5
+          "x" : 104.43,
+          "y" : 61.13
         },
         {
           "key" : "n",
           "t" : 800,
           "text" : "n",
-          "x" : 282.49,
-          "y" : 170.69
+          "x" : 277.67,
+          "y" : 175.81
         },
         {
           "key" : "b",
           "t" : 960,
           "text" : "b",
-          "x" : 243.51,
-          "y" : 171.24
+          "x" : 243.13,
+          "y" : 171.89
         },
         {
           "key" : "l",
           "t" : 1120,
           "text" : "l",
-          "x" : 356.37,
-          "y" : 119.49
+          "x" : 359.86,
+          "y" : 122.06
         },
         {
           "key" : "u",
           "t" : 1280,
           "text" : "u",
-          "x" : 258.71,
-          "y" : 63.02
+          "x" : 260.04,
+          "y" : 58.32
         },
         {
           "key" : "m",
           "t" : 1440,
           "text" : "m",
-          "x" : 315.18,
-          "y" : 170.42
+          "x" : 320.17,
+          "y" : 171.26
         },
         {
           "key" : "e",
           "t" : 1600,
           "text" : "e",
-          "x" : 102.8,
-          "y" : 65.78
+          "x" : 106.37,
+          "y" : 59.34
         },
         {
           "key" : "n",
           "t" : 1760,
           "text" : "n",
-          "x" : 282.62,
-          "y" : 176.54
+          "x" : 281.99,
+          "y" : 174.23
         },
         {
           "key" : "f",
           "t" : 1920,
           "text" : "f",
-          "x" : 162.69,
-          "y" : 116.56
+          "x" : 162.26,
+          "y" : 119.03
         },
         {
           "key" : "e",
           "t" : 2080,
           "text" : "e",
-          "x" : 104.43,
-          "y" : 61.13
+          "x" : 106.83,
+          "y" : 65.23
         },
         {
           "key" : "l",
           "t" : 2240,
           "text" : "l",
-          "x" : 354.87,
-          "y" : 119.81
+          "x" : 354.44,
+          "y" : 121.28
         },
         {
           "key" : "d",
           "t" : 2400,
           "text" : "d",
-          "x" : 127.33,
-          "y" : 115.89
+          "x" : 125.72,
+          "y" : 117.73
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:43Z",
+      "at" : "2026-09-21T14:13:45Z",
       "corrections" : [
 
       ],
@@ -2022,41 +2327,41 @@
           "key" : "t",
           "t" : 0,
           "text" : "t",
-          "x" : 186.16,
-          "y" : 66.06
+          "x" : 185,
+          "y" : 62.8
         },
         {
           "key" : "o",
           "t" : 160,
           "text" : "o",
-          "x" : 337.24,
-          "y" : 58.32
+          "x" : 338.38,
+          "y" : 66.01
         },
         {
           "key" : "d",
           "t" : 320,
           "text" : "d",
-          "x" : 127.17,
-          "y" : 115.26
+          "x" : 123.89,
+          "y" : 119.16
         },
         {
           "key" : "a",
           "t" : 480,
           "text" : "a",
-          "x" : 48.47,
-          "y" : 115.34
+          "x" : 50.94,
+          "y" : 117.04
         },
         {
           "key" : "y",
           "t" : 640,
           "text" : "y",
-          "x" : 224.09,
-          "y" : 62.23
+          "x" : 220.07,
+          "y" : 60.42
         }
       ]
     },
     {
-      "at" : "2026-09-21T14:13:43Z",
+      "at" : "2026-09-21T14:13:46Z",
       "commit" : {
         "kind" : "swipe",
         "text" : "weather"
@@ -2078,7 +2383,7 @@
       ]
     },
     {
-      "at" : "2026-09-21T14:13:43Z",
+      "at" : "2026-09-21T14:13:46Z",
       "corrections" : [
 
       ],

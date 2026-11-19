@@ -69,20 +69,20 @@ struct Report: Codable {
     var words: [WordLine]?
 
     /// `results[i]`: the variants' replays of the word, in `HitAreas.allCases` order.
-    static func build(words logged: [TypingLogWord], results: [Result<[ReplayedWord], SkipReason>], data: WordData,
-                      showWords: Bool) -> Report {
+    static func build(words logged: [TypingLogWord], results: [Result<[ReplayedWord], SkipReason>],
+                      isKnown: (Int, TypingLogWord) -> Bool, showWords: Bool) -> Report {
         var report = Report(exported: logged.count)
         let variants = HitAreas.allCases
         let baseline = variants[0]
         var lines: [WordLine] = []
-        for (word, result) in zip(logged, results) {
+        for (index, (word, result)) in zip(logged, results).enumerated() {
             let replays: [ReplayedWord]
             switch result {
             case .success(let replayed): replays = replayed
             case .failure(let reason): report.skipped[reason.rawValue, default: 0] += 1; continue
             }
             report.replayed += 1
-            let known = data.isKnown(word.meant, in: Set(word.languages.compactMap(Language.init(rawValue:))))
+            let known = isKnown(index, word)
             var reproduced = true
             if let index = variants.firstIndex(where: { $0.rawValue == word.hitAreas }) {
                 let replay = replays[index]
@@ -136,16 +136,17 @@ struct Report: Codable {
 
     func text() -> String {
         var out = "Typing log replay: \(exported) words exported, \(replayed) replayed\n"
+        if reproduction.isEmpty { out += "Reproduction: no replayed word was logged with a setting this tool knows\n" }
+        for (setting, r) in reproduction.sorted(by: { $0.key < $1.key }) {
+            out += "Reproduction (\(setting.capitalized)): committed word matches the iPhone for"
+            out += " \(r.commitMatches)/\(r.commits) words, \(Self.percent(r.commitMatches, r.commits))\n"
+            out += "  not compared: \(r.systemSpelling) fixed by system spelling,"
+            out += " \(r.commitsNotComparable) picked or edited after the separator\n"
+            out += "  typed letters match for \(r.literalMatches)/\(r.literals) words\n"
+        }
         if !skipped.isEmpty {
             out += "Skipped: " + skipped.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value)" }
                 .joined(separator: ", ") + "\n"
-        }
-        for (setting, r) in reproduction.sorted(by: { $0.key < $1.key }) {
-            out += "\nReproduction of words logged with \(setting):\n"
-            out += "  letters typed  \(r.literalMatches)/\(r.literals) words match\n"
-            out += "  committed word \(r.commitMatches)/\(r.commits) words match"
-            out += " (not compared: \(r.commitsNotComparable) picked or reopened,"
-            out += " \(r.systemSpelling) system spelling corrections)\n"
         }
         for variant in HitAreas.allCases {
             guard let split = variants[variant.rawValue] else { continue }
@@ -167,10 +168,11 @@ struct Report: Codable {
         return out
     }
 
+    private static func percent(_ part: Int, _ whole: Int) -> String {
+        whole == 0 ? "-" : String(format: "%.1f%%", Double(part) * 100 / Double(whole))
+    }
+
     private static func line(_ name: String, _ score: Score) -> String {
-        func percent(_ part: Int, _ whole: Int) -> String {
-            whole == 0 ? "-" : String(format: "%.1f%%", Double(part) * 100 / Double(whole))
-        }
         return "  \(name) \(score.words) words: word errors \(percent(score.wordErrors, score.words))"
             + " (\(score.wordErrors)), letter errors \(percent(score.letterErrors, score.letters))"
             + " (\(score.letterErrors)/\(score.letters))\n"
