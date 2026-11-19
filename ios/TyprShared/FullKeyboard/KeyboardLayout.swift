@@ -42,6 +42,9 @@ nonisolated enum KeyboardOrientation: String, Equatable, Sendable {
     }
 
     var isLandscape: Bool { self == .landscape || self == .wideLandscape }
+
+    /// Only the iPhone Duo open and sideways offers Apple's split keyboard.
+    var allowsSplit: Bool { self == .wideLandscape }
 }
 
 /// The bottom row's globe where iOS needs one: a key that switches keyboards, an inert spacer

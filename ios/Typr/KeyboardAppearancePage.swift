@@ -10,7 +10,7 @@ struct KeyboardAppearancePage: View {
     @State private var bottomRow = FullKeyboardSettings().bottomRow
     @State private var numberRow = FullKeyboardSettings().numberRow
     @State private var draggedOrder: [BottomKey]?
-    @State private var systemIsDark = Self.systemIsDark
+    @State private var window: WindowReader.Window?
 
     static let globeKeyFooter = "Only on iPhones with no globe under the keyboard. Spacer keeps 123 off the corner and does nothing when tapped."
     static let switchingKeyboardsHint = "With Spacer or Hidden, hold 123 in the full keyboard or space in the dictation bar to switch keyboards."
@@ -26,12 +26,6 @@ struct KeyboardAppearancePage: View {
         }
     }
 
-    /// The app is always dark; the keyboard follows the system like it does in most apps.
-    private static var systemIsDark: Bool {
-        let screen = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen }.first
-        return screen?.traitCollection.userInterfaceStyle != .light
-    }
-
     private func preview(container: CGSize) -> KeyboardAppearancePreview.Settings {
         KeyboardAppearancePreview.Settings(
             design: design,
@@ -39,7 +33,8 @@ struct KeyboardAppearancePage: View {
             globeKey: globeKey,
             bottomRow: BottomRow(order: draggedOrder ?? bottomRow.order, periodKey: bottomRow.periodKey),
             numberRow: numberRow,
-            isDark: Self.snapshotIsDark() ?? systemIsDark,
+            // The app is always dark; the keyboard follows the system like it does in most apps.
+            isDark: Self.snapshotIsDark() ?? window?.systemIsDark ?? true,
             container: container
         )
     }
@@ -62,11 +57,12 @@ struct KeyboardAppearancePage: View {
                 .frame(maxWidth: .infinity)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                dockedPreview(in: page.size, container: CGSize(
+                dockedPreview(in: page.size, foldBottom: Self.horizontalFoldBottom(page), container: window?.size ?? CGSize(
                     width: page.size.width + page.safeAreaInsets.leading + page.safeAreaInsets.trailing,
                     height: page.size.height + page.safeAreaInsets.top + page.safeAreaInsets.bottom
                 ))
             }
+            .background(WindowReader { window = $0 })
         }
         .background(TyprTheme.bgDeep.ignoresSafeArea())
         .navigationTitle(SettingsDestination.keyboardAppearance.title)
@@ -81,12 +77,30 @@ struct KeyboardAppearancePage: View {
         Color(uiColor: FullKeyboardPalette(isDark: isDark).backdrop)
     }
 
-    private func dockedPreview(in page: CGSize, container: CGSize) -> some View {
+    /// The docked preview's scale: full size where the page has room, else leaving the controls 260 pt but taking at
+    /// least 35% of the page, and never reaching above a fold across the page (`foldBottom`, in page coordinates).
+    static func previewScale(keyboardHeight: CGFloat, page: CGSize, foldBottom: CGFloat?) -> CGFloat {
+        var room = max(page.height - 260, page.height * 0.35)
+        if let foldBottom { room = min(room, page.height - foldBottom) }
+        return min(1, max(0, room) / keyboardHeight)
+    }
+
+    /// The bottom edge of an active fold running across the page: the iPhone Duo partly open and held upright.
+    private static func horizontalFoldBottom(_ page: GeometryProxy) -> CGFloat? {
+        guard #available(iOS 27.1, *) else { return nil }
+        return page.reservedRegions(kind: .division)
+            .map(\.frame)
+            .filter { $0.width > $0.height && $0.maxY < page.size.height }
+            .map(\.maxY)
+            .max()
+    }
+
+    private func dockedPreview(in page: CGSize, foldBottom: CGFloat?, container: CGSize) -> some View {
         let settings = preview(container: container)
         let height = KeyboardLayout.height(
             for: settings.orientation, showsStrip: settings.showsSuggestionBar, numberRow: settings.numberRow
         )
-        let scale = min(1, max(page.height - 260, page.height * 0.35) / height)
+        let scale = Self.previewScale(keyboardHeight: height, page: page, foldBottom: foldBottom)
         return KeyboardAppearancePreview(settings: settings)
             .frame(width: page.width, height: height)
             .scaleEffect(scale, anchor: .bottom)
@@ -173,7 +187,65 @@ struct KeyboardAppearancePage: View {
         globeKey = FullKeyboardSettings().globeKey
         bottomRow = FullKeyboardSettings().bottomRow
         numberRow = FullKeyboardSettings().numberRow
-        systemIsDark = Self.systemIsDark
+    }
+}
+
+/// The window the page is in, which a page beside a sidebar does not fill, and whether the system is dark.
+struct WindowReader: UIViewRepresentable {
+    struct Window: Equatable {
+        var size: CGSize
+        var systemIsDark: Bool
+    }
+
+    let onChange: (Window) -> Void
+
+    func makeUIView(context: Context) -> Probe {
+        let probe = Probe()
+        probe.isUserInteractionEnabled = false
+        probe.onChange = onChange
+        return probe
+    }
+
+    func updateUIView(_ probe: Probe, context: Context) {
+        probe.onChange = onChange
+    }
+
+    /// Laid out whenever the page resizes (rotating, folding, unfolding), which is when the window does.
+    final class Probe: UIView {
+        var onChange: ((Window) -> Void)?
+        private var reported: Window?
+        private weak var observedScene: UIWindowScene?
+        private var styleRegistration: (any UITraitChangeRegistration)?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if let styleRegistration, let observedScene {
+                observedScene.unregisterForTraitChanges(styleRegistration)
+            }
+            observedScene = window?.windowScene
+            // The scene's style, not the window's: the app forces its windows dark.
+            styleRegistration = observedScene?.registerForTraitChanges([UITraitUserInterfaceStyle.self]) {
+                [weak self] (_: UIWindowScene, _: UITraitCollection) in self?.report()
+            }
+            report()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            report()
+        }
+
+        private func report() {
+            guard let window else { return }
+            let current = Window(
+                size: window.bounds.size,
+                systemIsDark: window.windowScene?.traitCollection.userInterfaceStyle != .light
+            )
+            guard current != reported else { return }
+            reported = current
+            // Not during SwiftUI's own layout pass.
+            DispatchQueue.main.async { [weak self] in self?.onChange?(current) }
+        }
     }
 }
 
@@ -186,7 +258,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         var bottomRow: BottomRow
         var numberRow: Bool
         var isDark: Bool
-        /// The page with its bars: the display the preview stands in for.
+        /// The window the page is in: the display the preview stands in for.
         var container: CGSize
 
         var orientation: KeyboardOrientation { KeyboardOrientation(container: container) }
