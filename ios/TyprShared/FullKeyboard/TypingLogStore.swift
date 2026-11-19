@@ -8,13 +8,21 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
     static let currentName = "typing-log-v1.jsonl"
     static let previousName = "typing-log-v1-previous.jsonl"
     private static let lockName = "typing-log.lock"
+    static let maxLineBytes = 16 * 1024
 
     let directory: URL
     let segmentWords: Int
     private let queue = DispatchQueue(label: "dev.rudek.typr.typing-log", qos: .utility)
-    /// Lines and bytes of `current` after this process's last append; only touched on `queue`.
-    /// Other keyboard processes append too, so it counts only while the file size still matches.
-    private var currentCount: (lines: Int, bytes: UInt64)?
+    /// `current` after this process's last append; only touched on `queue`. Other keyboard processes
+    /// append and rotate too: while both files keep their identity, only later bytes need counting.
+    private var currentCount: Count?
+
+    private struct Count {
+        let current: UInt64
+        let previous: UInt64?
+        let bytes: UInt64
+        let lines: Int
+    }
 
     init(directory: URL, segmentWords: Int = 10_000) {
         self.directory = directory
@@ -24,7 +32,7 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
     /// Returns at once; encoding and writing happen on a background queue.
     func append(_ word: TypingLogWord) {
         queue.async { [self] in
-            guard let line = try? TypingLogExport.encoder().encode(word) else { return }
+            guard let line = try? TypingLogExport.encoder().encode(word), line.count <= Self.maxLineBytes else { return }
             try? withLock { try appendLine(line) }
         }
     }
@@ -74,17 +82,16 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
 
     private func appendLine(_ line: Data) throws {
         let current = directory.appendingPathComponent(Self.currentName)
-        let size = (try? FileManager.default.attributesOfItem(atPath: current.path)[.size] as? NSNumber)?.uint64Value
+        let previous = directory.appendingPathComponent(Self.previousName)
         var lines = 0
-        if let size {
-            lines = currentCount?.bytes == size ? currentCount?.lines ?? 0 : try countLines(current)
+        if let id = fileNumber(current) {
+            lines = try countLines(current, id: id, previous: fileNumber(previous))
             if lines >= segmentWords {
-                let previous = directory.appendingPathComponent(Self.previousName)
                 if FileManager.default.fileExists(atPath: previous.path) { try FileManager.default.removeItem(at: previous) }
                 try FileManager.default.moveItem(at: current, to: previous)
             }
         }
-        if size == nil || lines >= segmentWords {
+        if fileNumber(current) == nil {
             try Data().write(to: current, options: .completeFileProtectionUntilFirstUserAuthentication)
             try KeyboardLearningStore.protect(current)
             lines = 0
@@ -100,12 +107,31 @@ nonisolated final class TypingLogStore: @unchecked Sendable {
             try handle.seekToEnd()
         }
         try handle.write(contentsOf: data)
-        currentCount = (lines + data.count - line.count, end + UInt64(data.count))
+        currentCount = fileNumber(current).map {
+            Count(current: $0, previous: fileNumber(previous), bytes: end + UInt64(data.count),
+                  lines: lines + data.count - line.count)
+        }
     }
+
+    private func fileNumber(_ file: URL) -> UInt64? {
+        (try? FileManager.default.attributesOfItem(atPath: file.path)[.systemFileNumber] as? NSNumber)?.uint64Value
+    }
+
+    private func countLines(_ file: URL, id: UInt64, previous: UInt64?) throws -> Int {
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        guard let known = currentCount, known.current == id, known.previous == previous else {
+            return Self.newlines(in: try handle.readToEnd() ?? Data())
+        }
+        try handle.seek(toOffset: known.bytes)
+        return known.lines + Self.newlines(in: try handle.readToEnd() ?? Data())
+    }
+
+    private static func newlines(in data: Data) -> Int { data.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } }
 
     private func countLines(_ file: URL) throws -> Int {
         guard FileManager.default.fileExists(atPath: file.path) else { return 0 }
-        return try Data(contentsOf: file).reduce(0) { $1 == 0x0A ? $0 + 1 : $0 }
+        return Self.newlines(in: try Data(contentsOf: file))
     }
 
     /// Skips lines that do not decode, such as one cut short by a crash mid-append.
