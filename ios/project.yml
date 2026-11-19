@@ -135,6 +135,9 @@ targets:
         CURRENT_PROJECT_VERSION: 1
         GENERATE_INFOPLIST_FILE: NO
         MARKETING_VERSION: 0.2.0
+        # iOS 18 devices have no FoundationModels; the on-device predictions check iOS 26 at run time.
+        OTHER_LDFLAGS: $(inherited) -weak_framework FoundationModels
+        OTHER_SWIFT_FLAGS: $(inherited) -Xfrontend -disable-autolink-framework -Xfrontend FoundationModels
         PRODUCT_BUNDLE_IDENTIFIER: dev.rudek.typr.keyboard
         PRODUCT_NAME: TyprKeyboard
         SKIP_INSTALL: YES

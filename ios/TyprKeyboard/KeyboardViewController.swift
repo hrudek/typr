@@ -238,12 +238,16 @@ final class KeyboardViewController: UIInputViewController {
             )
             keyboard.hostController = self
             if hasFullAccess {
-                keyboard.engine.modelPredictions = ModelPredictionSession(provider: AnthropicPredictionProvider(
-                    key: { KeychainSecret.keyboardAnthropicAPIKey.read() }))
+                keyboard.hasCloudKey = {
+                    KeychainSecret.keyboardAnthropicAPIKey.read()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                }
+                keyboard.cloudPredictions = AnthropicPredictionProvider(
+                    key: { KeychainSecret.keyboardAnthropicAPIKey.read() })
             }
             keyboard.allowsHaptics = { [weak self] in self?.hasFullAccess ?? false }
             keyboard.allowsCompactBar = isPhone
             keyboard.onShowCompactBar = { [weak self] in self?.switchSurface(toCompactBar: true) }
+            keyboard.onDeviceModel = OnDeviceModelPredictions.systemModel()
             fullKeyboard = keyboard
             // Surface switches can create a keyboard without another viewWillAppear callback.
             let imports = hasFullAccess
