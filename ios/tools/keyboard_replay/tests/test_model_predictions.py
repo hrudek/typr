@@ -29,7 +29,7 @@ class ModelPredictionTests(unittest.TestCase):
         answer = self.report["answer"]
         self.assertEqual(len(counted), 3)
         self.assertEqual(answer["immediate"], counted)
-        self.assertEqual(answer["merged"], ["Visit", "go", "see"])
+        self.assertEqual(answer["merged"], ["the", "go", "visit"])
         self.assertEqual(answer["republished"], answer["merged"])
         self.assertEqual(answer["contexts"], ["I would like to "], "Republishing must not ask again")
 

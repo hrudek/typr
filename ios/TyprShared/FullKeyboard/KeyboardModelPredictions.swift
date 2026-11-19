@@ -39,8 +39,7 @@ final class ModelPredictionSession {
     private var active: (request: ModelPredictionRequest, finish: @MainActor ([String]) -> Void)?
     private var work: Task<Void, Never>?
     private var timer: Task<Void, Never>?
-    /// The last answer, so republishing the same context sends no second request.
-    private var answered: (request: ModelPredictionRequest, words: [String])?
+    private var lastAnswer: (request: ModelPredictionRequest, words: [String])?
 
     init(provider: any ModelPredictionProvider, timeout: Duration = .milliseconds(1_500)) {
         self.provider = provider
@@ -50,7 +49,7 @@ final class ModelPredictionSession {
     var isActive: Bool { active != nil }
 
     func words(for request: ModelPredictionRequest) -> [String]? {
-        answered?.request == request ? answered?.words : nil
+        lastAnswer?.request == request ? lastAnswer?.words : nil
     }
 
     /// `finish` gets the cleaned words on the main actor; failures and timeouts call nothing.
@@ -95,7 +94,7 @@ final class ModelPredictionSession {
         cancel()
         let cleaned = Self.clean(words ?? [])
         guard !cleaned.isEmpty else { return }
-        answered = (active.request, cleaned)
+        lastAnswer = (active.request, cleaned)
         finish(cleaned)
     }
 
@@ -114,15 +113,17 @@ final class ModelPredictionSession {
         return result
     }
 
-    /// Model words first, then the count-based predictions they do not repeat, in strip order
+    /// Model and count-based words alternate, model first, without repeats, in strip order
     /// (likeliest in the centre). `counted` is in strip order already.
     nonisolated static func merge(_ words: [String], into counted: [KeyboardSuggestion]) -> [KeyboardSuggestion] {
+        let model = words.map { KeyboardSuggestion(displayText: $0, replacement: $0, kind: .secondary, isCompletion: true) }
         let ranked = counted.filter { $0.kind != .secondary } + counted.filter { $0.kind == .secondary }
-        var seen = Set(words.map { $0.lowercased() })
-        var merged = words.map { KeyboardSuggestion(displayText: $0, replacement: $0, kind: .secondary, isCompletion: true) }
-        for suggestion in ranked where seen.insert(suggestion.replacement.lowercased()).inserted {
-            merged.append(suggestion)
+        var alternating: [KeyboardSuggestion] = []
+        for index in 0..<max(model.count, ranked.count) {
+            alternating += [model, ranked].compactMap { $0.indices.contains(index) ? $0[index] : nil }
         }
+        var seen: Set<String> = []
+        let merged = alternating.filter { seen.insert($0.replacement.lowercased()).inserted }
         return KeyboardContextModel.stripOrder(Array(merged.prefix(wordLimit)).enumerated().map { index, suggestion in
             var placed = KeyboardSuggestion(displayText: suggestion.displayText, replacement: suggestion.replacement,
                                             kind: index == 0 ? .primary(autoReplace: false) : .secondary,

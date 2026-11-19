@@ -90,7 +90,7 @@ func modelPredictionReport(words: WordData) async throws -> String {
     report["noProvider"] = bar(plain)
 
     let answerTarget = TraitTarget()
-    let model = FakeModel(["go", "Visit", "see"], mode: .hold)
+    let model = FakeModel(["go", "visit", "see"], mode: .hold)
     let answered = engine(answerTarget, provider: model)
     await typed(sentence, answerTarget, answered)
     let immediate = bar(answered)

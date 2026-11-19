@@ -406,8 +406,6 @@ final class FullKeyboardEngine {
         }
     }
 
-    /// Restricted fields (no inline predictions, numbers and punctuation) never reach a model;
-    /// secure, URL, email, number pad and no-autocorrect fields never get this far.
     private func addModelPredictions(to counted: [KeyboardSuggestion], ownership: KeyboardSuggestionOwnership,
                                      evidence: KeyboardTouchWord?) {
         guard let modelPredictions, target.inlinePredictionType != .no,

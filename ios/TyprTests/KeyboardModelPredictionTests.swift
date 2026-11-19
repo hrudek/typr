@@ -86,20 +86,20 @@ final class KeyboardModelPredictionTests: XCTestCase {
 
     func testCountPredictionsShowFirstThenModelWordsMergeForTheSameContext() async throws {
         let counted = try await countedBar()
-        let model = FakeModel(["go", "Visit", "see"], mode: .hold)
+        let model = FakeModel(["go", "visit", "see"], mode: .hold)
         let (engine, target) = try keyboard(model)
         await type(sentence, engine, target)
         XCTAssertEqual(bar(engine), counted, "Count predictions do not wait for the model")
         await model.waitForRequests(1)
         await model.release()
         await settle(engine)
-        XCTAssertEqual(bar(engine), ["Visit", "go", "see"], "Likeliest model word in the centre")
+        XCTAssertEqual(bar(engine), ["the", "go", "visit"], "Model and count words alternate, model first")
         XCTAssertEqual(engine.suggestions.filter(\.willAutoReplace).count, 0)
         XCTAssertTrue(engine.suggestions.allSatisfy { $0.ownership == engine.suggestionOwnership })
 
         engine.textDidChange()
         await settle(engine)
-        XCTAssertEqual(bar(engine), ["Visit", "go", "see"])
+        XCTAssertEqual(bar(engine), ["the", "go", "visit"])
         let contexts = await model.contexts
         XCTAssertEqual(contexts, [sentence], "The same context is not requested twice")
     }
@@ -127,16 +127,19 @@ final class KeyboardModelPredictionTests: XCTestCase {
         XCTAssertTrue(bar(engine).contains("fresh"))
     }
 
-    func testCaretMoveDropsResult() async throws {
-        let model = FakeModel(["late"], mode: .hold)
+    func testResultForAnOldCaretIsDropped() async throws {
+        let model = FakeModel(mode: .hold) { $0 == "I would like to " ? ["late"] : ["fresh"] }
         let (engine, target) = try keyboard(model)
         await type(sentence, engine, target)
         await model.waitForRequests(1)
-        target.adjustTextPosition(byCharacterOffset: -3)
+        target.adjustTextPosition(byCharacterOffset: -2)
         engine.textDidChange()
         await engine.waitForSuggestions()
+        XCTAssertFalse(engine.modelPredictions?.isActive ?? true, "Caret inside a word cancels the request")
         await model.release()
         await settle(engine)
+        let contexts = await model.contexts
+        XCTAssertEqual(contexts, [sentence], "No request for a caret inside a word")
         XCTAssertFalse(bar(engine).contains("late"))
     }
 
