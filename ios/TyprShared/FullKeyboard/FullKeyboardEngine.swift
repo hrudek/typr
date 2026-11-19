@@ -165,6 +165,7 @@ final class FullKeyboardEngine {
     let target: KeyboardTextTarget
     let autocorrect: AutocorrectEngine
     let statistics: UsageStatisticsSession?
+    let typingLog: TypingLogRecorder?
     // Bounded RAM-only ownership, discarded with the engine; never sent to the store.
     private var statisticsContext: String?
     private var statisticsSessionRevision: UInt64?
@@ -215,8 +216,10 @@ final class FullKeyboardEngine {
     init(target: KeyboardTextTarget, autocorrect: AutocorrectEngine? = nil,
          suggestionWorker: KeyboardSuggestionWorker? = nil,
          statistics: UsageStatisticsSession? = nil,
+         typingLog: TypingLogRecorder? = nil,
          swipeDecoder: SwipeDecoding? = nil) {
         self.statistics = statistics
+        self.typingLog = typingLog
         self.swipeDecoder = swipeDecoder ?? { await SwipeRecognizer.shared.decode($0) }
         self.target = target
         self.autocorrect = autocorrect ?? AutocorrectEngine()
@@ -254,6 +257,7 @@ final class FullKeyboardEngine {
 
     /// Call when the keyboard appears or the field changes.
     func configureForField() {
+        endTypingLogWord("field")
         statistics?.refreshGeneration()
         endStatisticsSession()
         suggestionsAreActive = true
@@ -278,6 +282,7 @@ final class FullKeyboardEngine {
 
     /// Call after the text or the cursor changed outside these keys.
     func textDidChange() {
+        endTypingLogWord("external")
         endStatisticsSession()
         invalidateTouchEvidence()
         lastSpaceAt = nil
@@ -462,6 +467,12 @@ final class FullKeyboardEngine {
         }
         autocorrect.clearPendingUndo()
         insert(replacement + " ", keepsFeedback: suggestion.boundary == nil)
+        logTyping { log in
+            if let original {
+                log.picked(from: original, to: replacement, chip: Self.chipName(suggestion.kind),
+                           boundary: suggestion.boundary != nil)
+            } else { log.end("prediction") }
+        }
         if let boundary = suggestion.boundary {
             autocorrect.recordAppliedBoundary(boundary, replacement: suggestion.replacement)
         } else if suggestion.kind == .keepLiteral, let token {
@@ -613,6 +624,7 @@ final class FullKeyboardEngine {
         if touch.key.kind == .space, !touch.committed {
             if !touch.isTrackpad, abs(point.x - touch.startPoint.x) >= Self.trackpadActivationDistance {
                 discardTouchEvidence()
+                endTypingLogWord("cursor")
                 touch.isTrackpad = true
                 touch.trackpadAnchorX = point.x
                 endStatisticsSession()
@@ -701,6 +713,7 @@ final class FullKeyboardEngine {
             prepareStatisticsEdit()
             statistics?.direct("\n")
             insert("\n")
+            logTyping { $0.boundary("\n") }
         case .layerSwitch:
             // Hold 123, slide to a key, let go: type it and go back.
             if let returnLayer = touch.returnLayer,
@@ -798,6 +811,7 @@ final class FullKeyboardEngine {
             autocorrect.discardFeedback()
             for _ in 0..<swipe.inserted.count { target.deleteBackward() }
             swipeWord = nil
+            logTyping { $0.dropOpenWord() }
             autocorrect.touchInput.deletedBackward(before: nil, after: target.documentContextBeforeInput)
             lastSpaceAt = nil
             didEdit()
@@ -812,6 +826,7 @@ final class FullKeyboardEngine {
                 target.deleteBackward()
             }
             target.insertText(undo.original)
+            logTyping { $0.undone(original: undo.original, token: currentToken) }
             autocorrect.touchInput.clear()
             autocorrect.recordUndo(undo)
             autocorrect.touchInput.deletedBackward(before: nil, after: target.documentContextBeforeInput)
@@ -823,6 +838,7 @@ final class FullKeyboardEngine {
         autocorrect.discardFeedback()
         if recordsStatistics { statistics?.deletion() }
         target.deleteBackward()
+        logTyping { $0.deleted(token: currentToken) }
         autocorrect.touchInput.deletedBackward(before: beforeDeletion, after: target.documentContextBeforeInput)
         lastSpaceAt = nil
         didEdit()
@@ -839,6 +855,7 @@ final class FullKeyboardEngine {
             return
         }
         statistics?.deletion(wholeWord: true)
+        typingLog?.discard()
         var count = 0
         var index = before.endIndex
         while index > before.startIndex, before[before.index(before: index)].isWhitespace {
@@ -899,7 +916,12 @@ final class FullKeyboardEngine {
         prepareStatisticsEdit()
         guard [".", ",", "?", "!"].contains(text), field == .text else {
             statistics?.direct(text)
+            let tapLayout = layout
             insert(text, sample: sample)
+            logTyping { log in
+                log.typed(text, point: sample?.point, key: sample?.key.character, layout: tapLayout,
+                          time: clock(), token: currentToken)
+            }
             return
         }
         autocorrect.forgetSpaceTaps()
@@ -911,6 +933,7 @@ final class FullKeyboardEngine {
             // This word was already committed; do not reconsider an explicit choice.
             statistics?.direct(text)
             insert(text)
+            logTyping { $0.boundary(text) }
             return
         }
         // A swiped word is already a lexicon word chosen by its whole path: never autocorrected or learned.
@@ -918,6 +941,7 @@ final class FullKeyboardEngine {
             autocorrect.discardFeedback()
             statistics?.direct(text)
             insert(text)
+            logTyping { $0.boundary(text) }
             return
         }
         if let (original, replacement) = autocorrect.replacementOnSpace(
@@ -928,6 +952,7 @@ final class FullKeyboardEngine {
             statistics?.direct(text, boundaryReplacement: replacement)
             for _ in 0..<original.count { target.deleteBackward() }
             target.insertText(replacement + text)
+            logTyping { $0.boundary(text, replacement: replacement, correction: typingLogCorrection) }
             autocorrect.recordAppliedCorrection(original: original, insertedText: replacement + text)
             autocorrect.discardFeedback()
             autocorrect.touchInput.clearAtBoundary()
@@ -938,6 +963,7 @@ final class FullKeyboardEngine {
         } else {
             statistics?.direct(text)
             insert(text)
+            logTyping { $0.boundary(text) }
         }
     }
 
@@ -976,6 +1002,7 @@ final class FullKeyboardEngine {
             autocorrect.clearPendingUndo()
             target.deleteBackward()
             target.insertText(". ")
+            logTyping { $0.boundary(" ") }
             lastSpaceAt = nil
             layerState.didInsert(" ")
             rebuildLayoutIfNeeded()
@@ -996,6 +1023,7 @@ final class FullKeyboardEngine {
             let inserted = replacement + " "
             autocorrect.touchInput.clear()
             target.insertText(inserted)
+            logTyping { $0.boundary(" ", replacement: replacement, correction: typingLogCorrection) }
             autocorrect.recordAppliedCorrection(original: original, insertedText: inserted)
             if let sample {
                 autocorrect.spaceTyped(at: sample.point, layout: layout, afterInput: target.documentContextBeforeInput)
@@ -1022,6 +1050,7 @@ final class FullKeyboardEngine {
         statistics?.direct(" ")
         let tapLayout = layout
         insert(" ", sample: sample, keepsFeedback: true)
+        logTyping { $0.boundary(" ") }
         if let sample {
             autocorrect.spaceTyped(at: sample.point, layout: tapLayout, afterInput: target.documentContextBeforeInput)
         }
@@ -1152,6 +1181,7 @@ final class FullKeyboardEngine {
         // Never pending word feedback or tap evidence: a swipe is neither a confirmed word nor taps.
         autocorrect.discardFeedback()
         target.insertText(text)
+        logTyping { $0.swiped(word, time: clock()) }
         autocorrect.touchInput.clear()
         shift.didType()
         lastSpaceAt = nil
@@ -1216,12 +1246,55 @@ final class FullKeyboardEngine {
             autocorrect.discardFeedback()
             for _ in 0..<swipe.inserted.count { target.deleteBackward() }
             target.insertText(suggestion.replacement)
+            logTyping { $0.swipeReplaced(with: suggestion.replacement) }
             autocorrect.touchInput.clear()
             swipe.inserted = suggestion.replacement
             swipe.context = target.documentContextBeforeInput.flatMap(Self.boundedSuggestionContext)
             swipeWord = swipe
             lastSpaceAt = nil
             didEdit()
+        }
+    }
+
+    // MARK: - Typing log
+
+    /// Records only where personal learning could: prose fields that allow autocorrection, never
+    /// secure, URL or email fields, and only while learning is on. Anywhere else drops open words.
+    private var typingLogAllowed: Bool {
+        guard field == .text, target.isSecureTextEntry != true, target.autocorrectionType != .no,
+              autocorrect.learning.isLearningEnabled,
+              case .keys(.text, _) = KeyboardFieldRouting.route(for: target.keyboardType) else { return false }
+        return true
+    }
+
+    private var currentToken: String? { AutocorrectEngine.currentToken(in: target.documentContextBeforeInput) }
+
+    private var typingLogCorrection: TypingLogWord.Commit.CorrectionKind {
+        switch autocorrect.pendingFeedback?.kind {
+        case .autoSpatial: .spatial
+        case .autoSpelling: .spelling
+        case .autoRule, .unchanged, nil: .rule
+        }
+    }
+
+    private func logTyping(_ event: (TypingLogRecorder) -> Void) {
+        guard let typingLog else { return }
+        guard typingLogAllowed else { typingLog.discard(); return }
+        typingLog.languages = autocorrect.suggestionLanguages.map(\.rawValue).sorted()
+        event(typingLog)
+    }
+
+    /// The user left the word without a separator (field change, host edit, cursor, dismissal).
+    func endTypingLogWord(_ reason: String) {
+        guard let typingLog else { return }
+        if autocorrect.learning.isLearningEnabled { typingLog.end(reason) } else { typingLog.discard() }
+    }
+
+    private static func chipName(_ kind: KeyboardSuggestion.Kind) -> String {
+        switch kind {
+        case .keepLiteral: "keep"
+        case .primary: "primary"
+        case .secondary: "secondary"
         }
     }
 

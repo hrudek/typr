@@ -69,9 +69,9 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     var shownPanelContent: TyprFeedbackPanel.Content? { panelContent }
 
     init(model: KeyboardViewModel, target: KeyboardTextTarget, autocorrect: AutocorrectEngine? = nil,
-         statistics: UsageStatisticsSession? = nil, preview: Preview? = nil) {
+         statistics: UsageStatisticsSession? = nil, typingLog: TypingLogRecorder? = nil, preview: Preview? = nil) {
         self.model = model
-        engine = FullKeyboardEngine(target: target, autocorrect: autocorrect, statistics: statistics)
+        engine = FullKeyboardEngine(target: target, autocorrect: autocorrect, statistics: statistics, typingLog: typingLog)
         engine.autocorrect.learning.onValidatedLabel = { [weak statistics] label, layout in
             statistics?.validatedLabel(label, layout: layout)
         }
@@ -289,6 +289,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
 
     /// Selection changes and keyboard dismissal must not retain current-word taps.
     func discardTouchEvidence() {
+        engine.endTypingLogWord("external")
         engine.endStatisticsSession()
         engine.discardTouchEvidence()
     }
