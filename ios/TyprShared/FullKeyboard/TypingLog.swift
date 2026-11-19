@@ -164,8 +164,9 @@ nonisolated struct TypingLogExport: Codable, Sendable {
 /// The engine calls it only where personal learning may record; `discard()` drops everything.
 @MainActor
 final class TypingLogRecorder {
-    /// Words with more taps or erased taps are not words; they are dropped.
+    /// Words beyond these bounds are dropped, which keeps every record a few kilobytes.
     static let maxTaps = 64
+    static let maxCorrections = 32
 
     var languages: [String] = []
     var hitAreas = "standard"
@@ -176,11 +177,15 @@ final class TypingLogRecorder {
 
     private struct Draft {
         var word: TypingLogWord
-        /// The word's current text in the field.
         var text: String
         var started: TimeInterval
         var backspacing = false
         var tapsMatchText: Bool { word.literal == text }
+        var isBounded: Bool {
+            word.taps.count <= TypingLogRecorder.maxTaps
+                && word.corrections.count <= TypingLogRecorder.maxCorrections
+                && word.corrections.reduce(0) { $0 + ($1.erased?.count ?? 0) } <= TypingLogRecorder.maxTaps
+        }
 
         mutating func append(_ text: String, point: CGPoint?, key: String?, layout: KeyboardLayout, time: TimeInterval) {
             if point != nil, word.layout == nil { word.layout = TypingLogLayout(layout) }
@@ -193,7 +198,6 @@ final class TypingLogRecorder {
             self.text += text
         }
 
-        /// Only the word's first boundary decides `commit`; later ones show up as corrections.
         mutating func commit(_ commit: TypingLogWord.Commit) {
             if word.commit == nil { word.commit = commit }
         }
@@ -207,10 +211,11 @@ final class TypingLogRecorder {
     /// A character went in. `token`: the current word in the field afterwards.
     func typed(_ text: String, point: CGPoint?, key: String?, layout: KeyboardLayout,
                time: TimeInterval, token: String?) {
-        if var draft = open, token == draft.text + text {
+        if var draft = open, token == draft.text + text
+            || (token == nil && Self.isApostrophe(text) && draft.text.last?.isLetter == true) {
             draft.append(text, point: point, key: key, layout: layout, time: time)
             draft.backspacing = false
-            open = draft.word.taps.count > Self.maxTaps ? nil : draft
+            open = draft.isBounded ? draft : nil
             return
         }
         settle()
@@ -251,7 +256,7 @@ final class TypingLogRecorder {
         draft.commit(.init(kind: boundary ? .boundaryPick : .pick, text: to))
         draft.text = to
         draft.word.end = " "
-        settled = draft
+        settled = draft.isBounded ? draft : nil
     }
 
     /// One character was deleted. `token`: the current word in the field afterwards.
@@ -272,7 +277,7 @@ final class TypingLogRecorder {
             }
             draft.backspacing = true
             draft.text = token ?? ""
-            if draft.word.corrections.last?.erased?.count ?? 0 <= Self.maxTaps { open = draft }
+            open = draft.isBounded ? draft : nil
             return
         }
         guard var draft = settled else { return }
@@ -281,7 +286,7 @@ final class TypingLogRecorder {
         draft.word.corrections.append(.init(kind: .reopen))
         draft.word.end = ""
         draft.text = token
-        open = draft
+        open = draft.isBounded ? draft : nil
     }
 
     /// Backspace restored `original` in place of the word's automatic change.
@@ -291,7 +296,7 @@ final class TypingLogRecorder {
         draft.word.corrections.append(.init(kind: .undo, from: draft.text, to: original))
         draft.word.end = ""
         draft.text = token
-        open = draft
+        open = draft.isBounded ? draft : nil
     }
 
     func swiped(_ word: String, time: TimeInterval) {
@@ -307,7 +312,7 @@ final class TypingLogRecorder {
         guard var draft = open, draft.word.swipe == true else { return }
         draft.word.corrections.append(.init(kind: .pick, from: draft.text, to: word, chip: "swipe"))
         draft.text = word
-        open = draft
+        open = draft.isBounded ? draft : nil
     }
 
     /// The open word was removed as a whole (swipe delete).
@@ -333,7 +338,9 @@ final class TypingLogRecorder {
     private func finish(_ draft: Draft?, end: String?) {
         guard var word = draft?.word, let text = draft?.text, !text.isEmpty else { return }
         if let end, word.end.isEmpty { word.end = end }
-        word.meant = text
+        word.meant = String(text.reversed().drop(while: { Self.isApostrophe(String($0)) }).reversed())
         write(word)
     }
+
+    private static func isApostrophe(_ text: String) -> Bool { text == "'" || text == "’" }
 }
