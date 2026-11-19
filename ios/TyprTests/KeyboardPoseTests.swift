@@ -66,10 +66,91 @@ final class KeyboardPoseTests: XCTestCase {
         for layout in [
             KeyboardLayout(width: 669, orientation: .widePortrait),
             KeyboardLayout(width: 801, orientation: .wideLandscape, numberRow: true),
+            KeyboardLayout(width: 801, orientation: .splitLandscape),
         ] {
             XCTAssertEqual(TypingLogLayout(layout).keyboardLayout, layout)
             XCTAssertEqual(KeyboardLayoutSignature(layout).orientation, layout.orientation.rawValue)
             XCTAssertNotEqual(KeyboardLayoutSignature(layout), KeyboardLayoutSignature(KeyboardLayout(width: layout.width)))
+        }
+    }
+
+    func testTheSplitSettingOnlySplitsTheOpenDuoSideways() {
+        XCTAssertEqual(KeyboardOrientation(container: innerLandscape, split: true), .splitLandscape)
+        XCTAssertEqual(KeyboardOrientation(container: innerLandscape, split: false), .wideLandscape)
+        for display in [outerPortrait, outerLandscape, innerPortrait, CGSize(width: 852, height: 393)] {
+            XCTAssertEqual(KeyboardOrientation(container: display, split: true), KeyboardOrientation(container: display))
+        }
+        XCTAssertTrue(KeyboardOrientation.splitLandscape.isLandscape)
+        XCTAssertFalse(KeyboardOrientation.splitLandscape.allowsSplit)
+    }
+
+    func testSplitHalvesSitAtTheEdgesWithTheFoldBetween() {
+        let left = Set("qwertasdfgzxcvb".map(String.init))
+        let right = Set("yuiophjklnm".map(String.init))
+        let phoneLetter = KeyboardLayout(width: outerPortrait.width).letterWidth
+        for width: CGFloat in [801, innerLandscape.width] {
+            for layout in variants(width: width, orientation: .splitLandscape) {
+                let name = describe(layout)
+                let full = KeyboardLayout(width: width, orientation: .wideLandscape,
+                                          numberRow: layout.numberRow, showsStrip: layout.showsStrip)
+                XCTAssertLessThanOrEqual(layout.totalHeight, full.totalHeight, name)
+                XCTAssertGreaterThanOrEqual(layout.letterWidth, phoneLetter, name)
+                XCTAssertLessThanOrEqual(layout.letterWidth, KeyboardMetrics.maxWideLetterWidth, name)
+                assertKeysInTheNorm(layout)
+
+                let q = layout.key(.character("q"))!
+                let p = layout.key(.character("p"))!
+                XCTAssertEqual(q.frame.minX, layout.metrics.side, accuracy: 0.001, name)
+                XCTAssertEqual(p.frame.maxX, width - layout.metrics.side, accuracy: 0.001, name)
+
+                let leftKeys = layout.keys.filter { $0.frame.midX < width / 2 }
+                let rightKeys = layout.keys.filter { $0.frame.midX > width / 2 }
+                XCTAssertEqual(Set(leftKeys.compactMap(\.character)).intersection(left.union(right)), left, name)
+                XCTAssertEqual(Set(rightKeys.compactMap(\.character)).intersection(left.union(right)), right, name)
+                XCTAssertTrue(layout.keys.allSatisfy { $0.frame.maxX < width / 2 || $0.frame.minX > width / 2 },
+                              "no key crosses the middle: \(name)")
+                XCTAssertLessThanOrEqual(leftKeys.map(\.frame.maxX).max()!, 0.4 * width + 0.001, name)
+                XCTAssertLessThanOrEqual(width - rightKeys.map(\.frame.minX).min()!, 0.4 * width + 0.001, name)
+
+                XCTAssertEqual(leftKeys.filter { $0.kind == .space }.count, 1, name)
+                XCTAssertEqual(rightKeys.filter { $0.kind == .space }.count, 1, name)
+                for kind in [KeyKind.shift, .layerSwitch(.numbers), .globe] {
+                    XCTAssertTrue(leftKeys.contains { $0.kind == kind }, "\(kind) on the left: \(name)")
+                }
+                for kind in [KeyKind.delete, .returnKey, .typr] {
+                    XCTAssertTrue(rightKeys.contains { $0.kind == kind }, "\(kind) on the right: \(name)")
+                }
+                for key in layout.keys {
+                    XCTAssertEqual(layout.hitTest(CGPoint(x: key.frame.midX, y: key.frame.midY)), key, name)
+                }
+                assertTheGapTypesNothingPastHalfAKey(layout)
+            }
+        }
+    }
+
+    func testTheSplitGapTypesNothingPastHalfAKeyOnEveryLayer() {
+        for width: CGFloat in [801, innerLandscape.width] {
+            for layer in [KeyboardLayer.numbers, .symbols] {
+                for field in [KeyboardFieldKind.text, .url, .email] {
+                    for showsStrip in [true, false] {
+                        assertTheGapTypesNothingPastHalfAKey(KeyboardLayout(
+                            width: width, orientation: .splitLandscape, layer: layer, field: field,
+                            showsGlobe: true, showsStrip: showsStrip
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
+    func testTheJoinedSpaceAndTyprKeycapTakesOnlyTheRightSpaceBarWhenSplit() throws {
+        for width: CGFloat in [801, innerLandscape.width] {
+            let layout = KeyboardLayout(width: width, orientation: .splitLandscape)
+            let spaces = layout.keys.filter { $0.kind == .space }.sorted { $0.frame.minX < $1.frame.minX }
+            XCTAssertEqual(spaces.count, 2)
+            let joined = try XCTUnwrap(JoinedSpaceKeycap(layout: layout))
+            XCTAssertEqual(joined.space, spaces[1].frame, "width \(width)")
+            XCTAssertNotEqual(joined.space, spaces[0].frame, "the left space bar keeps its own keycap")
         }
     }
 
@@ -90,6 +171,28 @@ final class KeyboardPoseTests: XCTestCase {
             view.frame = CGRect(x: 0, y: 0, width: display.width, height: view.preferredHeight)
             view.layoutIfNeeded()
             XCTAssertEqual(view.engine.layout.orientation, orientation, "\(display)")
+        }
+    }
+
+    private func assertTheGapTypesNothingPastHalfAKey(_ layout: KeyboardLayout, file: StaticString = #filePath, line: UInt = #line) {
+        let name = describe(layout)
+        let reach = layout.letterWidth / 2
+        for row in 0...layout.bottomRowIndex {
+            let keys = layout.keys.filter { $0.row == row }.sorted { $0.frame.minX < $1.frame.minX }
+            let leftHalf = keys.filter { $0.frame.maxX < layout.width / 2 }
+            let rightHalf = keys.filter { $0.frame.minX > layout.width / 2 }
+            for half in [leftHalf, rightHalf] {
+                for (a, b) in zip(half, half.dropFirst()) {
+                    XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, "row \(row) tiles: \(name)", file: file, line: line)
+                }
+            }
+            let inner = (leftHalf.last!, rightHalf.first!)
+            let y = inner.0.frame.midY
+            XCTAssertEqual(layout.hitTest(CGPoint(x: inner.0.frame.maxX + reach - 0.5, y: y)), inner.0, name, file: file, line: line)
+            XCTAssertEqual(layout.hitTest(CGPoint(x: inner.1.frame.minX - reach + 0.5, y: y)), inner.1, name, file: file, line: line)
+            XCTAssertNil(layout.hitTest(CGPoint(x: inner.0.frame.maxX + reach + 0.5, y: y)), "row \(row): \(name)", file: file, line: line)
+            XCTAssertNil(layout.hitTest(CGPoint(x: inner.1.frame.minX - reach - 0.5, y: y)), "row \(row): \(name)", file: file, line: line)
+            XCTAssertNil(layout.hitTest(CGPoint(x: layout.width / 2, y: y)), "row \(row): \(name)", file: file, line: line)
         }
     }
 

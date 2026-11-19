@@ -305,6 +305,7 @@ final class KeyboardLearningStoreTests: XCTestCase {
         let layouts = [
             KeyboardLayout(width: 669, orientation: .widePortrait),
             KeyboardLayout(width: 801, orientation: .wideLandscape),
+            KeyboardLayout(width: 801, orientation: .splitLandscape),
         ]
         for layout in layouts {
             let g = try XCTUnwrap(layout.key(.character("g")))

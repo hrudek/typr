@@ -176,9 +176,9 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
     }
 
     var orientation: KeyboardOrientation {
-        orientationOverride
-            ?? containerSize.map(KeyboardOrientation.init(container:))
-            ?? Self.orientation(for: traitCollection)
+        if let orientationOverride { return orientationOverride }
+        guard let containerSize else { return Self.orientation(for: traitCollection) }
+        return KeyboardOrientation(container: containerSize, split: model.splitKeyboard)
     }
 
     var preferredHeight: CGFloat {
@@ -506,6 +506,7 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
             setNeedsLayout()
             hostController?.view.setNeedsLayout()
         }
+        if orientation != engine.orientation { setNeedsLayout() }
         let recording = model.stagePhase == .recording || model.stagePhase == .transcribing
         if recording != showsRecording {
             setRecording(recording)

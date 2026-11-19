@@ -69,7 +69,8 @@ final class KeyboardKeyPlaneView: UIView {
         let symbolWeight: UIImage.SymbolWeight = isMechanical ? .medium : .regular
 
         let joined = JoinedSpaceKeycap(layout: layout)
-        joined?.draw(in: context, palette: palette, spacePressed: pressed.contains(.space), typrPressed: typrPressed)
+        let joinedSpacePressed = layout.keys.contains { $0.kind == .space && $0.frame == joined?.space && engine.isPressed($0) }
+        joined?.draw(in: context, palette: palette, spacePressed: joinedSpacePressed, typrPressed: typrPressed)
 
         for key in layout.keys {
             guard key.frame.intersects(rect) else { continue }
@@ -102,8 +103,8 @@ final class KeyboardKeyPlaneView: UIView {
                     yOffset: yOffset
                 )
             case .space:
-                if joined != nil { continue }
-                let fill = pressed.contains(.space) ? palette.keyPressedFill : palette.keyFill
+                if key.frame == joined?.space { continue }
+                let fill = engine.isPressed(key) ? palette.keyPressedFill : palette.keyFill
                 context.fillKeycap(key.frame, palette: palette, fill: fill, radius: radius)
             case .returnKey:
                 let isPressed = pressed.contains(.returnKey) && returnIsEnabled

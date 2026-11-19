@@ -43,7 +43,7 @@ final class KeyboardAppearanceTests: XCTestCase {
         let design = views.compactMap { $0 as? UISegmentedControl }
         XCTAssertEqual(design.count, 1)
         XCTAssertEqual(design.first?.numberOfSegments, KeyboardDesign.allCases.count)
-        XCTAssertEqual(views.filter { $0 is UISwitch }.count, 3)
+        XCTAssertEqual(views.filter { $0 is UISwitch }.count, 4)
     }
 
     func testPreviewIsDockedFullWidthAtTheBottomAndScrollEndsAboveIt() async throws {
@@ -169,6 +169,31 @@ final class KeyboardAppearanceTests: XCTestCase {
         }
     }
 
+    func testPreviewIsAsWideAsTheKeyboardIOSGivesThePose() {
+        XCTAssertEqual(KeyboardAppearancePage.keyboardWidth(display: CGSize(width: 393, height: 852)), 393)
+        XCTAssertEqual(KeyboardAppearancePage.keyboardWidth(display: CGSize(width: 669, height: 951)), 669)
+        for display in [CGSize(width: 466, height: 678), CGSize(width: 678, height: 466), CGSize(width: 951, height: 669)] {
+            XCTAssertLessThan(KeyboardAppearancePage.keyboardWidth(display: display), display.width, "\(display)")
+        }
+    }
+
+    func testPreviewSplitsOnlyOnTheOpenDuoSideways() {
+        let displays = [CGSize(width: 393, height: 852), CGSize(width: 466, height: 678), CGSize(width: 678, height: 466),
+                        CGSize(width: 669, height: 951), CGSize(width: 951, height: 669)]
+        for display in displays {
+            var settings = base
+            settings.container = display
+            let full = settings.orientation
+            settings.splitKeyboard = true
+            XCTAssertEqual(settings.orientation, full.allowsSplit ? .splitLandscape : full, "\(display)")
+            let view = KeyboardAppearancePreview.makeKeyboard(settings)
+            view.frame = CGRect(x: 0, y: 0, width: KeyboardAppearancePage.keyboardWidth(display: display),
+                                height: view.preferredHeight)
+            view.layoutIfNeeded()
+            XCTAssertEqual(view.engine.layout.orientation, settings.orientation, "\(display)")
+        }
+    }
+
     func testPreviewStaysBelowAFoldAcrossThePage() {
         let page = CGSize(width: 669, height: 830)
         let height = KeyboardLayout.height(for: .widePortrait, numberRow: true)
@@ -204,7 +229,7 @@ final class KeyboardAppearanceTests: XCTestCase {
                 return keyboard?.engine.layout.orientation == orientation
             }
             let keyboard = try XCTUnwrap(Self.subviews(of: host.view).compactMap { $0 as? FullKeyboardView }.first)
-            XCTAssertEqual(keyboard.bounds.width, size.width, accuracy: 0.5, "\(size)")
+            XCTAssertEqual(keyboard.bounds.width, KeyboardAppearancePage.keyboardWidth(display: size), accuracy: 0.5, "\(size)")
             if orientation == .wideLandscape {
                 XCTAssertEqual(keyboard.engine.layout.letterWidth, KeyboardMetrics.maxWideLetterWidth, accuracy: 0.001)
             }

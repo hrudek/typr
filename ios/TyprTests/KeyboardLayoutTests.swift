@@ -49,7 +49,8 @@ final class KeyboardLayoutTests: XCTestCase {
                 XCTAssertNil(joined, "Do not cover URL/email punctuation")
                 continue
             }
-            guard let joined, let space = layout.key(.space), let typr = layout.key(.typr) else {
+            // Split layouts have a space bar in each half; Typr sits beside the right one.
+            guard let joined, let space = layout.keys.last(where: { $0.kind == .space }), let typr = layout.key(.typr) else {
                 XCTFail("Adjacent space and Typr must share a background")
                 continue
             }
@@ -367,17 +368,30 @@ final class KeyboardLayoutTests: XCTestCase {
         var generator = SystemRandomNumberGenerator()
         for layout in everyLayout() {
             let area = layout.keysAreaFrame
+            let isSplit = layout.orientation == .splitLandscape
             var rowTop = area.minY
+            // Split only: per row, the stretch between the halves that types nothing.
+            var gaps: [(rows: Range<CGFloat>, xs: Range<CGFloat>)] = []
             for row in 0...layout.bottomRowIndex {
-                let targets = layout.keys.filter { $0.row == row }.map(\.hitFrame).sorted { $0.minX < $1.minX }
+                let keys = layout.keys.filter { $0.row == row }.sorted { $0.frame.minX < $1.frame.minX }
+                let targets = keys.map(\.hitFrame)
                 XCTAssertEqual(targets.first?.minX, 0, describe(layout))
                 XCTAssertEqual(targets.last?.maxX, layout.width, describe(layout))
                 for target in targets {
                     XCTAssertEqual(target.minY, rowTop, accuracy: 0.0001, "\(describe(layout)) row \(row)")
                 }
-                for (a, b) in zip(targets, targets.dropFirst()) {
-                    XCTAssertEqual(a.maxX, b.minX, accuracy: 0.0001, "\(describe(layout)) row \(row)")
+                var gapCount = 0
+                for (a, b) in zip(keys, keys.dropFirst()) {
+                    if isSplit, b.frame.minX - a.frame.maxX > layout.letterWidth {
+                        gapCount += 1
+                        XCTAssertLessThan(a.hitFrame.maxX, layout.width / 2, "\(describe(layout)) row \(row)")
+                        XCTAssertGreaterThan(b.hitFrame.minX, layout.width / 2, "\(describe(layout)) row \(row)")
+                        gaps.append((a.hitFrame.minY..<a.hitFrame.maxY, a.hitFrame.maxX..<b.hitFrame.minX))
+                    } else {
+                        XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, "\(describe(layout)) row \(row)")
+                    }
                 }
+                XCTAssertEqual(gapCount, isSplit ? 1 : 0, "\(describe(layout)) row \(row)")
                 rowTop = targets[0].maxY
             }
             XCTAssertEqual(rowTop, area.maxY, accuracy: 0.0001, describe(layout))
@@ -388,7 +402,8 @@ final class KeyboardLayoutTests: XCTestCase {
                     y: CGFloat.random(in: area.minY..<area.maxY, using: &generator)
                 )
                 let hits = layout.keys.filter { $0.hitFrame.contains(point) }
-                XCTAssertEqual(hits.count, 1, "\(describe(layout)) at \(point): \(hits.map(\.label))")
+                let inGap = gaps.contains { $0.rows.contains(point.y) && $0.xs.contains(point.x) }
+                XCTAssertEqual(hits.count, inGap ? 0 : 1, "\(describe(layout)) at \(point): \(hits.map(\.label))")
             }
             if layout.showsStrip {
                 XCTAssertNil(layout.hitTest(CGPoint(x: 20, y: layout.stripFrame.midY)), "strip is not a key")
@@ -576,6 +591,9 @@ final class KeyboardLayoutTests: XCTestCase {
             KeyboardLayout(width: 669, orientation: .widePortrait, layer: .symbols, field: .url),
             KeyboardLayout(width: 801, orientation: .wideLandscape, layer: .numbers),
             KeyboardLayout(width: 951, orientation: .wideLandscape, field: .email),
+            KeyboardLayout(width: 801, orientation: .splitLandscape),
+            KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .numbers, field: .url),
+            KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .symbols, field: .email),
         ]
     }
 
@@ -684,6 +702,7 @@ final class KeyboardLayoutTests: XCTestCase {
                     let row = layout.keys.filter { $0.row == layout.bottomRowIndex }.sorted { $0.frame.minX < $1.frame.minX }
                     for (a, b) in zip(row, row.dropFirst()) {
                         XCTAssertLessThan(a.frame.maxX, b.frame.minX, name)
+                        if layout.orientation == .splitLandscape, b.frame.minX - a.frame.maxX > layout.letterWidth { continue }
                         XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.minX, accuracy: 0.0001, name)
                     }
                     XCTAssertLessThanOrEqual(row.last?.frame.maxX ?? 0, layout.width - layout.horizontalInset, name)
@@ -750,6 +769,20 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertTrue(FullKeyboardSettings(defaults: defaults).numberRow)
         settings.numberRow = false
         XCTAssertFalse(FullKeyboardSettings(defaults: defaults).numberRow)
+    }
+
+    func testSplitKeyboardIsOffByDefaultAndRoundTrips() throws {
+        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = FullKeyboardSettings(defaults: defaults)
+
+        XCTAssertFalse(settings.splitKeyboard)
+        settings.splitKeyboard = true
+        XCTAssertTrue(FullKeyboardSettings(defaults: defaults).splitKeyboard)
+        XCTAssertEqual(defaults.object(forKey: "settings.keyboardSplit") as? Bool, true)
+        settings.splitKeyboard = false
+        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).splitKeyboard)
     }
 
     func testBottomRowDefaultsToSpaceThenTyprAndRoundTrips() throws {

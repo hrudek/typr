@@ -260,6 +260,11 @@ final class FullKeyboardEngine {
         Set(touches.values.filter { !$0.isSwipe }.map(\.key.kind))
     }
 
+    /// Like `pressedKinds`, for one key: the split keyboard has a space bar in each half.
+    func isPressed(_ key: KeyboardKey) -> Bool {
+        touches.values.contains { !$0.isSwipe && $0.key == key }
+    }
+
     func displayLabel(for key: KeyboardKey) -> String {
         guard let character = key.character else { return key.label }
         return isUppercase && layerState.layer == .letters ? character.uppercased() : character
@@ -1190,7 +1195,9 @@ final class FullKeyboardEngine {
     /// Prose fields with an enabled word language and loaded word lists. Elsewhere (URL, email,
     /// passwords, no languages) sliding over letters keeps its old meaning.
     private var swipeIsAvailable: Bool {
+        // FUTO's encoder reads swipes on one joined QWERTY board; the split halves' gap would bend every path.
         guard swipeTypingEnabled, field == .text, layerState.layer == .letters, activeAccentMenu == nil,
+              layout.orientation != .splitLandscape,
               !autocorrect.suggestionLanguages.isEmpty,
               autocorrect.spatialDecoder?.isResourceLoading == false,
               autocorrect.spatialDecoder?.resourceSnapshot.isEmpty == false else { return false }
