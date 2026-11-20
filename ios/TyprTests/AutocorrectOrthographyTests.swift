@@ -47,12 +47,10 @@ final class AutocorrectOrthographyTests: XCTestCase {
             }
             XCTAssertEqual(automatic, rule == "digraph" ? 4 : (rule == "contraction" ? 2 : 0))
             XCTAssertEqual(suggested, rule == "contraction" ? 7 : 4)
-            print("EVAL R2_5_rule rule=\(rule) n=\(cases.count) automatic=\(automatic) suggestion=\(suggested)")
         }
         let controls: [String] = ["were", "well", "ill", "wont", "shell", "hell", "its", "cant", "ich will essen", "das ist laut", "wir sind am essen", "ich sehe die masse", "die Masse", "die Maße", "die Steuer", "die Mauer", "Israel", "Michael", "die Strasse", "ich weiss", "im", "die", "war", "will", "also", "Gift", "Chef", "schon", "this is the house", "please send the gift", "ich sende the house", "TyprKey", "API", "@dont", "file/dont", "foo_dont"]
         let falseAutos = controls.filter { engine.replacementOnSpace(beforeInput: $0, field: .text, autocorrectionType: .default) != nil }.count
         XCTAssertEqual(falseAutos, 0)
-        print("EVAL R2_5_controls n=\(controls.count) false_automatic=\(falseAutos)")
         let english = AutocorrectEngine(checker: Checker(["shan't", "who'd"]), spatialDecoder: nil,
                                        contextResources: .init(model: BundledKeyboardData.contextModel))
         let missing = [("shant", "shan't"), ("whod", "who'd")]
@@ -61,7 +59,6 @@ final class AutocorrectOrthographyTests: XCTestCase {
             if english.suggestions(beforeInput: input, field: .text, autocorrectionType: .default).contains(where: { $0.replacement == target }) { hits += 1 }
         }
         XCTAssertEqual(hits, 2)
-        print("EVAL R2_5_productive n=2 automatic=0 suggestion=\(hits)")
     }
 
     @MainActor
@@ -76,7 +73,6 @@ final class AutocorrectOrthographyTests: XCTestCase {
             XCTAssertTrue(chips.contains { $0.replacement == target })
             XCTAssertFalse(chips.contains { $0.kind == .primary(autoReplace: true) })
         }
-        print("EVAL R2_5_ambiguous missing_dictionary=11 adversarial_guesses=11 false_automatic=0")
     }
 
     @MainActor
@@ -88,7 +84,6 @@ final class AutocorrectOrthographyTests: XCTestCase {
                                           contextResources: .init(model: nil))
             let chips = engine.suggestions(beforeInput: literal, field: .text, autocorrectionType: .default)
             let hits = chips.filter { $0.replacement == possessive }.count
-            print("EVAL R2_5_valid_literal token=\(literal) possessive_chips=\(hits) checker_calls=\(checker.validityCalls) apostrophe_probes=\(checker.apostropheCalls)")
             XCTAssertEqual(hits, 0)
             XCTAssertEqual(checker.apostropheCalls, 0, "Valid literals must not enumerate apostrophe spellings")
         }
@@ -100,15 +95,12 @@ final class AutocorrectOrthographyTests: XCTestCase {
         let engine = AutocorrectEngine(checker: checker, spatialDecoder: nil,
                                       contextResources: .init(model: nil))
         let input = String(repeating: "x", count: 32)
-        let start = ProcessInfo.processInfo.systemUptime
         let first = engine.suggestions(beforeInput: input, field: .text, autocorrectionType: .default)
         let calls = checker.validityCalls
         XCTAssertLessThanOrEqual(calls, 64, "31 insertion boundaries plus the existing fixed checker probes")
         let second = engine.suggestions(beforeInput: input, field: .text, autocorrectionType: .default)
         XCTAssertEqual(first.map(\.replacement), second.map(\.replacement))
         XCTAssertLessThanOrEqual(first.count, 3)
-        let duration = (ProcessInfo.processInfo.systemUptime - start) * 1000
-        print("EVAL R2_5_bounds token_letters_max=32 insertion_probes_max=31 checker_calls=\(calls) new_candidates_max=1 candidate_ascii_bytes_max=33 persistent_bytes=0 duration_two_calls_ms=\(duration) NOT_iPhone")
     }
 
     @MainActor
@@ -140,7 +132,6 @@ final class AutocorrectOrthographyTests: XCTestCase {
         XCTAssertFalse(offered("dont", "don't"))
         engine.englishEnabled = true; engine.isEnabled = false
         XCTAssertFalse(offered("were", "we're"))
-        print("EVAL R2_5_noun_gate valid_homographs=\(validHomographs.count) proposed_false_automatic=\(proposedFalse) shipped_automatic=0 policy=suggestion_only language_modes=4")
     }
 
     @MainActor
@@ -178,6 +169,5 @@ final class AutocorrectOrthographyTests: XCTestCase {
         apostrophe.german = GermanAutocorrect(checker: Checker(["Haus"]))
         XCTAssertFalse(manual(apostrophe, "ich habe das haus", "Haus"))
         XCTAssertFalse(session.isPersistent)
-        print("EVAL R2_5_learning apostrophe_hits=2 protected_vetoes=3 rejection_vetoes=2 keep_vetoes=1 inferred_touch_labels=0 new_persistent_bytes=0")
     }
 }

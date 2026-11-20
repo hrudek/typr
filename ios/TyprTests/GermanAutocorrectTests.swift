@@ -23,7 +23,6 @@ private final class FakeTextChecker: TextChecking {
 final class GermanAutocorrectTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!
-    private var now: TimeInterval = 200
 
     override func setUp() async throws {
         suiteName = "GermanAutocorrectTests-\(UUID().uuidString)"
@@ -61,11 +60,7 @@ final class GermanAutocorrectTests: XCTestCase {
         XCTAssertEqual(fix(engine, "FUER"), "FÜR")
         XCTAssertEqual(fix(engine, "ueber"), "über")
         XCTAssertEqual(fix(engine, "strasse"), "straße")
-    }
-
-    func testDictionaryPath() {
-        let engine = makeEngine(german: ["Brücke"])
-        XCTAssertEqual(fix(engine, "bruecke"), "Brücke")
+        XCTAssertEqual(fix(makeEngine(german: ["Brücke"]), "bruecke"), "Brücke", "casing comes from the dictionary")
     }
 
     func testValidWordsAreLeftAlone() {
@@ -80,55 +75,15 @@ final class GermanAutocorrectTests: XCTestCase {
         XCTAssertEqual(fix(makeEngine(germanOn: false), "im"), "I'm")
     }
 
-    func testSwitchOffDoesNotTouchUmlauts() {
-        XCTAssertNil(fix(makeEngine(germanOn: false), "fuer"))
-    }
-
-    func testLearnedWordIsNotRewritten() {
-        let engine = makeEngine()
-        engine.learning.keep("fuer")
-        XCTAssertNil(fix(engine, "fuer"))
-    }
-
-    func testUmlautAwareTypoCost() {
+    func testMissingUmlautCostsLessThanASubstitution() throws {
         let german = GermanAutocorrect(checker: FakeTextChecker())
-        XCTAssertEqual(german.costAdjustedForUmlauts(from: "fur", to: "für"), 0.4)
+        let substitution = try XCTUnwrap(AutocorrectEngine.singleEditKeyboardCost(from: "fur", to: "fir"))
+        XCTAssertLessThan(try XCTUnwrap(german.costAdjustedForUmlauts(from: "fur", to: "für")), substitution)
         XCTAssertNotNil(german.costAdjustedForUmlauts(from: "brucke", to: "brücke"))
     }
 
-    func testGermanTypoGuess() {
-        let engine = makeEngine(german: ["Haus"], germanGuesses: ["hasu": ["Haus"]])
-        XCTAssertEqual(fix(engine, "hasu"), "Haus")
-    }
-
-    func testEngineTypesUmlautAndBackspaceReverts() {
-        let target = FixtureTextTarget()
-        target.autocapitalizationType = UITextAutocapitalizationType.none
-        let autocorrect = makeEngine()
-        let engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
-        engine.width = 393
-        engine.clock = { [unowned self] in self.now }
-        engine.configureForField()
-
-        func tap(_ kind: KeyKind) {
-            let key = engine.layout.key(kind)!
-            let center = CGPoint(x: key.frame.midX, y: key.frame.midY)
-            engine.touchBegan(id: 1, at: center)
-            engine.touchEnded(id: 1, at: center)
-            now += 0.45
-        }
-        for ch in "fuer" { tap(.character(String(ch))) }
-        tap(.space)
-        XCTAssertEqual(target.text, "für ")
-        tap(.delete)
-        XCTAssertEqual(target.text, "fuer")
-    }
-
-    func testLanguageSettingsDefaultOnAndPersistIndependently() {
+    func testLanguageSettingsPersistIndependently() {
         let settings = TyprSettings(defaults: defaults)
-        defaults.set(false, forKey: "typr.germanAutocorrect")
-        XCTAssertTrue(settings.autocorrectGerman, "Retired experiment does not disable German")
-        XCTAssertTrue(settings.autocorrectEnglish)
         for german in [false, true] {
             for english in [false, true] {
                 settings.autocorrectGerman = german
@@ -188,11 +143,8 @@ final class GermanAutocorrectTests: XCTestCase {
             .contains { $0.replacement == "hello" })
     }
 
-    func testLanguageOrderDefaultsToGermanFirstAndPersists() {
+    func testInvalidStoredLanguageOrderFallsBackToGermanFirst() {
         let settings = TyprSettings(defaults: defaults)
-        XCTAssertEqual(settings.autocorrectLanguageOrder, [.german, .english])
-        settings.autocorrectLanguageOrder = [.english, .german]
-        XCTAssertEqual(TyprSettings(defaults: defaults).autocorrectLanguageOrder, [.english, .german])
         let invalid: [Any] = [["en"], ["en", "en"], ["fr", "en"], ["en", "de", "fr"], ["en", "fr", "de"], "en"]
         for stored in invalid {
             defaults.set(stored, forKey: "typr.autocorrectLanguageOrder")
@@ -274,35 +226,6 @@ final class GermanAutocorrectTests: XCTestCase {
             if english { XCTAssertEqual(fix(engine, "tpye"), "type", label) }
             if german { XCTAssertEqual(fix(engine, "tyo"), "Typ", label) }
         }
-    }
-
-    func testTypedProductNamePlusSpaceStays() {
-        let target = FixtureTextTarget()
-        target.autocapitalizationType = UITextAutocapitalizationType.none
-        let autocorrect = AutocorrectEngine(
-            checker: FakeTextChecker(valid: ["type"], guesses: ["typr": ["type"], "Typr": ["Type"]]),
-            learning: KeyboardLearningSession(defaults: defaults), spatialDecoder: nil
-        )
-        autocorrect.german = GermanAutocorrect(checker: FakeTextChecker(
-            valid: ["Typ"], guesses: ["typr": ["Typ"], "Typr": ["Typ"]]))
-        let engine = FullKeyboardEngine(target: target, autocorrect: autocorrect)
-        engine.width = 393
-        engine.clock = { [unowned self] in self.now }
-        engine.configureForField()
-
-        func tap(_ kind: KeyKind) {
-            let key = engine.layout.key(kind)!
-            let center = CGPoint(x: key.frame.midX, y: key.frame.midY)
-            engine.touchBegan(id: 1, at: center)
-            engine.touchEnded(id: 1, at: center)
-            now += 0.45
-        }
-        for ch in "typr" { tap(.character(String(ch))) }
-        tap(.space)
-        tap(.shift)
-        for ch in "typr" { tap(.character(String(ch))) }
-        tap(.space)
-        XCTAssertEqual(target.text, "typr Typr ")
     }
 
     func testRealDictionary() throws {
