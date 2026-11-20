@@ -54,8 +54,16 @@ final class KeyboardAppearanceTests: XCTestCase {
         try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 300), compact: true)
     }
 
-    private func assertDocked(in bounds: CGRect, compact: Bool) async throws {
+    func testPreviewBackdropReachesBothEdgesAndKeysCentreOnTheWindowWithUnevenSideInsets() async throws {
+        let insets = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 30)
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 393), compact: true, sideInsets: insets)
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 951, height: 669), compact: false, sideInsets: insets)
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 466, height: 678), compact: false, sideInsets: insets)
+    }
+
+    private func assertDocked(in bounds: CGRect, compact: Bool, sideInsets: UIEdgeInsets = .zero) async throws {
         let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
+        host.additionalSafeAreaInsets = sideInsets
         if compact { host.traitOverrides.verticalSizeClass = .compact }
         let window = UIWindow(frame: bounds)
         window.rootViewController = host
@@ -73,9 +81,18 @@ final class KeyboardAppearanceTests: XCTestCase {
         let frame = keyboard.convert(keyboard.bounds, to: window)
         XCTAssertGreaterThanOrEqual(frame.minY, -1)
         XCTAssertLessThanOrEqual(frame.maxX, window.bounds.width + 1)
+        let expectedWidth = KeyboardAppearancePage.keyboardWidth(display: window.bounds.size)
+        XCTAssertEqual(frame.midX, window.bounds.midX, accuracy: 0.5)
         if !compact {
-            XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
-            XCTAssertEqual(frame.width, window.bounds.width, accuracy: 0.5)
+            XCTAssertEqual(frame.width, expectedWidth, accuracy: 0.5)
+        }
+        if sideInsets != .zero {
+            let backdrop = Self.subviews(of: host.view).filter {
+                $0 !== keyboard && $0.convert($0.bounds, to: window).width >= window.bounds.width - 0.5
+                    && $0.convert($0.bounds, to: window).height >= frame.height - 0.5
+                    && $0.convert($0.bounds, to: window).maxY >= frame.maxY - 0.5
+            }
+            XCTAssertFalse(backdrop.isEmpty, "a backdrop view spans the window edge to edge")
         }
         XCTAssertEqual(frame.maxY, window.bounds.height - window.safeAreaInsets.bottom, accuracy: 1)
         let scroll = try XCTUnwrap(views.compactMap { $0 as? UIScrollView }.filter { !$0.isDescendant(of: keyboard) }.max { $0.bounds.height < $1.bounds.height })
@@ -175,19 +192,6 @@ final class KeyboardAppearanceTests: XCTestCase {
         for display in [CGSize(width: 466, height: 678), CGSize(width: 678, height: 466), CGSize(width: 951, height: 669)] {
             XCTAssertLessThan(KeyboardAppearancePage.keyboardWidth(display: display), display.width, "\(display)")
         }
-    }
-
-    func testDockedPreviewBackdropSpansTheFullDisplayWidth() {
-        let landscape = CGSize(width: 951, height: 669)
-        let widths = KeyboardAppearancePage.dockedPreviewWidths(fullWidth: landscape.width, container: landscape)
-        XCTAssertEqual(widths.backdrop, 951)
-        XCTAssertEqual(widths.keyboard, KeyboardAppearancePage.keyboardWidth(display: landscape))
-        let folded = CGSize(width: 466, height: 678)
-        XCTAssertEqual(KeyboardAppearancePage.dockedPreviewWidths(fullWidth: folded.width, container: folded).backdrop, 466)
-        let phone = CGSize(width: 393, height: 852)
-        let portrait = KeyboardAppearancePage.dockedPreviewWidths(fullWidth: phone.width, container: phone)
-        XCTAssertEqual(portrait.backdrop, 393)
-        XCTAssertEqual(portrait.keyboard, 393)
     }
 
     func testPreviewSplitsOnlyOnTheOpenDuoSideways() {
