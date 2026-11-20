@@ -937,8 +937,6 @@ final class DictationControllerTests: XCTestCase {
     private static let meterCycle = Duration.milliseconds(33)
     private static let sessionLoopTick = Duration.milliseconds(100)
 
-    /// A controller on this test's defaults with its model ready; `tearDown` drains it before it
-    /// removes the defaults domain the bridge writes to, also after a failed `guard`.
     private func readyController(
         audio: FakeAudioManager, bridge: KeyboardBridge? = nil, transcriber: ControlledTranscriber = ControlledTranscriber(),
         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 }, hostReturner: HostReturner? = nil,
