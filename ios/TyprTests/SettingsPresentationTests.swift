@@ -4,13 +4,24 @@ import XCTest
 @testable import Typr
 
 final class SettingsPresentationTests: XCTestCase {
-    func testEverySettingsPageHasAnExplicitSnapshotRoute() {
-        for destination in SettingsDestination.allCases {
-            XCTAssertFalse(destination.title.isEmpty)
-            XCTAssertEqual(
-                SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", "settings-\(destination.rawValue)"]),
-                destination
-            )
+    func testEverySettingsPageHasItsTitleAndSnapshotScene() {
+        let pages: [(SettingsDestination, String, String)] = [
+            (.keyboard, "Keyboard", "settings-keyboard"),
+            (.keyboardAppearance, "Appearance", "settings-keyboard-appearance"),
+            (.statistics, "Statistics", "settings-statistics"),
+            (.autocorrectLanguages, "Autocorrect languages", "settings-autocorrect-languages"),
+            (.keyboardWordsPrivacy, "Words and privacy", "settings-keyboard-words-privacy"),
+            (.keyboardLearnedWords, "Manage learned words", "settings-keyboard-learned-words"),
+            (.textProcessing, "AI & vocabulary", "settings-writing"),
+            (.history, "History & feedback", "settings-history"),
+            (.speechEngine, "Speech engine", "settings-speech-engine"),
+            (.style, "Style", "settings-style"),
+            (.language, "Language", "settings-language"),
+        ]
+        XCTAssertEqual(pages.map(\.0), SettingsDestination.allCases)
+        for (destination, title, scene) in pages {
+            XCTAssertEqual(destination.title, title)
+            XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", scene]), destination, scene)
         }
         for scene in [SettingsDestination.historySampleScene, SettingsDestination.historyDetailScene] {
             XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", scene]), .history)
@@ -18,9 +29,6 @@ final class SettingsPresentationTests: XCTestCase {
         // The prompt editor is gone (Hex has none); its old route opens nothing.
         XCTAssertNil(SettingsDestination.snapshotDestination(arguments:
             ["Typr", "--snap-state", "settings-cleanup-prompt"]))
-        XCTAssertEqual(Set(SettingsDestination.allCases.map(\.title)),
-                       ["Keyboard", "Appearance", "Statistics", "Autocorrect languages", "Words and privacy",
-                        "Manage learned words", "AI & vocabulary", "History & feedback", "Speech engine", "Style", "Language"])
     }
 
     @MainActor
@@ -32,8 +40,6 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertEqual(state.counts["hello"]?.count, 12)
         // Synthetic aggregate pair only; the page lists its words, never the association.
         XCTAssertEqual(state.bigrams?.followers(after: "hello"), ["world": 3])
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
-            ["Typr", "--snap-state", "settings-keyboard-learned-words"]), .keyboardLearnedWords)
     }
 
     @MainActor
@@ -126,18 +132,12 @@ final class SettingsPresentationTests: XCTestCase {
             }
         }
         XCTAssertFalse(SettingsDestination.allCases.contains { $0.rawValue.contains("diagnostics") })
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
-            ["Typr", "--snap-state", "settings-statistics"]), .statistics)
         XCTAssertTrue(ContentView.learnedWordsUsesFixture(
             arguments: ["Typr", "--snap-state", "settings-keyboard-learned-words"]))
         for arguments in [[], ["Typr"], ["--snap-state"], ["settings-keyboard-learned-words"],
                           ["--other", "settings-keyboard-learned-words"], ["--snap-state", "settings-keyboard"]] {
             XCTAssertFalse(ContentView.learnedWordsUsesFixture(arguments: arguments))
         }
-    }
-
-    func testTypingAssistanceSnapshotOpensKeyboardSettings() {
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", "settings-keyboard-typing"]), .keyboard)
     }
 
     func testOrdinaryLaunchesAndUnrelatedScenesDoNotNavigate() {

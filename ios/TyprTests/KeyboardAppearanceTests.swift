@@ -20,7 +20,6 @@ final class KeyboardAppearanceTests: XCTestCase {
             XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: arguments), .keyboardAppearance, scene)
             XCTAssertEqual(KeyboardAppearancePage.snapshotIsDark(arguments: arguments), isDark, scene)
         }
-        XCTAssertEqual(SettingsDestination.keyboardAppearance.title, "Appearance")
     }
 
     func testPageShowsPreviewAndEveryAppearanceControl() async throws {
