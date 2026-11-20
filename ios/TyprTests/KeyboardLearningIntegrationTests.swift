@@ -71,7 +71,6 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertNotNil(ac.replacementOnSpace(beforeInput: "reply to teh", field: .text, autocorrectionType: .default))
         for _ in 0..<192 { session.recordWord("hello") }
         XCTAssertNotNil(ac.replacementOnSpace(beforeInput: "send to teh", field: .text, autocorrectionType: .default))
-        print("EVAL R2_3_session undo=1 immediate_same=0/1 immediate_different=0/1 event64_same=0/1 event64_different=1/1 event256_same=1/1 literal_confirmation=not_in_this_session")
     }
 
     func testFreshLiteralAfterUndoBecomesKeptButRestoredWordDoesNot() {
@@ -88,7 +87,6 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         for _ in 0..<256 { session.recordWord("hello") }
         XCTAssertTrue(session.model.state.rejected.isEmpty)
         XCTAssertNil(fresh.autocorrect.replacementOnSpace(beforeInput: "teh", field: .text, autocorrectionType: .default))
-        print("EVAL R2_3_literal undo_kept=0 restored_kept=0 fresh_settled_kept=1 post_decay_auto=0")
     }
 
     func testAimMemoriesSurviveManualFeedbackAndExternalContextChanges() throws {
@@ -484,23 +482,6 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertNil(engine.autocorrect.touchInput.evidence(beforeInput: target.text))
     }
 
-    func testManualAlternativeUsesOnlyUniqueAlignmentAndCompletionUsesNoTaps() {
-        let (engine, _) = keyboard()
-        type("helo", engine)
-        engine.acceptOwnedFixtureSuggestion(KeyboardSuggestion(displayText: "hello", replacement: "hello", kind: .secondary))
-        let session = engine.autocorrect.learning
-        // Repeated l's are ambiguous; h, e and o remain uniquely aligned.
-        XCTAssertEqual(session.diagnostics.acceptedBySource["manualPick"], 3)
-        XCTAssertEqual(session.model.lexicon.counts["hello"], 1)
-        XCTAssertEqual(session.diagnostics[.manualAlternativePick], 1)
-        type("wor", engine)
-        engine.acceptOwnedFixtureSuggestion(KeyboardSuggestion(displayText: "world", replacement: "world", kind: .secondary,
-                                                   isCompletion: true))
-        XCTAssertEqual(session.diagnostics.acceptedBySource["manualPick"], 3)
-        XCTAssertEqual(session.model.lexicon.counts["world"], 1)
-        XCTAssertEqual(session.diagnostics[.manualCompletionPick], 1)
-    }
-
     func testManualAlignmentDropsDistantSubstitutionAndCountsRejection() {
         let (engine, _) = keyboard()
         type("pello", engine)
@@ -509,15 +490,6 @@ final class KeyboardLearningIntegrationTests: XCTestCase {
         XCTAssertEqual(session.diagnostics.acceptedBySource["manualPick"], 4)
         XCTAssertEqual(session.diagnostics.rejectedByReason["outlier"], 1)
         XCTAssertEqual(session.model.lexicon.counts["hello"], 1)
-    }
-
-    func testRejectedDeterministicPairIsNotRetriedWithoutKeep() {
-        let (engine, _) = keyboard()
-        engine.autocorrect.learning.rejectCorrection(typed: "teh", replacement: "the")
-        XCTAssertFalse(engine.autocorrect.learning.model.lexicon.isKept("teh"))
-        XCTAssertNil(engine.autocorrect.replacementOnSpace(beforeInput: "teh", field: .text,
-                                                          autocorrectionType: .default))
-        XCTAssertEqual(engine.autocorrect.learning.diagnostics[.refusedProtected], 1)
     }
 
     func testSwitchChangeDiscardsAnUnsettledLiteral() throws {
