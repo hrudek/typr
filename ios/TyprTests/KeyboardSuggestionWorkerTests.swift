@@ -114,7 +114,6 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         await gate.release()
         await engine.waitForSuggestions()
         XCTAssertEqual(engine.suggestions.last?.replacement, "The")
-        print("EVAL M114_aimOwnership frozen=true staleLearnDropped=true snapshotReads=100 generationStable=true")
     }
 
     func testManualChoiceLearnsAimAndEmptyDiscardsKeepOwnership() async throws {
@@ -326,9 +325,7 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         engine.touchEnded(id: 1, at: point(t))
         XCTAssertEqual(target.text, "Teh")
         XCTAssertEqual(engine.autocorrect.touchInput.evidence(beforeInput: target.text)?.text, "Teh")
-        let start = ContinuousClock.now
         engine.typeSpaceFromTyprKey()
-        let boundaryDuration = start.duration(to: .now)
         // The continuation is still blocked: returning with the correction proves independence
         // from the worker, without asserting scheduler-dependent elapsed time.
         XCTAssertTrue(worker.isRunning)
@@ -336,7 +333,6 @@ final class KeyboardSuggestionWorkerTests: XCTestCase {
         XCTAssertEqual(rankedCalls, 1)
         XCTAssertEqual(worker.queuedCount, 0)
         XCTAssertEqual(target.text, "The ", "Authoritative fallback does not await a blocked worker")
-        print("EVAL P1_blockedBoundary duration=\(boundaryDuration) rankedCalls=\(rankedCalls) maxRunning=1 queued=\(worker.queuedCount) workerStillBlocked=true")
         await gate.release()
         await engine.waitForSuggestions()
         XCTAssertTrue(engine.suggestions.isEmpty)

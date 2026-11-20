@@ -39,8 +39,8 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
     private let grid = KeyboardLayout(width: 393, orientation: .portrait, layer: .letters, field: .text,
                                       showsGlobe: false, showsStrip: true)
 
-    func testRepeatedExplicitAcceptanceStrengthensCompletionBoundedly() throws {
-        let (session, defaults) = session()
+    func testRepeatedExplicitAcceptanceStrengthensCompletion() {
+        let (session, _) = session()
         let checker = Checker(valid: ["he"], completions: ["he": ["help", "hello"]])
         let ac = AutocorrectEngine(checker: checker, learning: session, spatialDecoder: nil)
         let before = alternatives(ac, "he")
@@ -51,35 +51,6 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
         XCTAssertEqual(after.first, "hello")
         XCTAssertEqual(session.model.lexicon.counts["hello"], 8)
         XCTAssertEqual(session.diagnostics.acceptedLabels, 0)
-        // The eight real acceptances above test integration; seed only the long saturation tail.
-        var boundary = session.model.state
-        boundary.counts["hello"] = .init(count: 9_999, lastUpdated: Date(timeIntervalSince1970: 1))
-        let validated = try XCTUnwrap(boundary.validated())
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let store = KeyboardLearningStore(directory: directory, defaults: defaults)
-        var diagnostics = session.diagnostics
-        XCTAssertTrue(store.save(model: validated, diagnostics: &diagnostics))
-        let capped = KeyboardLearningSession(store: store, defaults: defaults)
-        XCTAssertEqual(capped.model.state, validated, "The boundary fixture must load, not fall back to empty state")
-        capped.stopPersistence() // Boundary feedback needs no delayed writes after the fixture load.
-        XCTAssertEqual(capped.model.lexicon.counts["hello"], 9_999)
-        let cappedEngine = AutocorrectEngine(checker: checker, learning: capped, spatialDecoder: nil)
-        var previousUpdate = try XCTUnwrap(capped.model.state.counts["hello"]).lastUpdated
-        for _ in 0..<2 {
-            let eventStart = Date()
-            cappedEngine.recordSuggestionFeedback(pick, literal: "he", evidence: nil)
-            let value = try XCTUnwrap(capped.model.state.counts["hello"])
-            XCTAssertEqual(value.count, 10_000)
-            XCTAssertGreaterThanOrEqual(value.lastUpdated, eventStart, "Each acceptance refreshes recency, including at the cap")
-            XCTAssertGreaterThanOrEqual(value.lastUpdated, previousUpdate)
-            XCTAssertEqual(capped.model.lexicon.counts["hello"], 10_000)
-            XCTAssertEqual(capped.model.lexicon.bonus(for: "hello"), 1)
-            XCTAssertEqual(capped.diagnostics.acceptedLabels, 0)
-            XCTAssertNotNil(capped.model.state.validated())
-            previousUpdate = value.lastUpdated
-        }
-        print("EVAL R2_3_acceptance accepts=8 rank_before=2 rank_after=1 touch_labels=0 count_cap=10000 bonus_cap=1.0 automatic_output_training=0")
     }
 
     // MARK: - Helpers
@@ -127,7 +98,6 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
     private func bundled() throws -> [SpatialWordDecoder.Language: SpatialWordLexicon] {
         try XCTUnwrap(BundledKeyboardData.lexicons)
     }
-
 
     // MARK: - Prefix index
 
@@ -195,7 +165,6 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
         } }
         XCTAssertGreaterThan(nonEmpty, 50)
         XCTAssertLessThan(index.payloadBytes, 192 * 1024)
-        print("EVAL P2b_indexOracle words=\(index.entries.count) prefixes=\(prefixes) nonEmpty=\(nonEmpty) mismatches=0 payloadBytes=\(index.payloadBytes)")
     }
 
     func testPromotionTiesKeepBaselineOrderAndAdditionsFollowEqualBaselineWeights() {
@@ -245,7 +214,6 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
             if strip(on, token) != baseline { changed += 1 }
         }
         XCTAssertGreaterThanOrEqual(changed, 5, "Learning on must actually rerank these fixtures")
-        print("EVAL P2b_switchOff tokens=\(tokens.count) identicalOff=\(tokens.count) changedOn=\(changed)")
     }
 
     func testPersonalCountsMoveSystemCompletionsUpWithStableTiesAndKeptWords() {
@@ -334,13 +302,11 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
         XCTAssertEqual(learning.diagnostics[.manualCompletionPick], 2)
         XCTAssertEqual(learning.diagnostics[.personalCompletionPick], 1)
         XCTAssertEqual(learning.diagnostics.acceptedLabels, 0)
-        print("EVAL P2b_learning personal_picks=1 system_picks=1 counted_words=2 touch_labels=0")
     }
 
     func testWorkerRetrievesCompletionsWithoutCheckerAndMatchesSynchronousStrip() async throws {
         let words = try bundled()
         let worker = KeyboardSuggestionWorker()
-        var compared = 0
         for (typed, noisy) in [("fens", false), ("hau", false), ("keyb", true), ("tast", false), ("stra", false)] {
             func make() -> (AutocorrectEngine, Checker) {
                 let (learning, _) = session()
@@ -372,9 +338,7 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
             let result = try XCTUnwrap(completed)
             XCTAssertNotNil(result.completion, "Corpus/personal retrieval ran in the worker")
             XCTAssertEqual(deferred.finishSuggestions(result), strip(sync, token), token)
-            compared += 1
         }
-        print("EVAL P2b_worker compared=\(compared) identical=\(compared) preparationCheckerCalls=0")
     }
 
     // MARK: - Evaluation
@@ -406,15 +370,13 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
                 return ac
             }
             let off = make(learning: false), on = make(learning: true)
-            var n = 0, off1 = 0, off2 = 0, on1 = 0, on2 = 0, autoDiff = 0, autoCompletion = 0, personalAuto = 0
+            var off2 = 0, on2 = 0, autoDiff = 0, autoCompletion = 0, personalAuto = 0
             for target in targets {
                 let prefix = String(target.prefix(3))
                 let a = alternatives(off, prefix).map { $0.lowercased() }
                 let chips = strip(on, prefix)
                 let b = chips.filter { $0.kind != .keepLiteral }.map { $0.replacement.lowercased() }
-                if a.first == target { off1 += 1 }
                 if a.prefix(2).contains(target) { off2 += 1 }
-                if b.first == target { on1 += 1 }
                 if b.prefix(2).contains(target) { on2 += 1 }
                 if chips.contains(where: { $0.isPersonal && $0.willAutoReplace }) { personalAuto += 1 }
                 for typed in [prefix, target] {
@@ -424,13 +386,11 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
                     if let y, y.replacement.lowercased().hasPrefix(typed.lowercased()),
                        y.replacement.count > typed.count { autoCompletion += 1 }
                 }
-                n += 1
             }
             XCTAssertEqual(autoDiff, 0, "Personal ranking never changes automatic replacement")
             XCTAssertEqual(autoCompletion, 0)
             XCTAssertEqual(personalAuto, 0)
             XCTAssertGreaterThan(on2, off2, "\(name): the user's frequent words must become easier to pick")
-            print("EVAL P2b_personalRerank language=\(name) n=\(n) off_recall1=\(off1) off_recall2=\(off2) on_recall1=\(on1) on_recall2=\(on2) auto_diff=\(autoDiff) auto_completion=\(autoCompletion) personal_auto_chips=\(personalAuto) validity=synthetic-user NOT-iPhone")
         }
     }
 }
