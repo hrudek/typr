@@ -53,6 +53,7 @@ final class KeyboardViewModel: ObservableObject {
     @Published var bottomRow = BottomRow()
     @Published var numberRow = false
     @Published var splitKeyboard = false
+    @Published var keyDesign = KeyboardDesign.standard
     @Published var returnKeyLabel = "Return"
     @Published var isModelInstalled = false
     @Published private(set) var isWarmAvailable = false
@@ -290,7 +291,7 @@ final class KeyboardViewModel: ObservableObject {
 
 private struct GlobeKeyRepresentable: UIViewRepresentable {
     weak var controller: UIInputViewController?
-    let isDark: Bool
+    let color: UIColor
 
     func makeUIView(context: Context) -> UIButton {
         let button = UIButton(type: .system)
@@ -299,9 +300,7 @@ private struct GlobeKeyRepresentable: UIViewRepresentable {
             systemName: "globe",
             withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         )
-        config.baseForegroundColor = isDark
-            ? UIColor(white: 0.92, alpha: 1)
-            : UIColor(red: 0x14 / 255.0, green: 0x16 / 255.0, blue: 0x1B / 255.0, alpha: 1)
+        config.baseForegroundColor = color
         button.configuration = config
         button.accessibilityLabel = "Next keyboard"
         if let controller {
@@ -315,15 +314,13 @@ private struct GlobeKeyRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIButton, context: Context) {
-        uiView.configuration?.baseForegroundColor = isDark
-            ? UIColor(white: 0.92, alpha: 1)
-            : UIColor(red: 0x14 / 255.0, green: 0x16 / 255.0, blue: 0x1B / 255.0, alpha: 1)
+        uiView.configuration?.baseForegroundColor = color
     }
 }
 
 private struct KeyboardChromePalette {
     let isDark: Bool
-    let isHosted: Bool
+    let keys: FullKeyboardPalette
 
     var textBase: Color {
         isDark
@@ -361,18 +358,50 @@ private struct KeyboardChromePalette {
         isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.07)
     }
 
-    var keyFill: Color {
-        if !isHosted { return Color.white.opacity(0.085) }
-        return isDark ? Color.white.opacity(0.105) : Color.white
+    var keyGlyph: Color { Color(uiColor: keys.keyGlyph) }
+    var keyMuted: Color { Color(uiColor: keys.textMuted) }
+}
+
+/// A full-keyboard keycap behind a SwiftUI key.
+private struct Keycap: UIViewRepresentable {
+    let palette: FullKeyboardPalette
+    let isPressed: Bool
+
+    static let shadowOverhang: CGFloat = 6
+
+    func makeUIView(context: Context) -> KeycapView { KeycapView() }
+
+    func updateUIView(_ view: KeycapView, context: Context) {
+        view.palette = palette
+        view.isPressed = isPressed
     }
 
-    var keyPressedFill: Color {
-        if !isHosted { return Color.white.opacity(0.16) }
-        return isDark ? Color.white.opacity(0.19) : Color(white: 0.88)
-    }
+    final class KeycapView: UIView {
+        var palette = FullKeyboardPalette(isDark: false) { didSet { if palette != oldValue { setNeedsDisplay() } } }
+        var isPressed = false { didSet { if isPressed != oldValue { setNeedsDisplay() } } }
 
-    var keyShadow: Color {
-        Color.black.opacity(isDark ? 0.24 : 0.14)
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isOpaque = false
+            backgroundColor = .clear
+            contentMode = .redraw
+            isUserInteractionEnabled = false
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func draw(_ rect: CGRect) {
+            guard let context = UIGraphicsGetCurrentContext() else { return }
+            let fill = isPressed ? palette.keyPressedFill : palette.keyFill
+            context.fillKeycap(bounds.insetBy(dx: Keycap.shadowOverhang, dy: Keycap.shadowOverhang), palette: palette, fill: fill)
+        }
+    }
+}
+
+private extension View {
+    func keycap(_ palette: FullKeyboardPalette, isPressed: Bool = false) -> some View {
+        background(Keycap(palette: palette, isPressed: isPressed).padding(-Keycap.shadowOverhang))
     }
 }
 
@@ -380,12 +409,7 @@ private struct KeyboardKeyButtonStyle: ButtonStyle {
     let palette: KeyboardChromePalette
 
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                configuration.isPressed ? palette.keyPressedFill : palette.keyFill,
-                in: RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous)
-            )
-            .shadow(color: palette.keyShadow, radius: 0.5, x: 0, y: 1)
+        configuration.label.keycap(palette.keys, isPressed: configuration.isPressed)
     }
 }
 
@@ -410,14 +434,10 @@ private struct RepeatDeleteKey: View {
     var body: some View {
         Image(systemName: "delete.left")
             .font(.system(size: 15, weight: .medium))
-            .foregroundStyle(palette.textBase)
+            .foregroundStyle(palette.keyGlyph)
             .frame(width: 52, height: 42)
-            .background(
-                isPressing ? palette.keyPressedFill : palette.keyFill,
-                in: RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous)
-            )
-            .shadow(color: palette.keyShadow, radius: 0.5, x: 0, y: 1)
-            .contentShape(RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous))
+            .keycap(palette.keys, isPressed: isPressing)
+            .contentShape(RoundedRectangle(cornerRadius: FullKeyboardPalette.cornerRadius, style: .continuous))
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
@@ -504,10 +524,8 @@ struct KeyboardSurfaceView: View {
     }
 
     private var palette: KeyboardChromePalette {
-        KeyboardChromePalette(
-            isDark: !isHostedExtension || colorScheme == .dark,
-            isHosted: isHostedExtension
-        )
+        let isDark = !isHostedExtension || colorScheme == .dark
+        return KeyboardChromePalette(isDark: isDark, keys: FullKeyboardPalette(isDark: isDark, design: model.keyDesign))
     }
 
     private var isStageActive: Bool {
@@ -835,7 +853,7 @@ struct KeyboardSurfaceView: View {
         }
     }
 
-    // MARK: - Bottom Utility Key Row (42 pt, shadow-grounded keycaps with zero strokes)
+    // MARK: - Bottom Utility Key Row (42 pt, full-keyboard keycaps in the chosen design)
 
     private var utilityRow: some View {
         let p = palette
@@ -846,9 +864,9 @@ struct KeyboardSurfaceView: View {
                 } label: {
                     Image(systemName: "keyboard")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(p.textBase)
+                        .foregroundStyle(p.keyGlyph)
                         .frame(width: 44, height: 42)
-                        .contentShape(RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: FullKeyboardPalette.cornerRadius, style: .continuous))
                 }
                 .buttonStyle(KeyboardKeyButtonStyle(palette: p))
                 .disabled(isStageActive)
@@ -858,20 +876,16 @@ struct KeyboardSurfaceView: View {
             if model.needsGlobeKey, model.globeKey != .hidden {
                 Group {
                     if model.globeKey == .switches {
-                        GlobeKeyRepresentable(controller: model.inputViewController, isDark: p.isDark)
+                        GlobeKeyRepresentable(controller: model.inputViewController, color: p.keys.keyGlyph)
                     } else {
                         Image(systemName: "globe")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(p.textBase.opacity(0.35))
+                            .foregroundStyle(p.keyGlyph.opacity(0.35))
                             .accessibilityHidden(true)
                     }
                 }
                 .frame(width: 44, height: 42)
-                .background(
-                    p.keyFill,
-                    in: RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous)
-                )
-                .shadow(color: p.keyShadow, radius: 0.5, x: 0, y: 1)
+                .keycap(p.keys)
             }
 
             Button {
@@ -883,10 +897,10 @@ struct KeyboardSurfaceView: View {
             } label: {
                 Text("space")
                     .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(p.textMuted)
+                    .foregroundStyle(p.keyMuted)
                     .frame(maxWidth: .infinity)
                     .frame(height: 42)
-                    .contentShape(RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: FullKeyboardPalette.cornerRadius, style: .continuous))
             }
             .buttonStyle(KeyboardKeyButtonStyle(palette: p))
             .simultaneousGesture(
@@ -908,9 +922,9 @@ struct KeyboardSurfaceView: View {
             } label: {
                 Image(systemName: "return")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(p.textBase)
+                    .foregroundStyle(p.keyGlyph)
                     .frame(width: 56, height: 42)
-                    .contentShape(RoundedRectangle(cornerRadius: TyprTheme.controlRadius, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: FullKeyboardPalette.cornerRadius, style: .continuous))
             }
             .buttonStyle(KeyboardKeyButtonStyle(palette: p))
             .accessibilityLabel(model.returnKeyLabel)
