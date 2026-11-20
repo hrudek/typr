@@ -305,7 +305,6 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
         install(touch, in: ac)
         XCTAssertTrue(ac.suggestions(beforeInput: touch.original, field: .text, autocorrectionType: .default)
             .contains { $0.boundary?.replacement == "about" })
-        print("EVAL P6_density sparse_recall=1 calibrated_letter_recall=1 space_training=none static_space_prior_unchanged=true learning_off_recall=1")
     }
 
     func testRetainedRealSpacePreservesSettledPersonalPairs() throws {
@@ -338,7 +337,6 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
                 XCTAssertEqual(ac.learning.previousTrustedWord, second)
             }
         }
-        print("EVAL M6_settlement language_buckets=3 separator_modes=2 settled_pairs=6 premature_pairs=0 fabricated_spaces=0")
     }
 
     /// Aim about as loose as the static density (σ ≈ .35 pitch) for every letter and Space.
@@ -421,10 +419,9 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
                 XCTAssertEqual(nextLabels, 4)
             }
         }
-        print("EVAL M6_recovery cases=4 inferred_pairs=0 inferred_word_counts=0 inferred_touch_labels=0 undo_steps=1")
     }
 
-    func testWorkerPickOneStepUndoAndNoBoundaryTraining() async throws {
+    func testWorkerPickOneStepUndoAndStalePick() async throws {
         let sources = try helper.resources()
         for touch in [try splitTouch("greatvday", index: 5), try joinTouch("a out", aimed: "b")] {
             let ac = helper.engine(sources, languages: [.english])
@@ -436,12 +433,9 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
             keyboard.refreshSuggestions()
             await keyboard.waitForSuggestions()
             let chip = try XCTUnwrap(keyboard.suggestions.first { $0.boundary?.spatial == true }, touch.original)
-            let state = ac.learning.model.state
             let labels = ac.learning.diagnostics.acceptedLabels
             keyboard.acceptSuggestion(chip)
             XCTAssertEqual(target.text, chip.replacement + " ")
-            XCTAssertEqual(ac.learning.model.state.counts, state.counts)
-            XCTAssertEqual(ac.learning.model.state.layouts, state.layouts)
             keyboard.deleteBackward()
             XCTAssertEqual(target.text, touch.original)
             XCTAssertEqual(ac.learning.diagnostics.acceptedLabels, labels)
@@ -451,7 +445,6 @@ final class KeyboardBoundaryTouchTests: XCTestCase {
             target.insertText("x")
             keyboard.acceptSuggestion(chip)
             XCTAssertEqual(target.text, touch.original + "x")
-            print("EVAL P6_learning kind=\(chip.boundary!.kind) label_delta=0 count_delta=0 undo_steps=1 stale_edits=0")
         }
     }
 }

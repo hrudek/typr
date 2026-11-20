@@ -96,7 +96,6 @@ final class KeyboardContextCompletionTests: XCTestCase {
             }
         }
         XCTAssertGreaterThanOrEqual(promoted, 3)
-        print("EVAL M3_completion_union sources=4 promoted=\(promoted) worker_sync_identical=4 auto_changes=0 personal_pick_labels=0 candidate_cap=32")
     }
 
     func testLearningOffRemovesPersonalInfluenceButKeepsCorpusContext() async throws {
@@ -114,7 +113,6 @@ final class KeyboardContextCompletionTests: XCTestCase {
             XCTAssertFalse(off.learning.model.state.counts.isEmpty, "Off retains saved counts")
             if source != "personal" { XCTAssertEqual(chips[1].replacement.lowercased(), "habe", source) }
         }
-        print("EVAL M3_completion_switch sources=4 off_equals_empty=4 personal_influence_off=0 corpus_context_independent=1")
     }
 
     func testContextPreservesContactPrecedenceInWorker() async throws {

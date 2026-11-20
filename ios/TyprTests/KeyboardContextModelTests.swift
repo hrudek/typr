@@ -26,7 +26,6 @@ final class KeyboardContextModelTests: XCTestCase {
                 for (a, b) in zip(got, expected) { XCTAssertEqual(a.probability, b.probability, accuracy: 1e-12) }
             }
         }
-        print("EVAL context_reference vectors=\(spec.vectors.count) tolerance=1e-12 union=\(model.unionSize)")
     }
 
     func testCorruptTruncatedAndHostileFormat() throws {
@@ -132,8 +131,6 @@ final class KeyboardContextModelTests: XCTestCase {
         let long = String(repeating: "english ", count: 1000) + "ich habe "
         XCTAssertEqual(model.context(before: long, currentToken: nil).previous, "habe")
         XCTAssertEqual(model.context(before: nil, currentToken: nil).state.value, 0)
-        XCTAssertEqual(model.context(before: "ich habe ", currentToken: nil).state.value,
-                       model.context(before: "ich habe ", currentToken: nil).state.value)
         let ranked = model.rerank(["glaube", "bin", "habe"], context: model.context(before: "ich ", currentToken: nil), german: true, english: false)
         XCTAssertEqual(ranked, ["bin", "habe", "glaube"])
         // Noisy channel within spatial readings: bounded gain, never across evidence kinds.

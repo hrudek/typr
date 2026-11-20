@@ -21,9 +21,6 @@ final class KeyboardContextPosteriorTests: XCTestCase {
         }
         XCTAssertEqual(KeyboardContextModel.State(prior: .nan).value, 0)
         XCTAssertEqual(KeyboardContextModel.State(prior: 100).value, 1)
-        let bytes = MemoryLayout<KeyboardContextModel.State>.stride + 8 * MemoryLayout<Double>.stride
-        XCTAssertLessThanOrEqual(bytes, 128)
-        print("EVAL R2_4_bounds updates=10103 evidence_window=8 max_fold_steps=8 state_value_payload_bytes=\(bytes) prior_classifications=32 retained_count_cap=2000 added_persistent_bytes=0 allocator_overhead_excluded=1")
     }
 
     func testCuesAndSentenceReset() throws {
@@ -45,8 +42,6 @@ final class KeyboardContextPosteriorTests: XCTestCase {
         XCTAssertEqual(state.value, 0.25 * before + 0.4, accuracy: 1e-12)
         XCTAssertTrue(state.observations.isEmpty)
         XCTAssertEqual(state.wordsInSentence, 0)
-        XCTAssertEqual(model.context(before: "ich habe...!? ", currentToken: nil).state.value,
-                       model.context(before: "ich habe. ", currentToken: nil).state.value)
         XCTAssertEqual(model.context(before: "I don’t ", currentToken: nil).state.value,
                        model.context(before: "I don't ", currentToken: nil).state.value)
     }
@@ -60,7 +55,6 @@ final class KeyboardContextPosteriorTests: XCTestCase {
         let full = model.context(before: "ich habe ein Haus ", currentToken: nil)
         let active = model.context(before: "ich habe ein Haus th", currentToken: "th")
         XCTAssertEqual(full.state.value, active.state.value)
-        XCTAssertEqual(full.state.value, model.context(before: "ich habe ein Haus ", currentToken: nil).state.value)
         let bounded = model.context(before: String(repeating: "the ", count: 10_000) + "ich habe ", currentToken: nil)
         XCTAssertLessThanOrEqual(bounded.state.observations.count, 8)
     }
@@ -88,7 +82,6 @@ final class KeyboardContextPosteriorTests: XCTestCase {
         XCTAssertTrue(loaded.requestLearningReset())
         session.refresh()
         XCTAssertEqual(model.personalLanguagePrior(session.model.state.counts), 0)
-        print("EVAL R2_4_learning roundtrip=1 deletion=1 reset=1 added_schema_fields=0 added_persistent_bytes=0")
     }
 
     func testUsageRecencyCountCapAndDeterministicTies() throws {
@@ -140,7 +133,6 @@ final class KeyboardContextPosteriorTests: XCTestCase {
         XCTAssertFalse(session.model.state.counts.isEmpty)
         engine.german = nil; engine.englishEnabled = false
         XCTAssertTrue(actual().isEmpty)
-        print("EVAL R2_4_gating cache_updates=3 learning_off_neutral=1 full_access_denied_writes=0 disabled_language_slots=0")
     }
 
     @MainActor

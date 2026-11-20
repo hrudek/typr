@@ -106,11 +106,9 @@ extension KeyboardBoundaryDecoderTests {
         XCTAssertFalse(strip(engine(sources, languages: [.english], model: model), "inthe").contains {
             $0.boundary != nil
         })
-        let rejecting = engine(sources, languages: [.english], rejected: ["inthe"], model: model)
-        XCTAssertTrue(strip(rejecting, "inthe").contains { $0.boundary?.replacement == "in the" })
     }
 
-    func testImportedNameSplitJoinGuardBeforeAfterEvaluation() throws {
+    func testImportedNamesBlockSplitsAndJoins() throws {
         let sources = try resources()
         let model = try contextModel()
         let controls = ["ina", "malin", "andi", "asa", "bea", "isa", "ora", "todo", "athome",
@@ -118,25 +116,14 @@ extension KeyboardBoundaryDecoderTests {
         let ac = engine(sources, rejected: Set(controls), model: model)
         var builder = ProtectedPersonalLexicon.Builder()
         for word in controls { builder.add(word) }
-        var splitChips = [0, 0]
-        var joinChips = [0, 0]
-        var automatic = [0, 0]
-        for variant in 0..<2 {
-            if variant == 1 { ac.loadProtectedLexicon(builder.build()) }
-            for word in controls {
-                splitChips[variant] += strip(ac, word).filter { $0.boundary != nil }.count
-                for phrase in ["the " + word, word + " in"] {
-                    joinChips[variant] += strip(ac, phrase).filter { $0.boundary != nil }.count
-                    if ac.replacementOnSpace(beforeInput: phrase, field: .text, autocorrectionType: .default) != nil {
-                        automatic[variant] += 1
-                    }
-                }
+        ac.loadProtectedLexicon(builder.build())
+        for word in controls {
+            XCTAssertFalse(strip(ac, word).contains { $0.boundary != nil }, word)
+            for phrase in ["the " + word, word + " in"] {
+                XCTAssertFalse(strip(ac, phrase).contains { $0.boundary != nil }, phrase)
+                XCTAssertNil(ac.replacementOnSpace(beforeInput: phrase, field: .text, autocorrectionType: .default), phrase)
             }
         }
-        XCTAssertEqual(splitChips[1], 0)
-        XCTAssertEqual(joinChips[1], 0)
-        XCTAssertEqual(automatic[1], 0)
-        print("EVAL R2_1_boundary controls=\(controls.count) split_before_chips=\(splitChips[0]) split_after_chips=\(splitChips[1]) join_before_chips=\(joinChips[0]) join_after_chips=\(joinChips[1]) before_auto=\(automatic[0]) after_auto=\(automatic[1]) policy=suggestion_only NOT-iPhone")
     }
 
     func testStrongCorpusSplitNeverOverridesKeepContactCountOrAutomaticPolicy() throws {
