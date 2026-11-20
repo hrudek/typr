@@ -541,7 +541,6 @@ struct KeyboardSurfaceView: View {
         .padding(.top, isHostedExtension ? 4 : 6)
         .padding(.bottom, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { dismissSwipeArea }
         .background(isHostedExtension ? Color.clear : TyprTheme.bgDeep)
         .accessibilityHidden(model.hasFullAccess && model.feedback != nil && !isStageActive)
         .overlay {
@@ -551,18 +550,6 @@ struct KeyboardSurfaceView: View {
             }
         }
         .preferredColorScheme(isHostedExtension ? nil : .dark)
-    }
-
-    /// Behind every control, so only touches no button or key takes reach it.
-    private var dismissSwipeArea: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 10).onEnded { value in
-                    guard KeyboardDismissSwipe.dismisses(translation: value.translation) else { return }
-                    model.inputViewController?.dismissKeyboard()
-                }
-            )
     }
 
     // MARK: - Top Bar (26 pt, permanently mounted ZStack)
@@ -898,7 +885,6 @@ struct KeyboardSurfaceView: View {
                 }
                 .frame(width: 44, height: 42)
                 .keycap(p.keys)
-                .contentShape(RoundedRectangle(cornerRadius: FullKeyboardPalette.cornerRadius, style: .continuous))
             }
 
             Button {
