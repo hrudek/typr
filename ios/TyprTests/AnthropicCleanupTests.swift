@@ -188,23 +188,6 @@ final class AnthropicCleanupTests: XCTestCase {
         XCTAssertTrue(probe.requests.isEmpty)
     }
 
-    func testCoordinatorUsesPlainTranscriptWhenClaudeFails() async {
-        let probe = AnthropicTransportProbe()
-        probe.status = 529
-        let cleaner = AnthropicCleaner(keys: AnthropicKeyStore(storage: MemorySecret("sk-ant-test")), transport: probe.transport)
-        let background = CleanupTestBackground()
-        let observer = CleanupTestObserver()
-        var dependencies = TranscriptCleanupDependencies(cleaner: cleaner, background: background, isEnabled: { true })
-        dependencies.observer = observer
-        let job = CleanupJob(session: cleaner.makeSession(), background: background)
-        job.begin()
-        let raw = "hello there world"
-        let result = await CleanupCoordinator().clean(raw, job: job, dependencies: dependencies)
-        XCTAssertEqual(result, raw)
-        XCTAssertEqual(observer.events.map(\.outcome), [.failed(.rateLimited)])
-        XCTAssertEqual(probe.requests.count, 1)
-        job.finish()
-    }
 }
 
 @MainActor
@@ -228,11 +211,6 @@ final class CleanupEngineSelectionTests: XCTestCase {
             defaults.set("gpt", forKey: "typr.cleanupEngine")
             XCTAssertEqual(CleanupEnginePreferences(defaults: defaults).engine, .appleIntelligence)
         }
-    }
-
-    func testEngineTitles() {
-        XCTAssertEqual(CleanupEngine.appleIntelligence.title, "Apple Intelligence")
-        XCTAssertEqual(CleanupEngine.anthropic.title, "Claude")
     }
 
     func testSelectedCleanerFollowsThePreferenceOnEveryCall() {

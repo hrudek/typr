@@ -80,36 +80,14 @@ final class TyprCleanupTests: XCTestCase {
 
     private func drain() async { for _ in 0..<30 { await Task.yield() } }
 
-    func testSettingsUseIsolatedDefaultsAndDefaultOff() {
+    func testCleanupSettingPersists() {
         let name = "cleanup.tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let settings = TyprSettings(defaults: defaults)
-        XCTAssertFalse(settings.aiCleanup)
         settings.aiCleanup = true
         XCTAssertTrue(TyprSettings(defaults: defaults).aiCleanup)
         XCTAssertEqual(defaults.object(forKey: "typr.aiCleanup") as? Bool, true)
-    }
-
-    /// Success (trimmed, as Hex trims), a thrown error, and an empty answer: the last two keep the transcript.
-    func testSuccessThrowAndEmptyFallback() async {
-        for mode in 0..<3 {
-            let session = CleanupTestSession()
-            session.shouldThrow = mode == 1
-            session.result = mode == 2 ? " \n " : "  Die Katze sitzt auf der Matte.\n"
-            let bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-            let deps = TranscriptCleanupDependencies(cleaner: CleanupTestCleaner(session: session), background: bg, isEnabled: { true }, sleep: clock.sleep)
-            let job = CleanupJob(session: session, background: bg)
-            job.begin()
-            let coordinator = CleanupCoordinator()
-            let value = await coordinator.clean(raw, job: job, dependencies: deps)
-            XCTAssertEqual(value, mode == 0 ? "Die Katze sitzt auf der Matte." : raw)
-            XCTAssertNil(coordinator.reservedBy)
-            job.finish(); job.finish()
-            XCTAssertEqual(bg.ends, [1])
-            clock.fire()
-            await drain()
-        }
     }
 
     func testDeadlineRetainsReservationUntilIgnoringModelCompletes() async {

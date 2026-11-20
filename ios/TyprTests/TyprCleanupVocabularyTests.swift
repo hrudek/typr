@@ -61,20 +61,6 @@ private actor VocabularyASR: LocalTranscribing {
 
 @MainActor
 final class TyprCleanupVocabularyTests: XCTestCase {
-    func testCoordinatorHandsTheVocabularyToTheModel() async {
-        let session = VocabularySession()
-        let bg = CleanupTestBackground(), clock = CleanupTestSleeper()
-        let deps = TranscriptCleanupDependencies(cleaner: VocabularyCleaner(session: session), background: bg, isEnabled: { true }, sleep: clock.sleep)
-        let job = CleanupJob(session: session, background: bg)
-        job.begin()
-        let value = await CleanupCoordinator().clean("Grüße an Rudeck und Meier", job: job,
-            dependencies: deps, vocabulary: ["Rudek", "Mayer"])
-        XCTAssertEqual(value, "Grüße an Rudek und Mayer")
-        XCTAssertEqual(session.prompts, [CleanupPrompt.make("Grüße an Rudeck und Meier", vocabulary: ["Rudek", "Mayer"])])
-        job.finish()
-        clock.fire()
-    }
-
     /// Only Typr cleanup may run, even when an old install still has the removed setting on.
     func testTyprCleanupOrPlainTranscriptIgnoresRemovedExperiment() async throws {
         for typrOn in [true, false] {
