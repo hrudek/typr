@@ -116,13 +116,14 @@ struct KeyboardAppearancePage: View {
         )
         let scale = Self.previewScale(keyboardHeight: height, page: page, foldBottom: foldBottom)
         return KeyboardAppearancePreview(settings: settings)
-            .frame(width: min(page.width, Self.keyboardWidth(display: container)), height: height)
+            .frame(maxWidth: Self.keyboardWidth(display: container), minHeight: height, maxHeight: height)
             .scaleEffect(scale, anchor: .bottom)
-            .frame(width: page.width, height: height * scale, alignment: .bottom)
+            .frame(maxWidth: .infinity, minHeight: height * scale, maxHeight: height * scale, alignment: .bottom)
             .allowsHitTesting(false)
             .accessibilityElement()
             .accessibilityLabel(settings.accessibilityLabel)
             .background(Self.dockBackdrop(isDark: settings.isDark).ignoresSafeArea(edges: .bottom))
+            .ignoresSafeArea(edges: .horizontal)
     }
 
     private var controls: some View {

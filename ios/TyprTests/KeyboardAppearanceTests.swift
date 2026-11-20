@@ -54,8 +54,16 @@ final class KeyboardAppearanceTests: XCTestCase {
         try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 300), compact: true)
     }
 
-    private func assertDocked(in bounds: CGRect, compact: Bool) async throws {
+    func testPreviewKeysCentreOnTheWindowWithUnevenSideInsets() async throws {
+        let insets = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 30)
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 393), compact: true, sideInsets: insets)
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 951, height: 669), compact: false, sideInsets: insets)
+        try await assertDocked(in: CGRect(x: 0, y: 0, width: 466, height: 678), compact: false, sideInsets: insets)
+    }
+
+    private func assertDocked(in bounds: CGRect, compact: Bool, sideInsets: UIEdgeInsets = .zero) async throws {
         let host = UIHostingController(rootView: NavigationStack { KeyboardAppearancePage() })
+        host.additionalSafeAreaInsets = sideInsets
         if compact { host.traitOverrides.verticalSizeClass = .compact }
         let window = UIWindow(frame: bounds)
         window.rootViewController = host
@@ -73,9 +81,10 @@ final class KeyboardAppearanceTests: XCTestCase {
         let frame = keyboard.convert(keyboard.bounds, to: window)
         XCTAssertGreaterThanOrEqual(frame.minY, -1)
         XCTAssertLessThanOrEqual(frame.maxX, window.bounds.width + 1)
+        let expectedWidth = KeyboardAppearancePage.keyboardWidth(display: window.bounds.size)
+        XCTAssertEqual(frame.midX, window.bounds.midX, accuracy: 0.5)
         if !compact {
-            XCTAssertEqual(frame.minX, 0, accuracy: 0.5)
-            XCTAssertEqual(frame.width, window.bounds.width, accuracy: 0.5)
+            XCTAssertEqual(frame.width, expectedWidth, accuracy: 0.5)
         }
         XCTAssertEqual(frame.maxY, window.bounds.height - window.safeAreaInsets.bottom, accuracy: 1)
         let scroll = try XCTUnwrap(views.compactMap { $0 as? UIScrollView }.filter { !$0.isDescendant(of: keyboard) }.max { $0.bounds.height < $1.bounds.height })
