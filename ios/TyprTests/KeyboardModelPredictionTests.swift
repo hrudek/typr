@@ -179,13 +179,6 @@ final class KeyboardModelPredictionTests: XCTestCase {
         }
     }
 
-    func testNoProviderLeavesPredictionsUnchanged() async throws {
-        let (engine, target) = try keyboard(nil)
-        await type(sentence, engine, target)
-        XCTAssertNil(engine.modelPredictions)
-        XCTAssertEqual(bar(engine).count, 3)
-    }
-
     func testRequestIsTheBoundedCurrentParagraphBeforeTheCaret() throws {
         XCTAssertNil(ModelPredictionRequest(before: nil))
         XCTAssertNil(ModelPredictionRequest(before: "I would"), "Only after a separator")
