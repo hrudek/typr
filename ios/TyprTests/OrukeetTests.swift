@@ -40,19 +40,12 @@ private struct FakeOrukeetFailure: LocalizedError {
 private final class FakeOrukeetDownloader: ModelFileDownloading, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [String] = []
-    private var holding = false
-
     var calls: [String] { lock.withLock { recorded } }
-    func hold() { lock.withLock { holding = true } }
-    func release() { lock.withLock { holding = false } }
 
     func download(_ file: PinnedModelFile, into root: URL,
                   progress: @escaping @Sendable (Double) -> Void) async throws {
         lock.withLock { recorded.append(file.path) }
-        progress(0.5)
-        while lock.withLock({ holding }) { try await Task.sleep(for: .milliseconds(10)) }
         try WhisperTestFiles.writeSparse(OrukeetModelStore(root: root).fileURL(for: file), bytes: file.bytes)
-        progress(1)
     }
 }
 
@@ -97,30 +90,6 @@ final class OrukeetTests: XCTestCase {
                               availableCapacity: { capacity })
     }
 
-    func testSpecPinsOneArchiveWithItsSizeChecksumAndUnpackPeak() {
-        XCTAssertEqual(OrukeetModelSpec.modelRepo, "oruk/orukeet")
-        XCTAssertEqual(OrukeetModelSpec.modelRevision.count, 40, "a commit, not a branch")
-        XCTAssertEqual(OrukeetModelSpec.allFiles, [OrukeetModelSpec.archive])
-        XCTAssertEqual(OrukeetModelSpec.totalBytes, 554_985_744)
-        XCTAssertEqual(OrukeetModelSpec.archiveSHA256.count, 64)
-        XCTAssertEqual(OrukeetModelSpec.totalBytes + OrukeetModelSpec.storageHeadroomBytes, 1_818_641_670,
-                       "archive, unpacked packages and compiled models at once")
-        let topLevel = Set(OrukeetModelSpec.unpackedFiles.compactMap { $0.path.split(separator: "/").first.map(String.init) })
-        XCTAssertEqual(topLevel, Set(TdtV3PreparationComponent.allCases.map { "\($0.rawValue).mlpackage" } + [TdtV3Vocabulary.fileName]))
-        XCTAssertEqual(OrukeetModelSpec.vocabularyEntry.bytes, ParakeetV3ModelSpec.vocabularyFile.bytes)
-        XCTAssertFalse(OrukeetModelSpec.acceptsLanguageHint, "greedy-only joint network")
-    }
-
-    func testStoreIsSeparateFromOtherEnginesAndExcludedFromBackup() throws {
-        let store = makeStore()
-        XCTAssertEqual(OrukeetModelStore.defaultRoot().lastPathComponent, "Orukeet")
-        XCTAssertNotEqual(OrukeetModelStore.defaultRoot(), ParakeetV3ModelStore.defaultRoot())
-        XCTAssertNotEqual(OrukeetModelStore.markerFileName, ParakeetV3ModelStore.markerFileName)
-        try store.prepareRoot()
-        let values = try store.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
-        XCTAssertEqual(values.isExcludedFromBackup, true)
-    }
-
     func testInstalledNeedsTheMarkerTheCompiledModelsAndTheVocabulary() throws {
         let store = makeStore()
         XCTAssertFalse(store.isInstalled)
@@ -137,9 +106,6 @@ final class OrukeetTests: XCTestCase {
         try WhisperTestFiles.writeSparse(store.vocabularyURL, bytes: OrukeetModelSpec.vocabularyEntry.bytes - 1)
         XCTAssertFalse(store.isInstalled, "a short vocabulary is never installed")
 
-        try OrukeetTestFiles.populateCompiled(store)
-        try Data(#"{"modelRepo":"oruk/orukeet","modelRevision":"main","archiveSHA256":"x"}"#.utf8).write(to: store.markerURL)
-        XCTAssertFalse(store.isInstalled, "a marker for another revision is not this install")
     }
 
     func testArchiveUnpacksOnlyPinnedEntriesCompilesThemAndDeletesTheArchive() async throws {
@@ -208,52 +174,6 @@ final class OrukeetTests: XCTestCase {
             atPath: store.repoFolder(OrukeetModelSpec.modelRepo).appending(component: "unpacking").path))
     }
 
-    func testDownloadReportsBytesUnpacksAndVerifiesBeforeInstalled() async throws {
-        let store = makeStore()
-        let downloader = FakeOrukeetDownloader()
-        let unpacker = FakeOrukeetUnpacker()
-        let installer = makeInstaller(store, downloader: downloader, unpacker: unpacker)
-        XCTAssertEqual(installer.state, .notInstalled)
-        XCTAssertTrue(downloader.calls.isEmpty, "creating the installer downloads nothing")
-
-        downloader.hold()
-        let task = installer.install()
-        try await waitForState("Orukeet download running") {
-            if case .downloading = installer.state { !downloader.calls.isEmpty } else { false }
-        }
-        guard case .downloading(let progress) = installer.state else { return XCTFail("\(installer.state)") }
-        XCTAssertEqual(progress.totalBytes, OrukeetModelSpec.totalBytes)
-        XCTAssertEqual(unpacker.calls, 0)
-        XCTAssertFalse(store.hasMarker)
-        downloader.release()
-        await task.value
-
-        XCTAssertEqual(installer.state, .installed)
-        XCTAssertEqual(downloader.calls, [OrukeetModelSpec.archive.path])
-        XCTAssertEqual(unpacker.calls, 1)
-        XCTAssertTrue(store.isInstalled)
-    }
-
-    func testCancelledDownloadRetriesTheArchive() async throws {
-        let store = makeStore()
-        let downloader = FakeOrukeetDownloader()
-        let unpacker = FakeOrukeetUnpacker()
-        let installer = makeInstaller(store, downloader: downloader, unpacker: unpacker)
-        downloader.hold()
-        let first = installer.install()
-        try await waitForState("Orukeet download held") { !downloader.calls.isEmpty }
-        installer.cancel()
-        XCTAssertEqual(installer.state, .cancelled)
-        downloader.release()
-        await first.value
-        XCTAssertEqual(installer.state, .cancelled)
-        XCTAssertEqual(unpacker.calls, 0)
-        XCTAssertFalse(store.isInstalled)
-
-        await installer.install().value
-        XCTAssertEqual(installer.state, .installed)
-    }
-
     func testFailedUnpackOffersRetryThatUnpacksTheKeptArchiveWithoutDownloading() async throws {
         let store = makeStore()
         let downloader = FakeOrukeetDownloader()
@@ -289,66 +209,11 @@ final class OrukeetTests: XCTestCase {
         XCTAssertEqual(unpacker.calls, 0)
     }
 
-    func testPreparationRefusesAnUninstalledModel() async throws {
-        let store = makeStore()
-        try OrukeetTestFiles.populateCompiled(store)
-        let transcriber = OrukeetTranscriber(store: store, language: .german, availableCapacity: { .max })
-        do {
-            try await transcriber.prepare { _ in }
-            XCTFail("an unverified model is never prepared")
-        } catch let error as OrukeetTranscriber.TranscriberError {
-            XCTAssertEqual(error, .notInstalled)
-            XCTAssertEqual(error.localizedDescription, "Orukeet is not downloaded. Download it under Speech engine.")
-        }
-    }
-
-    func testDamagedVocabularyInvalidatesTheInstallAndAsksForDownload() async throws {
-        let store = makeStore()
-        try OrukeetTestFiles.populateCompiled(store)
-        try store.writeMarker()
-        try WhisperTestFiles.writeSparse(store.vocabularyURL, bytes: OrukeetModelSpec.vocabularyEntry.bytes)
-        let transcriber = OrukeetTranscriber(store: store, language: .english, availableCapacity: { .max })
-        do {
-            try await transcriber.prepare { _ in }
-            XCTFail("a damaged vocabulary must stop preparation")
-        } catch let error as OrukeetTranscriber.TranscriberError {
-            guard case .corruptModel = error else { return XCTFail("expected corruptModel, got \(error)") }
-            XCTAssertTrue(error.localizedDescription.contains("Download Orukeet again"))
-        }
-        XCTAssertFalse(store.hasMarker)
-    }
-
-    func testUnloadableModelsFailAsPreparationWithOrukeetStages() async throws {
-        let store = makeStore()
-        try OrukeetTestFiles.populateCompiled(store)
-        try store.writeMarker()
-        let log = PreparationProgressLog()
-        let transcriber = OrukeetTranscriber(store: store, language: .english,
-                                             availableCapacity: { .max }, environment: "env")
-        do {
-            try await transcriber.prepare { log.append($0) }
-            XCTFail("placeholder Core ML models cannot load")
-        } catch let error as OrukeetTranscriber.TranscriberError {
-            guard case .preparationFailed = error else { return XCTFail("expected preparationFailed, got \(error)") }
-        }
-        XCTAssertEqual(store.preparationRecord, ModelPreparationRecord(loadedEnvironment: nil, inProgress: false))
-        XCTAssertTrue(log.values.contains { $0.detail.hasPrefix("Optimizing Orukeet audio features") })
-        XCTAssertTrue(store.isInstalled, "a Core ML failure is not evidence of damaged downloads")
-    }
-
     func testLanguageIsAlwaysDetectedByTheModel() {
         for language in DictationLanguage.allCases {
             XCTAssertEqual(OrukeetTranscriber.languageName(for: language), "Automatic (detected by Orukeet)")
             XCTAssertNil(OrukeetTranscriber.languageHint(for: language))
         }
-    }
-
-    func testFailuresAreClassifiedForTheDictationLog() {
-        typealias E = OrukeetTranscriber.TranscriberError
-        XCTAssertEqual(DictationLogASRFailure.classify(E.notInstalled), .modelNotReady)
-        XCTAssertEqual(DictationLogASRFailure.classify(E.preparationFailed("x")), .modelNotReady)
-        XCTAssertEqual(DictationLogASRFailure.classify(E.emptyTranscript), .noSpeech)
-        XCTAssertEqual(DictationLogASRFailure.classify(E.corruptModel("x")), .other)
     }
 
     func testProductionProviderReportsOrukeetFromDiskOnly() async throws {

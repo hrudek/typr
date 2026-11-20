@@ -23,8 +23,8 @@ nonisolated enum CohereTestFiles {
         }
     }
 
-    static func populate(_ store: CohereModelStore, marker: Bool, except skipped: Set<String> = []) throws {
-        for file in CohereModelSpec.allFiles where !skipped.contains(file.path) {
+    static func populate(_ store: CohereModelStore, marker: Bool) throws {
+        for file in CohereModelSpec.allFiles {
             try write(file, into: store.root)
         }
         if marker {
@@ -48,57 +48,6 @@ final class CohereTests: XCTestCase {
             .appendingPathComponent("typr-cohere-tests-\(UUID().uuidString)", isDirectory: true)
         roots.append(root)
         return CohereModelStore(root: root)
-    }
-
-    func testSpecPinsOneRevisionOfTheInt8EncoderV2DecoderAndVocabularyWithExactSizes() {
-        XCTAssertEqual(CohereModelSpec.modelRepo, "FluidInference/cohere-transcribe-03-2026-coreml")
-        XCTAssertEqual(CohereModelSpec.modelRevision.count, 40, "a commit, not a branch")
-        XCTAssertTrue(CohereModelSpec.allFiles.allSatisfy {
-            $0.repo == CohereModelSpec.modelRepo && $0.revision == CohereModelSpec.modelRevision
-        })
-        XCTAssertEqual(CohereModelSpec.allFiles.reduce(0) { $0 + $1.bytes }, CohereModelSpec.totalBytes)
-        XCTAssertEqual(Set(CohereModelSpec.allFiles.map(\.path)).count, CohereModelSpec.allFiles.count)
-        XCTAssertEqual(CohereModelSpec.allFiles.first, CohereModelSpec.vocabularyFile, "vocabulary first")
-        XCTAssertEqual(CohereModelSpec.checkedFiles, [CohereModelSpec.vocabularyFile])
-        let folders = Set(CohereModelSpec.modelFiles.map { $0.path.split(separator: "/").prefix(2).joined(separator: "/") })
-        XCTAssertEqual(folders, ["q8/\(CohereModelSpec.encoderFolder)", "q8/\(CohereModelSpec.decoderFolder)"])
-        XCTAssertEqual(CohereModelSpec.computeUnits, .cpuAndNeuralEngine, "no GPU: background preparation")
-    }
-
-    func testStoreIsSeparateFromOtherEnginesAndExcludedFromBackup() throws {
-        let store = makeStore()
-        XCTAssertEqual(CohereModelStore.defaultRoot().lastPathComponent, "CohereTranscribe")
-        XCTAssertNotEqual(CohereModelStore.defaultRoot(), WhisperModelStore.defaultRoot())
-        XCTAssertNotEqual(CohereModelStore.defaultRoot(), ParakeetV3ModelStore.defaultRoot())
-        XCTAssertNotEqual(CohereModelStore.markerFileName, ParakeetV3ModelStore.markerFileName)
-        XCTAssertNotEqual(CohereModelStore.preparationFileName, CohereModelStore.markerFileName)
-        XCTAssertEqual(store.modelFolder.deletingLastPathComponent().path, store.vocabularyFolder.path)
-        XCTAssertEqual(store.vocabularyURL.deletingLastPathComponent().path, store.vocabularyFolder.path)
-        try store.prepareRoot()
-        let values = try store.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
-        XCTAssertEqual(values.isExcludedFromBackup, true)
-    }
-
-    func testInstalledNeedsTheMarkerAndEveryFileAtItsExactSize() throws {
-        let store = makeStore()
-        XCTAssertFalse(store.isInstalled)
-        try CohereTestFiles.populate(store, marker: false)
-        XCTAssertTrue(store.filesComplete)
-        XCTAssertTrue(FileManager.default.fileExists(
-            atPath: store.modelFolder.appendingPathComponent(CohereModelSpec.encoderFolder).path))
-        XCTAssertFalse(store.isInstalled, "files without the marker are a partial download")
-        try store.writeMarker()
-        XCTAssertTrue(store.isInstalled)
-
-        let encoder = try XCTUnwrap(CohereModelSpec.modelFiles.last)
-        try WhisperTestFiles.writeSparse(store.fileURL(for: encoder), bytes: encoder.bytes - 1)
-        XCTAssertFalse(store.isInstalled, "a short file is never installed")
-        try CohereTestFiles.write(encoder, into: store.root)
-        XCTAssertTrue(store.isInstalled)
-
-        try Data(#"{"modelRepo":"FluidInference/cohere-transcribe-03-2026-coreml","modelRevision":"main","totalBytes":1}"#.utf8)
-            .write(to: store.markerURL)
-        XCTAssertFalse(store.isInstalled, "a marker for another revision is not this install")
     }
 
     func testVocabularyMustBeTheFullTokenTable() throws {

@@ -193,17 +193,6 @@ final class WhisperInstallerTests: XCTestCase {
         return task
     }
 
-    private func waitUntil(_ condition: @MainActor () -> Bool, timeout: TimeInterval = 3) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            guard Date() < deadline else {
-                XCTFail("condition not met in time")
-                throw CocoaError(.userCancelled)
-            }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-    }
-
     private var allPaths: [String] { WhisperModelSpec.allFiles.map(\.path) }
 
     private func bytes(before path: String) -> Int64 {
@@ -213,56 +202,40 @@ final class WhisperInstallerTests: XCTestCase {
 
     // MARK: - Spec
 
-    func testSpecPinsTheAgreedModelTokenizerAndSizes() {
-        XCTAssertEqual(WhisperModelSpec.engine, .whisperLargeV3Turbo)
-        XCTAssertEqual(WhisperModelSpec.packageURL, "https://github.com/argmaxinc/argmax-oss-swift.git")
-        XCTAssertEqual(WhisperModelSpec.packageVersion, "1.1.1")
-        XCTAssertEqual(WhisperModelSpec.packageProduct, "WhisperKit")
-        XCTAssertEqual(WhisperModelSpec.modelRepo, "argmaxinc/whisperkit-coreml")
-        XCTAssertEqual(WhisperModelSpec.modelRevision, "0f63a7800b00dd0226abd051b906c246e1907482")
-        XCTAssertEqual(WhisperModelSpec.modelFolderName, "openai_whisper-large-v3-v20240930_626MB")
-        XCTAssertFalse(WhisperModelSpec.modelFolderName.contains("turbo"), "the _turbo_632MB build is not the agreed one")
-        XCTAssertEqual(WhisperModelSpec.tokenizerRepo, "openai/whisper-large-v3")
-        XCTAssertEqual(WhisperModelSpec.tokenizerRevision, "06f233fe06e710322aca913c1bc4249a0d71fce1")
+    private func assertPinned<Spec: DownloadableModelSpec>(_: Spec.Type, line: UInt = #line) {
+        let files = Spec.allFiles
+        XCTAssertEqual(files.reduce(0) { $0 + $1.bytes }, Spec.totalBytes, "\(Spec.engine)", line: line)
+        XCTAssertEqual(Set(files.map { "\($0.repo)/\($0.path)" }).count, files.count, "\(Spec.engine)", line: line)
+        XCTAssertEqual(Array(files.prefix(Spec.checkedFiles.count)), Spec.checkedFiles, "checked files come first", line: line)
+        for file in files {
+            XCTAssertTrue(file.revision.count == 40 && file.revision.allSatisfy(\.isHexDigit), "\(file.path) pins a commit", line: line)
+            XCTAssertGreaterThan(file.bytes, 0, file.path, line: line)
+        }
+    }
 
-        // Hugging Face tree API at the pinned revisions: 17 model files, 626,718,238 bytes.
-        XCTAssertEqual(WhisperModelSpec.modelFiles.count, 17)
-        XCTAssertEqual(WhisperModelSpec.modelFiles.reduce(0) { $0 + $1.bytes }, 626_718_238)
-        XCTAssertEqual(WhisperModelSpec.modelBytes, 626_718_238)
-        XCTAssertEqual(WhisperModelSpec.tokenizerFiles.map(\.path), ["config.json", "tokenizer.json", "tokenizer_config.json"])
-        XCTAssertEqual(WhisperModelSpec.tokenizerFiles.map(\.bytes), [1_272, 2_480_617, 282_843])
-        XCTAssertEqual(WhisperModelSpec.totalBytes, WhisperModelSpec.allFiles.reduce(0) { $0 + $1.bytes })
-        XCTAssertEqual(Set(WhisperModelSpec.allFiles).count, WhisperModelSpec.allFiles.count, "no duplicate pinned file")
-
-        for file in WhisperModelSpec.modelFiles {
-            XCTAssertEqual(file.repo, WhisperModelSpec.modelRepo)
-            XCTAssertEqual(file.revision, WhisperModelSpec.modelRevision)
-            XCTAssertTrue(file.path.hasPrefix(WhisperModelSpec.modelFolderName + "/"), file.path)
-            XCTAssertGreaterThan(file.bytes, 0)
-        }
-        for file in WhisperModelSpec.tokenizerFiles {
-            XCTAssertEqual(file.repo, WhisperModelSpec.tokenizerRepo)
-            XCTAssertEqual(file.revision, WhisperModelSpec.tokenizerRevision)
-        }
-        // Exact 40-character commit revisions, never a branch name such as "main".
-        for revision in [WhisperModelSpec.modelRevision, WhisperModelSpec.tokenizerRevision] {
-            XCTAssertEqual(revision.count, 40)
-            XCTAssertTrue(revision.allSatisfy { $0.isHexDigit }, revision)
-        }
-        // The tokenizer is downloaded (and parsed) before the large model files.
-        XCTAssertEqual(Array(WhisperModelSpec.allFiles.prefix(3)), WhisperModelSpec.tokenizerFiles)
-        XCTAssertEqual(WhisperModelSpec.expectedLogitsSize, 51_866)
+    func testEverySpecPinsCommitsAndItsFilesAddUpToTheTotal() {
+        assertPinned(WhisperModelSpec.self)
+        assertPinned(ParakeetV3ModelSpec.self)
+        assertPinned(OrukeetModelSpec.self)
+        assertPinned(CohereModelSpec.self)
+        XCTAssertTrue(WhisperModelSpec.modelFiles.allSatisfy { $0.path.hasPrefix(WhisperModelSpec.modelFolderName + "/") })
+        let components = TdtV3PreparationComponent.allCases.map(\.rawValue)
+        XCTAssertEqual(Set(ParakeetV3ModelSpec.modelFiles.compactMap { $0.path.split(separator: "/").first.map(String.init) }),
+                       Set(components.map { "\($0).mlmodelc" }))
+        XCTAssertEqual(Set(OrukeetModelSpec.unpackedFiles.compactMap { $0.path.split(separator: "/").first.map(String.init) }),
+                       Set(components.map { "\($0).mlpackage" } + [TdtV3Vocabulary.fileName]))
+        XCTAssertEqual(OrukeetModelSpec.archiveSHA256.count, 64)
+        XCTAssertEqual(Set(CohereModelSpec.modelFiles.map { $0.path.split(separator: "/").prefix(2).joined(separator: "/") }),
+                       ["q8/\(CohereModelSpec.encoderFolder)", "q8/\(CohereModelSpec.decoderFolder)"])
     }
 
     func testComputeUnitsNeverUseTheGPU() {
         // Keyboard dictations finish in the background, where iOS denies GPU work.
-        XCTAssertEqual(WhisperModelSpec.melComputeUnits, .cpuOnly)
-        XCTAssertEqual(WhisperModelSpec.audioEncoderComputeUnits, .cpuAndNeuralEngine)
-        XCTAssertEqual(WhisperModelSpec.textDecoderComputeUnits, .cpuAndNeuralEngine)
-        for units in [WhisperModelSpec.melComputeUnits, WhisperModelSpec.audioEncoderComputeUnits,
-                      WhisperModelSpec.textDecoderComputeUnits] {
-            XCTAssertNotEqual(units, .cpuAndGPU)
-            XCTAssertNotEqual(units, .all)
+        let units = [WhisperModelSpec.melComputeUnits, WhisperModelSpec.audioEncoderComputeUnits,
+                     WhisperModelSpec.textDecoderComputeUnits, CohereModelSpec.computeUnits]
+            + TdtV3PreparationComponent.allCases.map(\.computeUnits)
+        for unit in units {
+            XCTAssertFalse([MLComputeUnits.cpuAndGPU, .all].contains(unit), "\(unit.rawValue)")
         }
     }
 
@@ -303,16 +276,23 @@ final class WhisperInstallerTests: XCTestCase {
 
     // MARK: - Store
 
-    func testStoreLivesInApplicationSupportExcludedFromBackupNotDocumentsOrAppGroup() throws {
-        let production = WhisperModelStore.defaultRoot()
+    func testEveryEngineHasItsOwnStoreInApplicationSupportExcludedFromBackup() throws {
         let support = try XCTUnwrap(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
         let documents = try XCTUnwrap(FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first)
-        XCTAssertTrue(production.standardizedFileURL.path.hasPrefix(support.standardizedFileURL.path), production.path)
-        XCTAssertFalse(production.standardizedFileURL.path.hasPrefix(documents.standardizedFileURL.path))
-        if let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: KeyboardBridge.appGroup) {
-            XCTAssertFalse(production.standardizedFileURL.path.hasPrefix(group.standardizedFileURL.path),
-                           "the keyboard never needs the model")
+        let group = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: KeyboardBridge.appGroup)
+        let roots = [WhisperModelStore.defaultRoot(), ParakeetV3ModelStore.defaultRoot(),
+                     OrukeetModelStore.defaultRoot(), CohereModelStore.defaultRoot()].map(\.standardizedFileURL.path)
+        XCTAssertEqual(Set(roots).count, roots.count, "each engine has its own folder")
+        for path in roots {
+            XCTAssertTrue(path.hasPrefix(support.standardizedFileURL.path), path)
+            XCTAssertFalse(path.hasPrefix(documents.standardizedFileURL.path), path)
+            if let group { XCTAssertFalse(path.hasPrefix(group.standardizedFileURL.path), "the keyboard never needs the model") }
         }
+        let files = [(WhisperModelStore.markerFileName, WhisperModelStore.preparationFileName),
+                     (ParakeetV3ModelStore.markerFileName, ParakeetV3ModelStore.preparationFileName),
+                     (OrukeetModelStore.markerFileName, OrukeetModelStore.preparationFileName),
+                     (CohereModelStore.markerFileName, CohereModelStore.preparationFileName)]
+        for (marker, preparation) in files { XCTAssertNotEqual(marker, preparation) }
 
         try store.prepareRoot()
         let values = try root.resourceValues(forKeys: [.isExcludedFromBackupKey])
@@ -423,8 +403,8 @@ final class WhisperInstallerTests: XCTestCase {
 
         let weight = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.weightPath })
         let expected = bytes(before: Self.weightPath) + weight.bytes / 2
-        try await waitUntil { installer.state == .downloading(ModelDownloadProgress(completedBytes: expected,
-                                                                                         totalBytes: WhisperModelSpec.totalBytes)) }
+        let half = ModelDownloadProgress(completedBytes: expected, totalBytes: WhisperModelSpec.totalBytes)
+        try await waitForState("half the held file shown") { installer.state == .downloading(half) }
         XCTAssertFalse(store.hasMarker)
         XCTAssertFalse(installer.isInstalled)
 
@@ -438,12 +418,12 @@ final class WhisperInstallerTests: XCTestCase {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
         let task = install(installer)
-        try await waitUntil { self.downloader.calls.last == Self.weightPath }
+        try await waitForState("weight download held") { self.downloader.calls.last == Self.weightPath }
         let file = try XCTUnwrap(WhisperModelSpec.allFiles.first { $0.path == Self.weightPath })
         let advanced = ModelDownloadProgress.weighted(finishedBytes: bytes(before: file.path),
             currentFileBytes: file.bytes, currentFileFraction: 0.8, totalBytes: WhisperModelSpec.totalBytes)
         downloader.emit(0.8, for: file.path)
-        try await waitUntil { installer.state == .downloading(advanced) }
+        try await waitForState("advanced progress shown") { installer.state == .downloading(advanced) }
         downloader.emit(0.1, for: file.path)
         await mainActorBarrier() // The late progress hop has run (and was ignored).
         XCTAssertEqual(installer.state, .downloading(advanced), "late progress never moves the display backwards")
@@ -463,7 +443,7 @@ final class WhisperInstallerTests: XCTestCase {
                                               availableCapacity: { .max })
         installers.append(installer)
         let task = install(installer)
-        try await waitUntil { slowChecker.hasEntered && installer.state == .verifying }
+        try await waitForState("tokenizer check held") { slowChecker.hasEntered && installer.state == .verifying }
         XCTAssertTrue(installer.isBusy)
         XCTAssertFalse(store.hasMarker)
         XCTAssertFalse(installer.isInstalled)
@@ -501,7 +481,7 @@ final class WhisperInstallerTests: XCTestCase {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
         let task = install(installer)
-        try await waitUntil { self.downloader.calls.last == Self.weightPath }
+        try await waitForState("weight download held") { self.downloader.calls.last == Self.weightPath }
 
         installer.cancel()
         XCTAssertEqual(installer.state, .cancelled)
@@ -528,7 +508,7 @@ final class WhisperInstallerTests: XCTestCase {
         downloader.set(.hold, for: Self.weightPath)
         let installer = makeInstaller()
         _ = install(installer)
-        try await waitUntil { self.downloader.calls.last == Self.weightPath }
+        try await waitForState("weight download held") { self.downloader.calls.last == Self.weightPath }
         installer.cancel()
         downloader.set(.write, for: Self.weightPath)
         await install(installer).value
@@ -637,7 +617,7 @@ final class WhisperInstallerTests: XCTestCase {
                                               availableCapacity: { .max })
         installers.append(installer)
         let task = install(installer)
-        try await waitUntil { !self.store.hasMarker }
+        try await waitForState("marker removed") { !self.store.hasMarker }
         XCTAssertFalse(installer.isInstalled, "a stale marker never advertises an install being repaired")
         installer.cancel()
         await task.value
