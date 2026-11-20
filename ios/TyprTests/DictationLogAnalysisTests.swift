@@ -55,7 +55,7 @@ final class DictationLogAnalysisTests: XCTestCase {
         XCTAssertTrue(old.spellingLines(old.firstSpellingPass).first?.contains("older entry or pass not reached") == true)
     }
 
-    func testSettingsAndTwoPassEvidenceSurviveStorageAndExport() async throws {
+    func testSettingsStagesFeedbackAndTwoPassEvidenceSurviveStorage() async throws {
         let env = LogTestEnvironment()
         var context = DictationLogContext()
         context.cleanupPath = .typr
@@ -68,13 +68,20 @@ final class DictationLogAnalysisTests: XCTestCase {
         first.record(before: "iphone", after: "iPhone", term: "iPhone")
         second.record(before: "IPhone", after: "iPhone", term: "iPhone")
         recording.recognized("iphone", spelled: "iPhone", asrMilliseconds: 1, spellingPass: first)
+        recording.modelAnswer("iPhone", use: .accepted, modelMilliseconds: 30)
+        recording.processingStages(cleanupOutput: "iPhone", formattedText: "IPhone.")
         recording.finish(text: "iPhone.", beforeSpelling: "IPhone.", spellingPass: second)
+        env.store.saveFeedback(for: recording.entryID, expectedText: "iPhone!", note: "Lost the exclamation")
         await env.storage.flush()
         let loaded = DictationLogStore(storage: env.storage, settings: env.settings)
         try await LogTestEnvironment.waitUntilLoaded(loaded)
         let entry = try XCTUnwrap(loaded.entries.first)
         XCTAssertEqual(entry.firstSpellingPass, first)
         XCTAssertEqual(entry.secondSpellingPass, second)
+        XCTAssertEqual(entry.cleanupOutput?.text, "iPhone")
+        XCTAssertEqual(entry.formattedText?.text, "IPhone.")
+        XCTAssertEqual(entry.expectedText?.text, "iPhone!")
+        XCTAssertEqual(entry.feedbackNote?.text, "Lost the exclamation")
         XCTAssertEqual(entry.context.upstreamCleanupEnabled, true)
         XCTAssertTrue(entry.vocabularyLabel.hasPrefix("Vocabulary: On"))
         XCTAssertTrue(entry.improvementLines.contains(entry.vocabularyLabel))

@@ -85,14 +85,7 @@ private final class LogControllerFixture {
 
     func waitUntil(_ description: String, file: StaticString = #filePath, line: UInt = #line,
                    _ condition: () -> Bool) async throws {
-        // These are state/serialization tests, not latency tests. A cold CI simulator can
-        // spend several seconds in framework initialization before the injected model runs.
-        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
-        while !condition(), ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        // Stop the test on timeout rather than cancelling an unfinished job with the next one.
-        _ = try XCTUnwrap(condition() ? true : nil, description, file: file, line: line)
+        try await waitForState(description, timeout: .seconds(30), file: file, line: line) { condition() }
     }
     func waitUntilFinished(file: StaticString = #filePath, line: UInt = #line) async throws {
         // Keyboard completion also waits for cold archive readiness.
@@ -101,13 +94,7 @@ private final class LogControllerFixture {
         }
     }
     func waitUntilASRIsSuspended(file: StaticString = #filePath, line: UInt = #line) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        var waiting = await asr.isWaiting()
-        while !waiting, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-            waiting = await asr.isWaiting()
-        }
-        _ = try XCTUnwrap(waiting ? true : nil, "Expected suspended ASR", file: file, line: line)
+        try await waitForState("Expected suspended ASR", file: file, line: line) { await asr.isWaiting() }
     }
     func start() async throws {
         try await waitUntil("Expected the isolated log archive to finish loading") { !env.store.isLoading }
