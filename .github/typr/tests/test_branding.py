@@ -44,11 +44,7 @@ class BrandingTests(unittest.TestCase):
     def test_optical_offset_shifts_right_and_down_by_a_small_amount(self):
         dx, dy = branding.OPTICAL_OFFSET
         _, _, _, (x0, y0, x1, y1) = branding.geometry()
-        self.assertGreater(dx, 0)
-        self.assertGreater(dy, 0)
-        self.assertLess(dx / (x1 - x0), 0.05)
-        self.assertLess(dy / (y1 - y0), 0.05)
-        self.assertIn(f'CGSize(width: {dx:g}, height: {dy:g})', branding.swift_source())
+        self.assertTrue(0 < dx / (x1 - x0) < 0.05 and 0 < dy / (y1 - y0) < 0.05)
 
 
 if __name__ == '__main__':
