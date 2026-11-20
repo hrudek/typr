@@ -202,6 +202,8 @@ final class ParakeetV3Tests: XCTestCase {
         XCTAssertEqual(DictationLogASRFailure.classify(E.preparationFailed("x")), .modelNotReady)
         XCTAssertEqual(DictationLogASRFailure.classify(E.emptyTranscript), .noSpeech)
         XCTAssertEqual(DictationLogASRFailure.classify(E.corruptModel("x")), .other)
+        XCTAssertEqual(DictationLogASRFailure.classify(OrukeetTranscriber.TranscriberError.notInstalled), .modelNotReady)
+        XCTAssertEqual(DictationLogASRFailure.classify(OrukeetTranscriber.TranscriberError.emptyTranscript), .noSpeech)
         XCTAssertTrue(DictationController.transcriptionFailureKeepsModel(E.emptyTranscript))
         XCTAssertFalse(DictationController.transcriptionFailureKeepsModel(E.corruptModel("x")))
     }

@@ -225,6 +225,12 @@ final class WhisperInstallerTests: XCTestCase {
         XCTAssertEqual(Set(OrukeetModelSpec.unpackedFiles.compactMap { $0.path.split(separator: "/").first.map(String.init) }),
                        Set(components.map { "\($0).mlpackage" } + [TdtV3Vocabulary.fileName]))
         XCTAssertEqual(OrukeetModelSpec.archiveSHA256.count, 64)
+        XCTAssertGreaterThanOrEqual(OrukeetModelSpec.storageHeadroomBytes,
+                                    2 * OrukeetModelSpec.unpackedFiles.reduce(0) { $0 + $1.bytes },
+                                    "unpacked packages and their compiled copies exist at once")
+        XCTAssertEqual(WhisperModelSpec.checkedFiles, WhisperModelSpec.tokenizerFiles)
+        XCTAssertEqual(ParakeetV3ModelSpec.checkedFiles, [ParakeetV3ModelSpec.vocabularyFile])
+        XCTAssertEqual(CohereModelSpec.checkedFiles, [CohereModelSpec.vocabularyFile])
         XCTAssertEqual(Set(CohereModelSpec.modelFiles.map { $0.path.split(separator: "/").prefix(2).joined(separator: "/") }),
                        ["q8/\(CohereModelSpec.encoderFolder)", "q8/\(CohereModelSpec.decoderFolder)"])
     }
@@ -293,6 +299,12 @@ final class WhisperInstallerTests: XCTestCase {
                      (OrukeetModelStore.markerFileName, OrukeetModelStore.preparationFileName),
                      (CohereModelStore.markerFileName, CohereModelStore.preparationFileName)]
         for (marker, preparation) in files { XCTAssertNotEqual(marker, preparation) }
+        let cohere = CohereModelStore(root: root)
+        for file in CohereModelSpec.modelFiles {
+            XCTAssertTrue(cohere.fileURL(for: file).standardizedFileURL.path
+                .hasPrefix(cohere.modelFolder.standardizedFileURL.path + "/"), "\(file.path) is where the loader reads")
+        }
+        XCTAssertEqual(cohere.fileURL(for: CohereModelSpec.vocabularyFile).standardizedFileURL, cohere.vocabularyURL.standardizedFileURL)
 
         try store.prepareRoot()
         let values = try root.resourceValues(forKeys: [.isExcludedFromBackupKey])
