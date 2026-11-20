@@ -36,7 +36,6 @@ final class PersonalTypingTrigramTests: XCTestCase {
             XCTAssertNil(model.context(before: prefix, currentToken: nil).earlier, prefix)
         }
         XCTAssertEqual(model.context(before: "our project key", currentToken: "key").earlier, "our")
-        print("EVAL R2_2_query_work retainedTrigramLookups=1 fallbackLookups=2 noPreviousLookups=0 rowFollowersMax=8 rerankCandidatesMax=32")
     }
 
     /// Moved from the research-only neural spike file: the exact discounted probability of
@@ -114,7 +113,7 @@ final class PersonalTypingTrigramTests: XCTestCase {
         let model = try XCTUnwrap(BundledKeyboardData.contextModel)
         let controls = ["Lena", "Donaudampfschiff", "WeChat", "camelCase", "meeting", "tasche",
                         "mittwoch", "updated", "reviewer", "standard", "tastaturen", "kollegen"]
-        var queries = 0, unwanted = 0, differences = 0
+        var unwanted = 0, differences = 0
         for language in ["de", "en", "mixed"] {
             let phrases = try XCTUnwrap(PersonalTrigramPhraseFixtures.phrases[language])
             let session = KeyboardLearningSession()
@@ -135,13 +134,11 @@ final class PersonalTypingTrigramTests: XCTestCase {
                     let mine = personal.replacementOnSpace(beforeInput: before, field: .text, autocorrectionType: .default)
                     if base?.replacement != mine?.replacement { differences += 1 }
                     if mine != nil { unwanted += 1 }
-                    queries += 1
                 }
             }
         }
         XCTAssertEqual(unwanted, 0)
         XCTAssertEqual(differences, 0)
-        print("EVAL R2_2_trigram_controls queries=\(queries) unwantedAuto=\(unwanted) changedAuto=\(differences) validity=injected_valid_DE_EN_mixed_names_compounds")
     }
 
     func testOldSchemaThreeFileLoadsCountsAndMigratesWithoutInventedTrigrams() throws {
@@ -277,8 +274,6 @@ final class PersonalTypingTrigramTests: XCTestCase {
         var b = a
         XCTAssertEqual(a.pairCount, 512)
         XCTAssertTrue(a.isValid)
-        let atCapBytes = try JSONEncoder().encode(a).count
-        let atCapBound = a.encodedByteBound
         for i in 0..<1024 {
             a.record(word(i), after: "project", earlier: word(i + 100))
             b.record(word(i), after: "project", earlier: word(i + 100))
@@ -293,6 +288,5 @@ final class PersonalTypingTrigramTests: XCTestCase {
                            after: String(repeating: "語", count: 26) + word(i), earlier: String(repeating: "文", count: 28))
             XCTAssertTrue(unicode.isValid)
         }
-        print("EVAL R2_2_bounds entriesAtCap=512 encodedBytesAtCap=\(atCapBytes) boundAtCap=\(atCapBound) byteCap=65536 unicodeEntries=\(unicode.pairCount) unicodeBound=\(unicode.encodedByteBound) agedOriginalRows=0 deterministicReplay=1")
     }
 }

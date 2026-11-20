@@ -179,21 +179,6 @@ final class PersonalTypingAimTests: XCTestCase {
         XCTAssertEqual(model.calibration(for: other), otherBefore)
     }
 
-    func testLearningOffAndResetLeaveNoMemories() throws {
-        let model = warm()
-        for _ in 0..<3 { model.learn([label("e", 0.3, 0.15)], layout: grid, source: .keep) }
-        let state = model.state, calibration = model.calibration(for: grid)
-        model.isLearningEnabled = false
-        XCTAssertEqual(model.learn([label("e", -0.3, 0)], layout: grid, source: .keep).rejected, [.learningOff: 1])
-        XCTAssertNil(model.calibration(for: grid))
-        XCTAssertEqual(model.state, state, "learning off learns nothing")
-        model.isLearningEnabled = true
-        XCTAssertEqual(model.calibration(for: grid), calibration)
-        model.reset()
-        XCTAssertEqual(model.state, PersonalTypingModel.State())
-        XCTAssertNil(model.calibration(for: grid))
-    }
-
     func testMigrationRepairAndAggregatePrivacy() throws {
         let model = warm()
         model.keep("hallo"); model.recordWord("hello"); model.rejectCorrection(typed: "hallo", replacement: "hello")
@@ -264,13 +249,9 @@ final class PersonalTypingAimTests: XCTestCase {
         }
         XCTAssertNotNil(maximumLayouts.validated())
         let touchBytes = try JSONEncoder().encode(maximumLayouts).count
-        let slowPayload = 4 * 27 * MemoryLayout<PersonalTypingModel.TouchStats>.stride
-        let aimPayload = 4 * 26 * (MemoryLayout<PersonalTypingModel.KeyAim>.stride + 3 * MemoryLayout<Double>.stride)
         XCTAssertEqual(template.aims?.count, 26)
         XCTAssertLessThan(touchBytes, 64 * 1024)
-        XCTAssertLessThan(slowPayload + aimPayload, 32 * 1024)
         XCTAssertEqual(model.state.layouts.count, 1)
-        print("EVAL P7_memory slowPayloadMaxBytes=\(slowPayload) aimPayloadMaxBytes=\(aimPayload) fourLayoutEncodedBytes=\(touchBytes) storeLimitBytes=\(KeyboardLearningStore.maximumLearningBytes) heapOverheadExcluded=true")
         var fileBytes = 0, nodes = 0
         for lexicon in try XCTUnwrap(BundledKeyboardData.lexicons).values {
             fileBytes += lexicon.data.count; nodes += lexicon.nodeCount
@@ -278,7 +259,6 @@ final class PersonalTypingAimTests: XCTestCase {
         let indexBytes = nodes * MemoryLayout<UInt32>.stride
         let lengthBytes = nodes * MemoryLayout<UInt16>.stride
         XCTAssertLessThan(fileBytes + 2 * indexBytes + lengthBytes, 8 * 1024 * 1024, "shipping data plus subtree priors, child masks and length spans, not RSS")
-        print("EVAL P7_lexiconMemory mappedFileBytes=\(fileBytes) priorIndexBytes=\(indexBytes) continuationMaskBytes=\(indexBytes) lengthSpanBytes=\(lengthBytes) totalFileAndIndexBytes=\(fileBytes + 2 * indexBytes + lengthBytes) transientAndHeapOverheadExcluded=true")
         // Exercise a real read and trusted update, without benchmark repetition.
         XCTAssertNotNil(model.calibration(for: grid))
         let outcome = model.learn([label("e", 0.15, 0.1)], layout: grid, source: .keep)

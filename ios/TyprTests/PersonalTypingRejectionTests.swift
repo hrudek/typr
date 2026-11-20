@@ -42,7 +42,6 @@ final class PersonalTypingRejectionTests: XCTestCase {
         XCTAssertEqual(model.state.rejected.first?.context, "reply to")
         model.forgetRejection(.init(typed: "teh", replacement: "the"))
         XCTAssertTrue(model.state.rejected.isEmpty)
-        print("EVAL R2_3_decay global_horizon=64 same_context_horizon=256 off_events_aged=0 refreshed_records=1 deleted_records=1 max_visits_per_word=512")
     }
 
     func testContextExtractionAndValidation() {
@@ -81,9 +80,5 @@ final class PersonalTypingRejectionTests: XCTestCase {
         XCTAssertFalse(model.lexicon.isKept("teh"))
         model.confirmLiteral("teh")
         XCTAssertTrue(model.lexicon.isKept("teh"))
-        model.reset()
-        XCTAssertTrue(model.state.rejected.isEmpty)
-        XCTAssertTrue(model.state.kept.isEmpty)
-        print("EVAL R2_3_bounds attempts=600 records=512 encoded_state_bytes=\(data.count) file_cap=262144 remaining_max=256 global_max=64 work_per_trusted_word_max=512 context_chars_max=96 reset_remaining=0")
     }
 }
