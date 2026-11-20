@@ -36,11 +36,11 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         func pending() async -> [DictationFeedbackEvent] {
             await withCheckedContinuation { c in bridge.pending { events, _ in c.resume(returning: events) } }
         }
-        func drain() async throws {
+        func drain(_ archive: DictationLogStore? = nil) async {
+            let archive = archive ?? store
             for _ in 0..<30 {
-                store.drainKeyboardFeedback(force: true)
-                await store.storage.flush(); await bridge.flush()
-                try await Task.sleep(for: .milliseconds(5))
+                archive.drainKeyboardFeedback(force: true)
+                await archive.storage.flush(); await bridge.flush(); await mainActorBarrier()
             }
         }
         func diskEntry(_ id: UUID) throws -> DictationLogEntry {
@@ -76,7 +76,7 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
             ownedJobs: recreated.feedbackJobs, permission: f.bridge.permission, now: Date())
         XCTAssertEqual(presentation?.panelContent, .ask)
         f.store.saveFeedback(for: offer.entryID, expectedText: nil, note: "I expected the name to be preserved.")
-        try await f.drain()
+        await f.drain()
         let saved = try f.diskEntry(offer.entryID)
         XCTAssertNil(saved.expectedText)
         XCTAssertEqual(saved.feedbackNote?.text, "I expected the name to be preserved.")
@@ -145,7 +145,7 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let queuedFirst = await f.enqueue(first), queuedSecond = await f.enqueue(second)
         XCTAssertTrue(queuedFirst && queuedSecond)
         f.store.saveFeedback(for: offer.entryID, expectedText: "Human reference.", note: "Synthetic note.")
-        try await f.drain()
+        await f.drain()
         XCTAssertEqual(try f.diskEntry(offer.entryID).issues, ["misheard", "too_slow"])
         XCTAssertEqual(try f.diskEntry(offer.entryID).expectedText?.text, "Human reference.")
         XCTAssertEqual(try f.diskEntry(offer.entryID).feedbackNote?.text, "Synthetic note.")
@@ -171,11 +171,11 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let lower = event(offer, rating: "good", id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, date: time)
         let upper = event(offer, issues: ["other"], id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, date: time)
         let a = await f.enqueue(upper), b = await f.enqueue(lower); XCTAssertTrue(a && b)
-        try await f.drain()
+        await f.drain()
         XCTAssertEqual(try f.diskEntry(offer.entryID).ratingOrder, upper.order)
         f.store.rate(offer.entryID, rating: "good", order: .init(modifiedAt: time.addingTimeInterval(1), origin: "app", eventID: UUID().uuidString))
         let duplicate = await f.enqueue(upper); XCTAssertTrue(duplicate)
-        try await f.drain()
+        await f.drain()
         XCTAssertEqual(try f.diskEntry(offer.entryID).rating, "good")
         await f.dispose()
     }
@@ -187,10 +187,7 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let revision = try f.diskEntry(offer.entryID).revision
         let reloaded = DictationLogStore(storage: DictationLogStorage(url: f.store.storage.url), settings: f.settings, feedbackBridge: f.bridge)
         try await LogTestEnvironment.waitUntilLoaded(reloaded)
-        for _ in 0..<30 {
-            reloaded.drainKeyboardFeedback(force: true)
-            await reloaded.storage.flush(); await f.bridge.flush(); try await Task.sleep(for: .milliseconds(5))
-        }
+        await f.drain(reloaded)
         XCTAssertEqual(try f.diskEntry(offer.entryID).revision, revision)
         let pending = await f.pending(); XCTAssertTrue(pending.isEmpty)
         await f.dispose()
@@ -218,11 +215,11 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let directory = f.store.storage.root.appendingPathComponent("entries")
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
         let queued = await f.enqueue(event(offer, issues: ["misheard"])); XCTAssertTrue(queued)
-        try await f.drain()
+        await f.drain()
         let pending = await f.pending(); XCTAssertEqual(pending.count, 1)
         XCTAssertNil(try f.diskEntry(offer.entryID).rating)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-        f.store.retry(); try await f.drain()
+        f.store.retry(); await f.drain()
         XCTAssertEqual(try f.diskEntry(offer.entryID).rating, "bad")
         let remaining = await f.pending(); XCTAssertTrue(remaining.isEmpty)
         await f.dispose()
@@ -235,9 +232,9 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
         let onQueued = await f.enqueue(event(old)); XCTAssertFalse(onQueued)
         let current = f.offer(); f.store.delete(current.entryID)
         let deletedQueued = await f.enqueue(event(current)); XCTAssertTrue(deletedQueued)
-        try await f.drain()
+        await f.drain()
         XCTAssertFalse(f.store.metadata.contains { $0.id == current.entryID })
-        f.store.clear(); await f.store.storage.flush(); try await Task.sleep(for: .milliseconds(20))
+        f.store.clear(); await f.store.storage.flush(); await mainActorBarrier()
         let clearQueued = await f.enqueue(event(current)); XCTAssertFalse(clearQueued)
         f.settings.dictationFeedbackStrip = false; f.store.feedbackSettingsChanged()
         let disabledQueued = await f.enqueue(event(old))
@@ -258,10 +255,7 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
             resultID: UUID().uuidString, expiresAt: Date().addingTimeInterval(600)))
         XCTAssertEqual(f.bridge.permission, permission)
         try await LogTestEnvironment.waitUntilLoaded(reloaded)
-        for _ in 0..<30 {
-            reloaded.drainKeyboardFeedback(force: true)
-            await reloaded.storage.flush(); await f.bridge.flush(); try await Task.sleep(for: .milliseconds(5))
-        }
+        await f.drain(reloaded)
         XCTAssertEqual(try f.diskEntry(offer.entryID).rating, "bad")
         XCTAssertEqual(f.bridge.permission, permission)
         await f.dispose()
@@ -275,11 +269,11 @@ final class DictationKeyboardFeedbackTests: XCTestCase {
             let rec = f.store.begin(token: f.store.token(), context: .init())!
             rec.finish(text: "Other synthetic result.", beforeSpelling: "Other synthetic result.")
         }
-        await f.store.storage.flush(); try await Task.sleep(for: .milliseconds(30))
+        await f.store.storage.flush(); await mainActorBarrier()
         XCTAssertNil(f.store.entry(original.entryID))
         let queued = await f.enqueue(event(original, issues: ["too_slow"])); XCTAssertTrue(queued)
         offer = nil
-        try await f.drain()
+        await f.drain()
         XCTAssertEqual(try f.diskEntry(original.entryID).rating, "bad")
         XCTAssertEqual(try f.diskEntry(original.entryID).issues, ["too_slow"])
         await f.dispose()

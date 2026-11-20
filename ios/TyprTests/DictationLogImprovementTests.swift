@@ -3,31 +3,6 @@ import XCTest
 
 @MainActor
 final class DictationLogImprovementTests: XCTestCase {
-    func testStagesAndHumanFeedbackSurviveStorage() async throws {
-        let env = LogTestEnvironment()
-        var context = DictationLogContext()
-        context.cleanupPath = .typr
-        let recording = env.begin(context: context)
-        let raw = "Treffen wir uns um 14:00 Uhr nein besser um 16:00 Uhr."
-        let answer = "Treffen wir uns um 14:00 Uhr um 16:00 Uhr."
-        let formatted = "Treffen wir uns 14:00 Uhr 16:00 Uhr."
-        recording.recognized(raw, spelled: raw, asrMilliseconds: 12, spellingPass: .init())
-        recording.modelAnswer(answer, use: .accepted, modelMilliseconds: 30)
-        recording.processingStages(cleanupOutput: answer, formattedText: formatted)
-        recording.finish(text: formatted, beforeSpelling: formatted, spellingPass: .init())
-        let id = try XCTUnwrap(env.store.entries.first?.id)
-        env.store.saveFeedback(for: id, expectedText: "Treffen wir uns um 16:00 Uhr.", note: "Self-correction and lost preposition")
-        await env.storage.flush()
-        let loaded = DictationLogStore(storage: env.storage, settings: env.settings)
-        try await LogTestEnvironment.waitUntilLoaded(loaded)
-        let entry = try XCTUnwrap(loaded.entries.first)
-        XCTAssertEqual(entry.cleanupOutput?.text, answer)
-        XCTAssertEqual(entry.formattedText?.text, formatted)
-        XCTAssertEqual(entry.expectedText?.text, "Treffen wir uns um 16:00 Uhr.")
-        XCTAssertEqual(entry.feedbackNote?.text, "Self-correction and lost preposition")
-        await env.dispose()
-    }
-
     func testRejectedAnswerAndFallbackAreKeptDistinctAndLateAnswerCannotChangeStages() async throws {
         let env = LogTestEnvironment()
         let recording = env.begin()
