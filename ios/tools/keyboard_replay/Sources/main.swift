@@ -7,6 +7,8 @@ Replays a Typr typing log export through the keyboard's own engine.
   --json        print the report as JSON
        keyboard-replay --make-fixture FILE
 Types the invented test text through the engine and writes it as an export to FILE.
+       keyboard-replay --touch-posterior
+Prints the learned touch densities after fixed labels as JSON, for the touch-model tests.
 """
 
 func readExport(_ path: String) throws -> TypingLogExport {
@@ -43,6 +45,7 @@ func run(_ arguments: [String]) async throws {
             guard let path = rest.popFirst() else { throw ReplayError(usage) }
             fixture = URL(fileURLWithPath: path)
         case "-h", "--help": print(usage); return
+        case "--touch-posterior": print(try touchPosteriorReport(), terminator: ""); return
         default:
             guard input == nil, !argument.hasPrefix("-") else { throw ReplayError(usage) }
             input = argument
