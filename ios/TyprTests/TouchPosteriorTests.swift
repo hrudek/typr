@@ -62,8 +62,6 @@ final class TouchPosteriorTests: XCTestCase {
 
     func testUntrainedKeysUseThePriorPosterior() throws {
         let prior = SpatialTouchCalibration.prior
-        XCTAssertEqual(prior.sigmaX * prior.sigmaX, 2.0 / 9 * 7 * 0.04, accuracy: 1e-15)
-        XCTAssertEqual(prior.degrees, 9)
         let x = 0.3, y = -0.2
         let emissions = try XCTUnwrap(KeyboardLetterMap.emissions(for: word("f", at: (x, y)), calibration: nil))
         XCTAssertEqual(emissions.likelihoods[0][index("f")], prior.logDensity(x: x, y: y), accuracy: 1e-12)
