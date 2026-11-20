@@ -177,6 +177,19 @@ final class KeyboardAppearanceTests: XCTestCase {
         }
     }
 
+    func testDockedPreviewBackdropSpansTheFullDisplayWidth() {
+        let landscape = CGSize(width: 951, height: 669)
+        let widths = KeyboardAppearancePage.dockedPreviewWidths(fullWidth: landscape.width, container: landscape)
+        XCTAssertEqual(widths.backdrop, 951)
+        XCTAssertEqual(widths.keyboard, KeyboardAppearancePage.keyboardWidth(display: landscape))
+        let folded = CGSize(width: 466, height: 678)
+        XCTAssertEqual(KeyboardAppearancePage.dockedPreviewWidths(fullWidth: folded.width, container: folded).backdrop, 466)
+        let phone = CGSize(width: 393, height: 852)
+        let portrait = KeyboardAppearancePage.dockedPreviewWidths(fullWidth: phone.width, container: phone)
+        XCTAssertEqual(portrait.backdrop, 393)
+        XCTAssertEqual(portrait.keyboard, 393)
+    }
+
     func testPreviewSplitsOnlyOnTheOpenDuoSideways() {
         let displays = [CGSize(width: 393, height: 852), CGSize(width: 466, height: 678), CGSize(width: 678, height: 466),
                         CGSize(width: 669, height: 951), CGSize(width: 951, height: 669)]

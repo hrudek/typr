@@ -60,10 +60,16 @@ struct KeyboardAppearancePage: View {
                 .frame(maxWidth: .infinity)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                dockedPreview(in: page.size, foldBottom: Self.horizontalFoldBottom(page), container: window?.size ?? CGSize(
-                    width: page.size.width + page.safeAreaInsets.leading + page.safeAreaInsets.trailing,
-                    height: page.size.height + page.safeAreaInsets.top + page.safeAreaInsets.bottom
-                ))
+                let sideInsets = page.safeAreaInsets.leading + page.safeAreaInsets.trailing
+                dockedPreview(
+                    in: page.size,
+                    fullWidth: page.size.width + sideInsets,
+                    foldBottom: Self.horizontalFoldBottom(page),
+                    container: window?.size ?? CGSize(
+                        width: page.size.width + sideInsets,
+                        height: page.size.height + page.safeAreaInsets.top + page.safeAreaInsets.bottom
+                    )
+                )
             }
             .background(WindowReader { window = $0 })
         }
@@ -109,20 +115,26 @@ struct KeyboardAppearancePage: View {
             .max()
     }
 
-    private func dockedPreview(in page: CGSize, foldBottom: CGFloat?, container: CGSize) -> some View {
+    /// The docked preview spans the page and its horizontal safe-area margins, as the real keyboard's backdrop does.
+    static func dockedPreviewWidths(fullWidth: CGFloat, container: CGSize) -> (backdrop: CGFloat, keyboard: CGFloat) {
+        (fullWidth, min(fullWidth, keyboardWidth(display: container)))
+    }
+
+    private func dockedPreview(in page: CGSize, fullWidth: CGFloat, foldBottom: CGFloat?, container: CGSize) -> some View {
         let settings = preview(container: container)
         let height = KeyboardLayout.height(
             for: settings.orientation, showsStrip: settings.showsSuggestionBar, numberRow: settings.numberRow
         )
         let scale = Self.previewScale(keyboardHeight: height, page: page, foldBottom: foldBottom)
+        let widths = Self.dockedPreviewWidths(fullWidth: fullWidth, container: container)
         return KeyboardAppearancePreview(settings: settings)
-            .frame(width: min(page.width, Self.keyboardWidth(display: container)), height: height)
+            .frame(width: widths.keyboard, height: height)
             .scaleEffect(scale, anchor: .bottom)
-            .frame(width: page.width, height: height * scale, alignment: .bottom)
+            .frame(width: widths.backdrop, height: height * scale, alignment: .bottom)
             .allowsHitTesting(false)
             .accessibilityElement()
             .accessibilityLabel(settings.accessibilityLabel)
-            .background(Self.dockBackdrop(isDark: settings.isDark).ignoresSafeArea(edges: .bottom))
+            .background(Self.dockBackdrop(isDark: settings.isDark).ignoresSafeArea(edges: [.bottom, .horizontal]))
     }
 
     private var controls: some View {
