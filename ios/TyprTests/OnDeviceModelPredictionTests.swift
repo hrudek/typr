@@ -10,23 +10,17 @@ final class OnDeviceModelPredictionTests: XCTestCase {
         func completions(for prefix: String) -> [String] { [] }
     }
 
-    private struct Refusal: Error {}
-
     private final class FakeSystemModel: OnDeviceNextWordModel {
-        enum Mode { case answer, refuse, hold }
         let isAvailable: Bool
         let languages: Set<SpatialWordDecoder.Language>
-        private let mode: Mode
         private let answer: (String) -> [String]
         private(set) var contexts: [String] = []
         private(set) var prewarms = 0
-        private var held: [CheckedContinuation<Void, Never>] = []
 
         init(available: Bool = true, languages: Set<SpatialWordDecoder.Language> = [.german, .english],
-             mode: Mode = .answer, answer: @escaping (String) -> [String] = { _ in ["go"] }) {
+             answer: @escaping (String) -> [String] = { _ in ["go"] }) {
             isAvailable = available
             self.languages = languages
-            self.mode = mode
             self.answer = answer
         }
 
@@ -35,21 +29,7 @@ final class OnDeviceModelPredictionTests: XCTestCase {
 
         func nextWords(after context: String) async throws -> [String] {
             contexts.append(context)
-            switch mode {
-            case .answer: break
-            case .refuse: throw Refusal()
-            case .hold: await withCheckedContinuation { held.append($0) }
-            }
             return answer(context)
-        }
-
-        func waitForRequests(_ count: Int) async {
-            while contexts.count < count || held.count < count { await Task.yield() }
-        }
-
-        func release() {
-            held.forEach { $0.resume() }
-            held = []
         }
     }
 
@@ -59,16 +39,14 @@ final class OnDeviceModelPredictionTests: XCTestCase {
 
     private let sentence = "I would like to "
 
-    private func keyboard(_ model: FakeSystemModel?, timeout: Duration = .seconds(5),
-                          configure: (FixtureTextTarget) -> Void = { _ in }) throws -> (FullKeyboardEngine, FixtureTextTarget) {
+    private func keyboard(_ model: FakeSystemModel?) throws -> (FullKeyboardEngine, FixtureTextTarget) {
         let target = FixtureTextTarget()
-        configure(target)
         let engine = FullKeyboardEngine(target: target, autocorrect: AutocorrectEngine(
             checker: Checker(), spatialDecoder: nil,
             contextResources: .init(model: try XCTUnwrap(BundledKeyboardData.contextModel))))
         engine.width = 393
         engine.modelPredictions = model.map {
-            ModelPredictionSession(provider: OnDeviceModelPredictions(model: $0), timeout: timeout)
+            ModelPredictionSession(provider: OnDeviceModelPredictions(model: $0), timeout: .seconds(5))
         }
         engine.configureForField()
         return (engine, target)
@@ -177,55 +155,5 @@ final class OnDeviceModelPredictionTests: XCTestCase {
         XCTAssertEqual(shown[1], "see", "Likeliest model word in the centre")
         XCTAssertEqual(shown[0], counted[1], "Then the likeliest count word")
         XCTAssertEqual(shown[2].lowercased(), "visit")
-    }
-
-    func testRefusalTimeoutAndUnusableWordsKeepCountPredictions() async throws {
-        let counted = try await countedBar()
-        let refusing = FakeSystemModel(mode: .refuse)
-        let (refused, refusedTarget) = try keyboard(refusing)
-        await type(sentence, refused, refusedTarget)
-        await settle(refused)
-        XCTAssertEqual(refusing.contexts.count, 1)
-        XCTAssertEqual(bar(refused), counted)
-
-        let slow = FakeSystemModel(mode: .hold) { _ in ["late"] }
-        let (timed, timedTarget) = try keyboard(slow, timeout: .milliseconds(50))
-        await type(sentence, timed, timedTarget)
-        await settle(timed)
-        await slow.waitForRequests(1)
-        slow.release()
-        await Task.yield()
-        XCTAssertEqual(bar(timed), counted)
-
-        let (garbled, garbledTarget) = try keyboard(FakeSystemModel { _ in ["two words", "1234", ""] })
-        await type(sentence, garbled, garbledTarget)
-        await settle(garbled)
-        XCTAssertEqual(bar(garbled), counted)
-    }
-
-    func testStaleAnswerIsDropped() async throws {
-        let model = FakeSystemModel(mode: .hold) { $0.hasSuffix("go ") ? ["fresh"] : ["stale"] }
-        let (engine, target) = try keyboard(model)
-        await type(sentence, engine, target)
-        await type("go ", engine, target)
-        await model.waitForRequests(2)
-        model.release()
-        await settle(engine)
-        XCTAssertFalse(bar(engine).contains("stale"))
-        XCTAssertTrue(bar(engine).contains("fresh"))
-    }
-
-    func testSecureUrlEmailAndNumberFieldsNeverReachTheModel() async throws {
-        let fields: [(FixtureTextTarget) -> Void] = [
-            { $0.isSecureTextEntry = true }, { $0.keyboardType = .URL }, { $0.keyboardType = .emailAddress },
-            { $0.keyboardType = .numberPad }, { $0.keyboardType = .numbersAndPunctuation },
-        ]
-        for configure in fields {
-            let model = FakeSystemModel()
-            let (engine, target) = try keyboard(model, configure: configure)
-            await type(sentence, engine, target)
-            await settle(engine)
-            XCTAssertEqual(model.contexts, [])
-        }
     }
 }

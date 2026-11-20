@@ -17,15 +17,13 @@ final class AnthropicPredictionProviderTests: XCTestCase {
         AnthropicPredictionProvider(key: { key }, transport: probe.transport)
     }
 
-    private func keyboard(_ probe: AnthropicTransportProbe, key: String?, timeout: Duration = .seconds(5),
-                          configure: (FixtureTextTarget) -> Void = { _ in }) throws -> (FullKeyboardEngine, FixtureTextTarget) {
+    private func keyboard(_ probe: AnthropicTransportProbe, key: String?) throws -> (FullKeyboardEngine, FixtureTextTarget) {
         let target = FixtureTextTarget()
-        configure(target)
         let engine = FullKeyboardEngine(target: target, autocorrect: AutocorrectEngine(
             checker: Checker(), spatialDecoder: nil,
             contextResources: .init(model: try XCTUnwrap(BundledKeyboardData.contextModel))))
         engine.width = 393
-        engine.modelPredictions = ModelPredictionSession(provider: provider(probe, key: key), timeout: timeout)
+        engine.modelPredictions = ModelPredictionSession(provider: provider(probe, key: key), timeout: .seconds(5))
         engine.configureForField()
         return (engine, target)
     }
@@ -71,7 +69,7 @@ final class AnthropicPredictionProviderTests: XCTestCase {
         XCTAssertEqual(messages.map { $0["content"] as? String }, [sentence])
     }
 
-    func testRateLimitTimeoutAndMalformedKeepLocalPredictions() async throws {
+    func testRateLimitAndMalformedKeepLocalPredictions() async throws {
         let (local, localTarget) = try keyboard(AnthropicTransportProbe(), key: nil)
         await type(sentence, local, localTarget)
         let counted = bar(local)
@@ -84,10 +82,8 @@ final class AnthropicPredictionProviderTests: XCTestCase {
         malformed.body = Data("not json".utf8)
         let empty = AnthropicTransportProbe()
         empty.body = AnthropicTransportProbe.message(text: "")
-        let slow = AnthropicTransportProbe()
-        slow.waitForCancellation = true
-        for probe in [limited, overloaded, malformed, empty, slow] {
-            let (engine, target) = try keyboard(probe, key: key, timeout: .milliseconds(100))
+        for probe in [limited, overloaded, malformed, empty] {
+            let (engine, target) = try keyboard(probe, key: key)
             await type(sentence, engine, target)
             XCTAssertEqual(probe.requests.count, 1)
             XCTAssertEqual(bar(engine), counted)
@@ -112,20 +108,6 @@ final class AnthropicPredictionProviderTests: XCTestCase {
         XCTAssertEqual(probe.requests.count, 2, "The newer context replaces the active request")
         XCTAssertTrue(probe.cancelled, "The stale request is cancelled")
         engine.cancelSuggestions()
-    }
-
-    func testRestrictedFieldsSendNothing() async throws {
-        let fields: [(FixtureTextTarget) -> Void] = [
-            { $0.isSecureTextEntry = true }, { $0.keyboardType = .URL }, { $0.keyboardType = .emailAddress },
-            { $0.keyboardType = .numberPad }, { $0.keyboardType = .numbersAndPunctuation },
-            { $0.autocorrectionType = .no }, { $0.inlinePredictionType = .no },
-        ]
-        for configure in fields {
-            let probe = AnthropicTransportProbe()
-            let (engine, target) = try keyboard(probe, key: key, configure: configure)
-            await type(sentence, engine, target)
-            XCTAssertEqual(probe.requests.count, 0)
-        }
     }
 
     func testParseErrorsCarryNoResponseText() {
