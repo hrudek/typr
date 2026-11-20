@@ -706,6 +706,8 @@ final class SpatialWordDecoderTests: XCTestCase {
                        "A small lead of the other language loses to the preferred one")
         let englishClear = [candidate("work", .english, score: 8), candidate("wird", .german, score: 4.5)]
         XCTAssertEqual(decision(englishClear, preferring: .german), "work")
+        XCTAssertEqual(decision([candidate("work", .english, score: 0.1)], preferring: .german), "work",
+                       "The preference penalty does not apply against the literal")
     }
 
     func testPersonalCandidatesPriorAndCalibrationNormalization() throws {
@@ -804,7 +806,10 @@ final class SpatialWordDecoderTests: XCTestCase {
         }
         XCTAssertTrue(decoder.decode(evidence("xello", aimedAt: "zello"), languages: [.english],
             personal: updated)?.candidates.contains { $0.word == "zello" && $0.language == nil } ?? false)
-        XCTAssertFalse(decoder.decode(evidence("xello", aimedAt: "zello"), languages: [.english], personal: snapshot)?.candidates.contains { $0.language == nil } ?? true)
+        let word = evidence("xello", aimedAt: "zello")
+        let keptOnly = PersonalLexiconSnapshot(kept: ["zello"], counts: [:], rejected: [])
+        XCTAssertTrue(decoder.decode(word, languages: [.english], personal: keptOnly)?.candidates.contains { $0.word == "zello" } ?? false)
+        XCTAssertFalse(decoder.decode(word, languages: [.english], personal: snapshot)?.candidates.contains { $0.language == nil } ?? true)
     }
 
     func testLearningAlignmentDropsAmbiguousAndTransposedLabels() {
@@ -1146,7 +1151,6 @@ final class SpatialChecker: TextChecking {
     func completions(for prefix: String) -> [String] { prefixes }
 }
 
-/// TSW1 fixture writer, independent of the production Python compiler.
 func spatialLexicon(_ words: [(String, UInt32)]) -> SpatialWordLexicon {
     final class Node {
         var children: [Int: Node] = [:]
