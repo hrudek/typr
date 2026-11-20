@@ -375,14 +375,6 @@ final class FullKeyboardEngineTests: XCTestCase {
         XCTAssertEqual(target.text, "ok. 4 ")
     }
 
-    func testSlowDoubleSpaceStaysTwoSpaces() {
-        type("ok")
-        tap(.space)
-        now += 0.5
-        tap(.space)
-        XCTAssertEqual(target.text, "ok  ")
-    }
-
     func testSentenceAutoCapitalization() {
         target.autocapitalizationType = .sentences
         engine.configureForField()

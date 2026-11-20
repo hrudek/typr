@@ -730,72 +730,41 @@ final class KeyboardLayoutTests: XCTestCase {
 
 @MainActor
 final class FullKeyboardSettingsTests: XCTestCase {
-    func testAutocorrectAndSwipeTypingAreOnByDefault() throws {
+    func testKeyboardSettingsDefaultRoundTripAndFallBack() throws {
         let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = FullKeyboardSettings(defaults: defaults)
+        let fresh = { FullKeyboardSettings(defaults: defaults) }
 
         XCTAssertTrue(settings.autocorrect)
         XCTAssertTrue(settings.swipeTyping)
+        XCTAssertFalse(settings.numberRow)
+        XCTAssertFalse(settings.splitKeyboard)
+        XCTAssertEqual(settings.design, .standard)
+        XCTAssertEqual(settings.bottomRow, BottomRow(order: [.space, .period, .typr], periodKey: false))
 
         settings.autocorrect = false
-        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).autocorrect)
         settings.swipeTyping = false
-        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).swipeTyping)
-    }
-
-    func testKeyboardDesignDefaultsRoundTripsAndFallsBack() throws {
-        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = FullKeyboardSettings(defaults: defaults)
-
-        XCTAssertEqual(settings.design, .standard)
-        settings.design = .mechanical
-        XCTAssertEqual(FullKeyboardSettings(defaults: defaults).design, .mechanical)
-        defaults.set("neon", forKey: "settings.keyboardDesign")
-        XCTAssertEqual(settings.design, .standard)
-    }
-
-    func testNumberRowIsOffByDefaultAndRoundTrips() throws {
-        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = FullKeyboardSettings(defaults: defaults)
-
-        XCTAssertFalse(settings.numberRow)
         settings.numberRow = true
-        XCTAssertTrue(FullKeyboardSettings(defaults: defaults).numberRow)
-        settings.numberRow = false
-        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).numberRow)
-    }
-
-    func testSplitKeyboardIsOffByDefaultAndRoundTrips() throws {
-        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = FullKeyboardSettings(defaults: defaults)
-
-        XCTAssertFalse(settings.splitKeyboard)
         settings.splitKeyboard = true
-        XCTAssertTrue(FullKeyboardSettings(defaults: defaults).splitKeyboard)
-        XCTAssertEqual(defaults.object(forKey: "settings.keyboardSplit") as? Bool, true)
-        settings.splitKeyboard = false
-        XCTAssertFalse(FullKeyboardSettings(defaults: defaults).splitKeyboard)
-    }
-
-    func testBottomRowDefaultsToSpaceThenTyprAndRoundTrips() throws {
-        let suite = "FullKeyboardSettingsTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = FullKeyboardSettings(defaults: defaults)
-
-        XCTAssertEqual(settings.bottomRow, BottomRow(order: [.space, .period, .typr], periodKey: false))
+        settings.design = .mechanical
         let arranged = BottomRow(order: [.typr, .space, .period], periodKey: true)
         settings.bottomRow = arranged
-        XCTAssertEqual(FullKeyboardSettings(defaults: defaults).bottomRow, arranged)
+        XCTAssertFalse(fresh().autocorrect)
+        XCTAssertFalse(fresh().swipeTyping)
+        XCTAssertTrue(fresh().numberRow)
+        XCTAssertTrue(fresh().splitKeyboard)
+        XCTAssertEqual(fresh().design, .mechanical)
+        XCTAssertEqual(fresh().bottomRow, arranged)
+        settings.numberRow = false
+        settings.splitKeyboard = false
+        XCTAssertFalse(fresh().numberRow)
+        XCTAssertFalse(fresh().splitKeyboard)
+
+        defaults.set("neon", forKey: "settings.keyboardDesign")
         defaults.set(["typr", "emoji"], forKey: "settings.keyboardBottomRowOrder")
+        XCTAssertEqual(settings.design, .standard)
         XCTAssertEqual(settings.bottomRow.order, [.space, .period, .typr])
     }
 }

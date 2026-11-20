@@ -90,32 +90,20 @@ final class KeyboardBridgeTests: XCTestCase {
         )
     }
 
-    func testKeyboardRecordingLaunchRoundTripsMetadataAndEnforcesTenSecondWindow() {
+    func testKeyboardLaunchURLsRoundTripAndOnlyRecordingHasAHandoffWindow() {
         let t0 = 2_000.0
-        let request = KeyboardLaunchRequest.startRecording(
-            jobID: "job with spaces",
-            requestedAt: t0,
-            style: .casual,
-            host: "com.openai.chat"
-        )
-
-        let decoded = KeyboardLaunchRequest(url: request.url)
-        XCTAssertEqual(decoded, request)
-        XCTAssertFalse(request.isHandoffExpired(at: t0 + 9.9))
-        XCTAssertTrue(request.isHandoffExpired(at: t0 + 10.1))
-    }
-
-    func testKeyboardSessionLaunchDoesNotRequestRecording() {
-        let request = KeyboardLaunchRequest.startSession(requestedAt: 100, host: "com.apple.MobileSMS")
-        XCTAssertEqual(KeyboardLaunchRequest(url: request.url), request)
-        XCTAssertEqual(request.host, "com.apple.MobileSMS")
-    }
-
-    func testKeyboardSetupLaunchRoundTripsWithoutAHandoff() {
-        let request = KeyboardLaunchRequest.setup
-        XCTAssertEqual(request.url.absoluteString, "typr://keyboard/setup")
-        XCTAssertEqual(KeyboardLaunchRequest(url: request.url), request)
-        XCTAssertFalse(request.isHandoffExpired(at: 1_000_000))
+        let record = KeyboardLaunchRequest.startRecording(jobID: "job with spaces", requestedAt: t0, style: .casual,
+                                                          host: "com.openai.chat")
+        let session = KeyboardLaunchRequest.startSession(requestedAt: 100, host: "com.apple.MobileSMS")
+        for request in [record, session, .setup] {
+            XCTAssertEqual(KeyboardLaunchRequest(url: request.url), request)
+        }
+        XCTAssertFalse(record.isHandoffExpired(at: t0 + 9.9))
+        XCTAssertTrue(record.isHandoffExpired(at: t0 + 10.1))
+        XCTAssertEqual(session.host, "com.apple.MobileSMS")
+        XCTAssertEqual(KeyboardLaunchRequest.setup.url.absoluteString, "typr://keyboard/setup")
+        XCTAssertFalse(KeyboardLaunchRequest.setup.isHandoffExpired(at: 1_000_000))
+        XCTAssertNil(KeyboardLaunchRequest(url: URL(string: "typr://keyboard/record")!), "recording needs a job")
     }
 
     @MainActor
@@ -128,11 +116,6 @@ final class KeyboardBridgeTests: XCTestCase {
         XCTAssertNil(bridge.fullAccessSeenAt)
         bridge.fullAccessSeenAt = 1_234
         XCTAssertEqual(KeyboardBridge(defaults: defaults).fullAccessSeenAt, 1_234)
-    }
-
-    func testKeyboardRecordingLaunchRequiresAJob() {
-        let url = URL(string: "typr://keyboard/record")!
-        XCTAssertNil(KeyboardLaunchRequest(url: url))
     }
 
     func testTranscriptStylesFormatDeterministically() {

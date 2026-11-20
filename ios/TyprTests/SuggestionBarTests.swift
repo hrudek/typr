@@ -17,22 +17,14 @@ final class SuggestionBarTests: XCTestCase {
         defaults.removePersistentDomain(forName: suite)
     }
 
-    func testAllKeyboardDefaultsOnEmptyDefaults() {
+    func testTyprKeyboardDefaultsOnEmptyDefaultsAndTheBarSettingPersists() {
         let settings = TyprSettings(defaults: defaults)
-        let keyboard = FullKeyboardSettings(defaults: defaults)
-        XCTAssertTrue(keyboard.autocorrect)
-        XCTAssertTrue(keyboard.swipeTyping)
         XCTAssertFalse(settings.hideSuggestionBar)
         XCTAssertFalse(settings.aiCleanup)
         XCTAssertTrue(settings.personalLearning)
         XCTAssertTrue(settings.autocorrectGerman)
         XCTAssertTrue(settings.autocorrectEnglish)
         XCTAssertFalse(settings.dictationFeedbackStrip)
-    }
-
-    func testSettingDefaultsOffAndPersists() {
-        let settings = TyprSettings(defaults: defaults)
-        XCTAssertFalse(settings.hideSuggestionBar)
         settings.hideSuggestionBar = true
         XCTAssertTrue(TyprSettings(defaults: defaults).hideSuggestionBar)
     }
