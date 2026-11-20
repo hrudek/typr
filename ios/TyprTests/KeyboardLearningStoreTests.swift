@@ -75,7 +75,6 @@ final class KeyboardLearningStoreTests: XCTestCase {
                                    context: contextWord + " " + contextWord)
         }
         XCTAssertEqual(model.state.rejected.count, 512)
-        let rawBytes = try JSONEncoder().encode(model.state).count
         var counters = KeyboardDiagnostics()
         XCTAssertTrue(fixture.store().save(model: model.state, diagnostics: &counters))
         let bytes = try Data(contentsOf: fixture.file("learning-v1.json")).count
@@ -84,7 +83,6 @@ final class KeyboardLearningStoreTests: XCTestCase {
         XCTAssertLessThan(saved.rejected.count, 512, "Byte limit may evict FIFO protections")
         XCTAssertFalse(saved.rejected.isEmpty)
         XCTAssertEqual(saved.rejected.first?.remaining, 256)
-        print("EVAL R2_3_file_cap input_pairs=512 raw_state_bytes=\(rawBytes) saved_pairs=\(saved.rejected.count) saved_file_bytes=\(bytes) cap=262144")
     }
 
     func testContextRejectionDeletionReloadAndReset() throws {
@@ -108,7 +106,6 @@ final class KeyboardLearningStoreTests: XCTestCase {
         XCTAssertTrue(fixture.store().requestLearningReset())
         session.refresh()
         XCTAssertTrue(session.model.state.rejected.isEmpty)
-        print("EVAL R2_3_store reloaded_remaining=192 reloaded_global=0 predecessor_deletion_remaining=0 pair_deletion_remaining=0 reset_remaining=0")
     }
 
     func testDeleteWithoutPersistentStorageDoesNotPretendToSucceed() {

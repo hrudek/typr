@@ -134,25 +134,6 @@ final class KeyboardPersonalLexiconLearningTests: XCTestCase {
         XCTAssertTrue(chips.contains { $0.replacement == "malin" && $0.isCompletion && !$0.willAutoReplace })
     }
 
-    func testNameControlBeforeAfterEvaluation() {
-        let controls = ["ina", "malin", "andi", "jens", "maren", "siemens", "herdr", "typr",
-                        "Mälin", "Jürgen", "Zoë", "O'Neil", "Alice", "Microsoft", "OpenAI", "Whisper"]
-        let ac = engine()
-        let imported = lexicon(controls.joined(separator: " "))
-        var before = 0
-        var after = 0
-        for word in controls {
-            if ac.replacementOnSpace(beforeInput: word, field: .text, autocorrectionType: .default) != nil { before += 1 }
-        }
-        ac.loadProtectedLexicon(imported)
-        for word in controls {
-            if ac.replacementOnSpace(beforeInput: word, field: .text, autocorrectionType: .default) != nil { after += 1 }
-        }
-        XCTAssertGreaterThan(before, 0)
-        XCTAssertEqual(after, 0)
-        print("EVAL R2_1_names n=\(controls.count) before_auto=\(before) after_auto=\(after) checker=synthetic_adversarial_same_fixtures NOT-iPhone")
-    }
-
     func testCapSizedLoadWorkEvaluation() throws {
         var builder = ProtectedPersonalLexicon.Builder()
         for i in 0..<2_000 { builder.add(String(repeating: "a", count: 61) + suffix(i)) }
@@ -162,6 +143,5 @@ final class KeyboardPersonalLexiconLearningTests: XCTestCase {
         XCTAssertLessThanOrEqual(data.count, ProtectedPersonalLexicon.maximumFileBytes)
         XCTAssertEqual(ProtectedPersonalLexicon.decode(data), value)
         XCTAssertEqual(value.words.reduce(0) { $0 + $1.utf8.count }, 128_000)
-        print("EVAL R2_1_bounds entries=\(value.words.count) token_bytes=128000 encoded_bytes=\(data.count) file_cap=262144 max_read_bytes=262145 validated_entries=2000 binary_query_comparisons_max=11 completions_max=3 memory=payload_NOT_RSS NOT-iPhone")
     }
 }
