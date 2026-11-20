@@ -22,16 +22,25 @@ final class DictationKeyStyleTests: XCTestCase {
         return image
     }
 
-    private func returnKeyFace(in image: UIImage) -> UIColor {
-        let point = CGPoint(x: image.size.width - 10 - 56 + 9, y: image.size.height - 6 - 21)
-        guard let data = image.cgImage?.dataProvider?.data, let bytes = CFDataGetBytePtr(data),
-              let cg = image.cgImage else { return .clear }
-        let offset = Int(point.y) * cg.bytesPerRow + Int(point.x) * cg.bitsPerPixel / 8
-        let isBGRA = cg.bitmapInfo.contains(.byteOrder32Little)
-        let r = CGFloat(bytes[offset + (isBGRA ? 2 : 0)]) / 255
-        let g = CGFloat(bytes[offset + 1]) / 255
-        let b = CGFloat(bytes[offset + (isBGRA ? 0 : 2)]) / 255
-        return UIColor(red: r, green: g, blue: b, alpha: 1)
+    private func keycaps(in view: UIView) -> [Keycap.KeycapView] {
+        view.subviews.flatMap { subview -> [Keycap.KeycapView] in
+            if let keycap = subview as? Keycap.KeycapView { return [keycap] }
+            return keycaps(in: subview)
+        }
+    }
+
+    private func color(at point: CGPoint, in image: UIImage) throws -> UIColor {
+        let pixel = try XCTUnwrap(image.cgImage?.cropping(to: CGRect(x: Int(point.x), y: Int(point.y), width: 1, height: 1)))
+        var rgba = [UInt8](repeating: 0, count: 4)
+        let space = try XCTUnwrap(CGColorSpace(name: CGColorSpace.sRGB))
+        try rgba.withUnsafeMutableBytes { buffer in
+            let context = try XCTUnwrap(CGContext(
+                data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
+            context.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        return UIColor(red: CGFloat(rgba[0]) / 255, green: CGFloat(rgba[1]) / 255, blue: CGFloat(rgba[2]) / 255, alpha: 1)
     }
 
     private func assertClose(_ a: UIColor, _ b: UIColor, file: StaticString = #filePath, line: UInt = #line) {
@@ -44,10 +53,19 @@ final class DictationKeyStyleTests: XCTestCase {
         XCTAssertEqual(ab, bb, accuracy: 3.0 / 255, file: file, line: line)
     }
 
-    func testStandardDesignDrawsFullKeyboardKeyFill() {
+    func testStandardDesignDrawsFullKeyboardKeyFill() throws {
         let model = KeyboardViewModel()
         model.keyDesign = .standard
-        assertClose(returnKeyFace(in: render(model)), FullKeyboardPalette(isDark: true).keyFill)
+        let host = UIHostingController(rootView: KeyboardSurfaceView(model: model))
+        let image = render(model, host: host)
+        let caps = keycaps(in: host.view)
+        XCTAssertFalse(caps.isEmpty)
+        for cap in caps {
+            let face = cap.bounds.insetBy(dx: Keycap.shadowOverhang, dy: Keycap.shadowOverhang)
+            let point = cap.convert(CGPoint(x: face.minX + FullKeyboardPalette.cornerRadius, y: face.midY), to: host.view)
+            XCTAssertTrue(CGRect(origin: .zero, size: image.size).contains(point))
+            assertClose(try color(at: point, in: image), FullKeyboardPalette(isDark: true).keyFill)
+        }
     }
 
     func testDesignChangeRedrawsMountedKeys() {
