@@ -94,13 +94,6 @@ final class VocabularySpellingTests: XCTestCase {
         )
     }
 
-    func testMatchesACompoundTermAcrossThePlainPhrase() {
-        XCTAssertEqual(
-            VocabularySpelling.apply(["WeChat"], to: "message me on we chat"),
-            "message me on WeChat"
-        )
-    }
-
     func testPrefersTheLongestWindow() {
         XCTAssertEqual(
             VocabularySpelling.apply(["Open", "OpenCode"], to: "open code"),

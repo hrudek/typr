@@ -187,7 +187,6 @@ final class AnthropicCleanupTests: XCTestCase {
         await session(probe).prewarm()
         XCTAssertTrue(probe.requests.isEmpty)
     }
-
 }
 
 @MainActor
