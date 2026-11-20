@@ -757,6 +757,10 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertTrue(fresh().splitKeyboard)
         XCTAssertEqual(fresh().design, .mechanical)
         XCTAssertEqual(fresh().bottomRow, arranged)
+        settings.numberRow = false
+        settings.splitKeyboard = false
+        XCTAssertFalse(fresh().numberRow)
+        XCTAssertFalse(fresh().splitKeyboard)
 
         defaults.set("neon", forKey: "settings.keyboardDesign")
         defaults.set(["typr", "emoji"], forKey: "settings.keyboardBottomRowOrder")
