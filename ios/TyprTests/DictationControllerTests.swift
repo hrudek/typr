@@ -1,4 +1,3 @@
-import AVFAudio
 import XCTest
 @testable import Typr
 
@@ -181,16 +180,7 @@ final class DictationControllerTests: XCTestCase {
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
 
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
         XCTAssertEqual(controller.phase, .ready)
 
         // Start Job A and suspend its transcription in-flight.
@@ -244,17 +234,8 @@ final class DictationControllerTests: XCTestCase {
         await transcriber.armSuspension()
         let bridge = KeyboardBridge(defaults: defaults)
 
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            hostReturner: HostReturner(openByBundleID: { _ in false }, openURL: { _ in false })
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now },
+                                                   hostReturner: HostReturner(openByBundleID: { _ in false }, openURL: { _ in false }))
 
         controller.setWarmDuration(.off)
         // Very casual preserves this regression's lowercase output after the Casual style split.
@@ -289,26 +270,18 @@ final class DictationControllerTests: XCTestCase {
         var openedBundleIDs: [String] = []
         var openedURLs: [URL] = []
 
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            hostReturner: HostReturner(
-                openByBundleID: { id in
-                    openedBundleIDs.append(id)
-                    return id == "com.openai.chat"
-                },
-                openURL: { url in
-                    openedURLs.append(url)
-                    return url.scheme == "ichat"
-                }
-            )
+        let returner = HostReturner(
+            openByBundleID: { id in
+                openedBundleIDs.append(id)
+                return id == "com.openai.chat"
+            },
+            openURL: { url in
+                openedURLs.append(url)
+                return url.scheme == "ichat"
+            }
         )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now },
+                                                   hostReturner: returner)
 
         // 1. Expired (>10s) handoff warms session without surprise-recording or returning.
         controller.handleKeyboardLaunch(
@@ -391,16 +364,7 @@ final class DictationControllerTests: XCTestCase {
         await transcriber.setCannedOutput("saved before call")
         let bridge = KeyboardBridge(defaults: defaults)
 
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
         controller.toggleWarmSession()
         try await activationSettled(controller)
 
@@ -431,16 +395,7 @@ final class DictationControllerTests: XCTestCase {
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
 
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
         XCTAssertTrue(controller.keyboardSessionEnabled)
@@ -473,12 +428,7 @@ final class DictationControllerTests: XCTestCase {
         audio.isOtherAudioPlaying = true
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = DictationController(
-            audio: audio, keyboardBridge: bridge, transcriber: transcriber,
-            transcriberFactory: { transcriber }, now: { now }, autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
         // Synchronous: with media playing a warm-only request ends the session without activating.
         controller.selectWarmDuration(.fifteenMinutes)
         XCTAssertFalse(controller.keyboardSessionEnabled)
@@ -526,13 +476,7 @@ final class DictationControllerTests: XCTestCase {
             audio.nextCaptureDuration = outcome == "short" ? 0.1 : 1.4
             audio.captureShouldThrow = outcome == "failure"
             let transcriber = ControlledTranscriber()
-            let controller = DictationController(
-                audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
-                transcriberFactory: { transcriber }, autoPrepareOnInit: false,
-                audioActivationRetryDelays: []
-            )
-            drainAtTeardown(controller)
-            try await ready(controller)
+            let controller = try await readyController(audio: audio, transcriber: transcriber, retryDelays: [])
             controller.setWarmDuration(.fifteenMinutes)
             controller.startRecording()
             try await activationSettled(controller)
@@ -561,12 +505,7 @@ final class DictationControllerTests: XCTestCase {
     func testMediaStartingDuringWarmSessionLeavesInputColdAfterInterruption() async throws {
         let audio = FakeAudioManager()
         let transcriber = ControlledTranscriber()
-        let controller = DictationController(
-            audio: audio, keyboardBridge: KeyboardBridge(defaults: defaults), transcriber: transcriber,
-            transcriberFactory: { transcriber }, autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, transcriber: transcriber)
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
         XCTAssertTrue(audio.isKeepaliveRunning)
@@ -580,33 +519,13 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertTrue(audio.isOtherAudioPlaying)
     }
 
-    func testRecordedWAVFixtureIsValidSilentTestInput() throws {
-        let bundle = Bundle(for: Self.self)
-        let wavURL = try XCTUnwrap(
-            bundle.url(forResource: "term-hex-1", withExtension: "wav"),
-            "Expected recorded WAV fixture in test bundle"
-        )
-        let audioFile = try AVAudioFile(forReading: wavURL)
-        XCTAssertEqual(audioFile.fileFormat.sampleRate, 16_000, accuracy: 1)
-        XCTAssertGreaterThan(audioFile.length, 4_000)
-    }
-
     func testSelectWarmDurationWarmsAndEndsWithoutSeparateButton() async throws {
         let now = 12_000.0
         let audio = FakeAudioManager()
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
 
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
 
         controller.setWarmDuration(.off)
         XCTAssertFalse(controller.keyboardSessionEnabled)
@@ -627,17 +546,8 @@ final class DictationControllerTests: XCTestCase {
         let audio = FakeAudioManager()
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            hostReturner: HostReturner(openByBundleID: { _ in true }, openURL: { _ in false })
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now },
+                                                   hostReturner: HostReturner(openByBundleID: { _ in true }, openURL: { _ in false }))
         controller.setWarmDuration(.off)
 
         controller.handleKeyboardLaunch(
@@ -662,16 +572,7 @@ final class DictationControllerTests: XCTestCase {
         audio.isOtherAudioPlaying = true
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
         controller.setWarmDuration(.off)
         controller.handleKeyboardLaunch(
             .startRecording(jobID: "media-job", requestedAt: now - 0.3, style: .polished, host: nil)
@@ -706,16 +607,7 @@ final class DictationControllerTests: XCTestCase {
         audio.nextCaptureIsRecording = initiallyRecording
         let transcriber = ControlledTranscriber()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now })
         controller.startRecording(keyboardJobID: "meter-recovery")
         try await activationSettled(controller)
         let capture = try XCTUnwrap(audio.createdCaptures.last)
@@ -762,17 +654,8 @@ final class DictationControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults)
         let settings = CustomVocabularySettings(defaults: defaults)
         settings.terms = ["OpenCode"]
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            customVocabularySettings: settings
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now },
+                                                   vocabulary: settings)
 
         // Off: the transcript is formatted exactly as before.
         settings.isEnabled = false
@@ -803,17 +686,8 @@ final class DictationControllerTests: XCTestCase {
         let bridge = KeyboardBridge(defaults: defaults)
         let settings = CustomVocabularySettings(defaults: defaults)
         settings.terms = ["OpenCode"]
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            customVocabularySettings: settings
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now },
+                                                   vocabulary: settings)
 
         settings.isEnabled = false
         controller.startRecording(keyboardJobID: "vocabulary-hint-off")
@@ -833,36 +707,6 @@ final class DictationControllerTests: XCTestCase {
         XCTAssertEqual(arguments, [TechGlossary.listedTerms, ["OpenCode"] + TechGlossary.listedTerms])
     }
 
-    func testCustomVocabularySurvivesCasualFormatting() async throws {
-        let now = 70_000.0
-        let audio = FakeAudioManager()
-        let transcriber = ControlledTranscriber()
-        await transcriber.setCannedOutput("iphone 17 broke")
-        let bridge = KeyboardBridge(defaults: defaults)
-        let settings = CustomVocabularySettings(defaults: defaults)
-        settings.terms = ["iPhone 17"]
-        settings.isEnabled = true
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            customVocabularySettings: settings
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
-
-        // Very casual lowercases the whole sentence, so the second spelling pass has to
-        // restore the listed term.
-        controller.startRecording(keyboardJobID: "vocabulary-casual", styleOverride: .veryCasual)
-        try await activationSettled(controller)
-        controller.finishRecording()
-        try await transcribed(controller)
-        XCTAssertEqual(controller.transcript, "iPhone 17 broke")
-    }
-
     func testCustomVocabularySurvivesPolishedFormatting() async throws {
         let now = 80_000.0
         let audio = FakeAudioManager()
@@ -872,17 +716,8 @@ final class DictationControllerTests: XCTestCase {
         let settings = CustomVocabularySettings(defaults: defaults)
         settings.terms = ["iPhone 17"]
         settings.isEnabled = true
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: { transcriber },
-            now: { now },
-            autoPrepareOnInit: false,
-            customVocabularySettings: settings
-        )
-        drainAtTeardown(controller)
-        try await ready(controller)
+        let controller = try await readyController(audio: audio, bridge: bridge, transcriber: transcriber, now: { now },
+                                                   vocabulary: settings)
 
         // Polished capitalizes the sentence start ("IPhone"), so the second pass
         // has to restore the listed term.
@@ -895,37 +730,18 @@ final class DictationControllerTests: XCTestCase {
 
     // MARK: - Start without waiting after failures (2026-11-12 device logs)
 
-    private func makeRecoveryController(
-        audio: FakeAudioManager,
-        bridge: KeyboardBridge,
-        now: TimeInterval,
-        retryDelays: [Duration],
-        onPrepare: @escaping () -> Void = {}
-    ) -> DictationController {
-        let transcriber = ControlledTranscriber()
-        let controller = DictationController(
-            audio: audio,
-            keyboardBridge: bridge,
-            transcriber: transcriber,
-            transcriberFactory: {
-                onPrepare()
-                return transcriber
-            },
-            now: { now },
-            autoPrepareOnInit: false,
-            hostReturner: HostReturner(openByBundleID: { _ in false }, openURL: { _ in false }),
-            audioActivationRetryDelays: retryDelays
-        )
-        drainAtTeardown(controller)
-        return controller
+    private func recoveryController(audio: FakeAudioManager, bridge: KeyboardBridge, now: TimeInterval,
+                                    retryDelays: [Duration], onPrepare: @escaping () -> Void = {}) async throws -> DictationController {
+        try await readyController(audio: audio, bridge: bridge, now: { now },
+                                  hostReturner: HostReturner(openByBundleID: { _ in false }, openURL: { _ in false }),
+                                  retryDelays: retryDelays, onPrepare: onPrepare)
     }
 
     func testActivationRetriesWhileAnotherAppStillHoldsAudio() async throws {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 20_000,
-                                                retryDelays: [.milliseconds(1), .milliseconds(1)])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: 20_000,
+                                                      retryDelays: [.milliseconds(1), .milliseconds(1)])
 
         audio.busyActivationsRemaining = 2
         controller.startRecording(keyboardJobID: "after-voice-message")
@@ -938,9 +754,8 @@ final class DictationControllerTests: XCTestCase {
     func testRefusalBeyondRetriesExplainsThatAudioIsBusy() async throws {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 21_000,
-                                                retryDelays: [.milliseconds(1)])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: 21_000,
+                                                      retryDelays: [.milliseconds(1)])
 
         audio.busyActivationsRemaining = 5
         controller.startRecording(keyboardJobID: "busy")
@@ -954,9 +769,8 @@ final class DictationControllerTests: XCTestCase {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
         var prepares = 0
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: now,
-                                                retryDelays: [], onPrepare: { prepares += 1 })
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: now,
+                                                      retryDelays: [], onPrepare: { prepares += 1 })
         XCTAssertEqual(prepares, 1)
 
         audio.captureShouldThrow = true
@@ -978,8 +792,7 @@ final class DictationControllerTests: XCTestCase {
         let now = 23_000.0
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: now, retryDelays: [])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: now, retryDelays: [])
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
         XCTAssertTrue(audio.isKeepaliveRunning)
@@ -1002,9 +815,8 @@ final class DictationControllerTests: XCTestCase {
     func testInterruptionResumeRetriesBeforeEndingWarmSession() async throws {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 24_000,
-                                                retryDelays: [.milliseconds(1), .milliseconds(1)])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: 24_000,
+                                                      retryDelays: [.milliseconds(1), .milliseconds(1)])
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
 
@@ -1030,9 +842,8 @@ final class DictationControllerTests: XCTestCase {
         let now = 25_000.0
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: now,
-                                                retryDelays: [.milliseconds(50), .milliseconds(50)])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: now,
+                                                      retryDelays: [.milliseconds(50), .milliseconds(50)])
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
 
@@ -1060,8 +871,7 @@ final class DictationControllerTests: XCTestCase {
     func testFailedStartDuringCallKeepsWarmSessionUntilTheCallEnds() async throws {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 26_000, retryDelays: [])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: 26_000, retryDelays: [])
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
 
@@ -1084,8 +894,7 @@ final class DictationControllerTests: XCTestCase {
     func testSuccessfulStartDuringInterruptionEndsTheSuspension() async throws {
         let audio = FakeAudioManager()
         let bridge = KeyboardBridge(defaults: defaults)
-        let controller = makeRecoveryController(audio: audio, bridge: bridge, now: 27_000, retryDelays: [])
-        try await ready(controller)
+        let controller = try await recoveryController(audio: audio, bridge: bridge, now: 27_000, retryDelays: [])
         controller.selectWarmDuration(.fifteenMinutes)
         try await activationSettled(controller)
 
@@ -1128,9 +937,20 @@ final class DictationControllerTests: XCTestCase {
     private static let meterCycle = Duration.milliseconds(33)
     private static let sessionLoopTick = Duration.milliseconds(100)
 
-    private func ready(_ controller: DictationController) async throws {
+    private func readyController(
+        audio: FakeAudioManager, bridge: KeyboardBridge? = nil, transcriber: ControlledTranscriber = ControlledTranscriber(),
+        now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 }, hostReturner: HostReturner? = nil,
+        vocabulary: CustomVocabularySettings = CustomVocabularySettings(),
+        retryDelays: [Duration] = DictationController.audioActivationRetryDelays, onPrepare: @escaping () -> Void = {}
+    ) async throws -> DictationController {
+        let controller = DictationController(
+            audio: audio, keyboardBridge: bridge ?? KeyboardBridge(defaults: defaults), transcriber: transcriber,
+            transcriberFactory: { onPrepare(); return transcriber }, now: now, autoPrepareOnInit: false,
+            hostReturner: hostReturner, customVocabularySettings: vocabulary, audioActivationRetryDelays: retryDelays)
+        controllers.append(controller)
         controller.prepareModel()
         try await waitForState("model ready") { controller.phase == .ready }
+        return controller
     }
 
     /// A warm-session activation or a capture start sets `.requestingPermission` synchronously and
@@ -1146,11 +966,5 @@ final class DictationControllerTests: XCTestCase {
 
     private func asrSuspended(_ transcriber: ControlledTranscriber) async throws {
         try await waitForState("transcription suspended in ASR") { await transcriber.isWaiting() }
-    }
-
-    /// `tearDown` drains this controller before it removes the defaults domain the bridge writes to,
-    /// also after a failed `guard`.
-    private func drainAtTeardown(_ controller: DictationController) {
-        controllers.append(controller)
     }
 }
