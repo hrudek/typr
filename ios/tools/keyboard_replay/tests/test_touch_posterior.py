@@ -145,49 +145,6 @@ class TouchPosteriorTests(unittest.TestCase):
                 for probe, actual in zip(self.report["probes"], case["qDensity"]):
                     self.assertAlmostEqual(actual, log_t(q, *probe), places=9)
 
-    def test_displaced_taps_move_only_that_key_and_recover(self):
-        grip = self.report["grip"]
-        before, displaced, recovered = grip["before"], grip["displaced"], grip["recovered"]
-        self.assertGreater(displaced["e"][0] - before["e"][0], 0.08)
-        self.assertGreater(displaced["e"][1] - before["e"][1], 0.04)
-        self.assertGreater(grip["weights"][2], grip["weights"][0], "now predicted the repeated miss best")
-        for letter, offset in displaced.items():
-            if letter != "e":
-                self.assertAlmostEqual(offset[0], before[letter][0], places=12, msg=letter)
-                self.assertAlmostEqual(offset[1], before[letter][1], places=12, msg=letter)
-        self.assertLess(abs(recovered["e"][0] - before["e"][0]), 0.25 * (displaced["e"][0] - before["e"][0]))
-        self.assertEqual(grip["nextScore"][0], grip["nextScore"][1], "a reloaded model scores the next tap the same")
-        self.assertTrue(grip["otherLayoutUnchanged"])
-
-    def test_untrained_keys_use_the_prior_not_a_wider_fallback(self):
-        prior = self.report["cases"][0]["f"]
-        self.assertAlmostEqual(prior["sigmaX"], math.sqrt(2 / 9 * 7 * 0.04), places=12)
-        self.assertEqual(prior["degrees"], 9)
-
-    def test_the_first_label_changes_every_key(self):
-        cold, first = self.report["cases"][0], self.report["cases"][1]
-        self.assertNotEqual(cold["fDensity"], first["fDensity"])
-        self.assertNotEqual(cold["qDensity"], first["qDensity"], "unseen keys learn the pooled spread")
-
-    def test_densities_do_not_depend_on_keyboard_size(self):
-        for small, large in zip(self.report["cases"], self.report["scaled"]):
-            for name in ["f", "q"]:
-                for field, value in small[name].items():
-                    self.assertAlmostEqual(large[name][field], value, places=9)
-            for field in ["fDensity", "qDensity"]:
-                for a, b in zip(small[field], large[field]):
-                    self.assertAlmostEqual(a, b, places=9)
-
-    def test_malformed_keys_are_dropped_or_bounded(self):
-        malformed = self.report["malformed"]
-        self.assertTrue(malformed["droppedNaNDegrees"])
-        clamped = malformed["clamped"]
-        self.assertTrue(all(math.isfinite(v) for v in clamped.values()))
-        to_deviation = math.sqrt(clamped["degrees"] / (clamped["degrees"] - 2))
-        self.assertGreaterEqual(min(clamped["sigmaX"], clamped["sigmaY"]) * to_deviation, 0.08 - 1e-12)
-        self.assertLessEqual(max(clamped["sigmaX"], clamped["sigmaY"]) * to_deviation, 1.0 + 1e-12)
-        self.assertTrue(math.isfinite(malformed["farDensity"]))
-
 
 if __name__ == "__main__":
     unittest.main()

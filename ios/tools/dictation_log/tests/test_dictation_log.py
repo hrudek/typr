@@ -3,7 +3,6 @@ import copy
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
 import stat
 import sys
