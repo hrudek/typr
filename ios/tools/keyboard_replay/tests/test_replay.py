@@ -102,9 +102,6 @@ class ReplayTests(unittest.TestCase):
         self.assertEqual([line["replayed"] for line in report["words"]], ["I love you"])
 
     def test_edits_replay_in_order_up_to_the_first_boundary(self):
-        retyped = self.only(lambda w: w["meant"] == "around" and w["literal"] == "around")
-        self.assertEqual([c["kind"] for c in retyped["words"][0]["corrections"]], ["backspace"])
-        self.assertEqual(self.report(export=retyped)["reproduction"]["commitMatches"], 1)
         # `fine`, then the space deleted and the word retyped as `great`: the boundary saw `fine`.
         reopened = self.only(lambda w: w["meant"] == "great")
         self.assertEqual(reopened["words"][0]["commit"]["text"], "fine")

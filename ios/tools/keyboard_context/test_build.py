@@ -98,11 +98,7 @@ class ContextBuilderTests(unittest.TestCase):
                          '8e440c5fc04efb41b3719c597af755afebf75a7089477d2af6c51cb6097a3376')
         self.assertEqual(len((DATA/'tatoeba-contributors.tsv').read_text().splitlines())-1, 7206)
 
-    def test_global_partition_and_unreviewed_input_rejection(self):
-        digest = BUILD['digest_sentence'](['Hallo', 'Welt'])
-        self.assertEqual(digest, BUILD['digest_sentence'](['hallo', 'welt']))
-        r = int.from_bytes(digest[:8], 'big') % 10
-        self.assertEqual(BUILD['partition'](digest), 'test' if r == 0 else 'dev' if r == 1 else 'train')
+    def test_unreviewed_input_rejection(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'input.txt'
             path.write_text('unreviewed input')

@@ -55,14 +55,14 @@ class LargerCorporaTests(unittest.TestCase):
             list(API['lines'](path, 'leipzig'))
 
     def testCanonicalDedupeAndPartitionMatchRoundOne(self):
+        round_one = runpy.run_path(str(Path(__file__).parent/'tools/build_d3b.py'))
         one = API['digest'](['HELLO', 'Straße', None, 'World'])
-        two = API['digest'](['hello', 'straße', None, 'world'])
-        self.assertEqual(one, two)
+        self.assertEqual(one, API['digest'](['hello', 'straße', None, 'world']))
         self.assertNotEqual(one, API['digest'](['hello', 'strasse', None, 'world']))
         for i in range(100):
-            d = API['digest']([str(i)])
-            remainder = int.from_bytes(d[:8], 'big') % 10
-            self.assertEqual(API['partition'](d), 'test' if remainder == 0 else 'dev' if remainder == 1 else 'train')
+            d = API['digest']([str(i), 'Wort'])
+            self.assertEqual(d, round_one['digest_sentence']([str(i), 'Wort']))
+            self.assertEqual(API['partition'](d), round_one['partition'](d))
 
     def testHashAndExclusiveCacheGuards(self):
         source = self.root/'source.gz'

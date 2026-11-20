@@ -66,6 +66,3 @@ The replay sees at most the three words logged before each word as context.
 `python3 -m unittest discover -s ios/tools/keyboard_replay/tests` builds the tool and replays
 `fixture/synthetic.json`, invented text typed through the engine. After changing the export format,
 regenerate it with `keyboard-replay --make-fixture ios/tools/keyboard_replay/fixture/synthetic.json`.
-`keyboard-replay --touch-posterior` prints the learned touch densities after fixed labels and how
-displaced taps move one key's aim; the tests compare them with an independent computation of the
-touch model.
