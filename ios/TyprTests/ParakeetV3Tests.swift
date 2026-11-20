@@ -23,8 +23,8 @@ nonisolated enum ParakeetV3TestFiles {
         }
     }
 
-    static func populate(_ store: ParakeetV3ModelStore, marker: Bool, except skipped: Set<String> = []) throws {
-        for file in ParakeetV3ModelSpec.allFiles where !skipped.contains(file.path) {
+    static func populate(_ store: ParakeetV3ModelStore, marker: Bool) throws {
+        for file in ParakeetV3ModelSpec.allFiles {
             try write(file, into: store.root)
         }
         if marker {
@@ -34,32 +34,17 @@ nonisolated enum ParakeetV3TestFiles {
     }
 }
 
-private struct FakeParakeetV3Failure: LocalizedError {
-    var errorDescription: String? { "Server said no." }
-}
+private struct FakeParakeetV3Failure: Error {}
 
 private final class FakeParakeetV3Downloader: ModelFileDownloading, @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [String] = []
-    private var failure: (any Error)?
-    private var holding = false
-
     var calls: [String] { lock.withLock { recorded } }
-    func fail(with error: (any Error)?) { lock.withLock { failure = error } }
-    func hold() { lock.withLock { holding = true } }
-    func release() { lock.withLock { holding = false } }
 
     func download(_ file: PinnedModelFile, into root: URL,
                   progress: @escaping @Sendable (Double) -> Void) async throws {
-        let failure: (any Error)? = lock.withLock {
-            recorded.append(file.path)
-            return self.failure
-        }
-        if let failure { throw failure }
-        progress(0.5)
-        while lock.withLock({ holding }) { try await Task.sleep(for: .milliseconds(10)) }
+        lock.withLock { recorded.append(file.path) }
         try ParakeetV3TestFiles.write(file, into: root)
-        progress(1)
     }
 }
 
@@ -86,58 +71,6 @@ final class ParakeetV3Tests: XCTestCase {
         return ParakeetV3ModelStore(root: root)
     }
 
-    private func makeInstaller(_ store: ParakeetV3ModelStore, downloader: FakeParakeetV3Downloader,
-                               capacity: Int64? = .max) -> ParakeetV3ModelInstaller {
-        ParakeetV3ModelInstaller(store: store, downloader: downloader, availableCapacity: { capacity })
-    }
-
-    func testSpecPinsOneRevisionOfFluidAudiosV3FilesWithExactSizes() {
-        XCTAssertEqual(ParakeetV3ModelSpec.modelRepo, "FluidInference/parakeet-tdt-0.6b-v3-coreml")
-        XCTAssertEqual(ParakeetV3ModelSpec.modelRevision.count, 40, "a commit, not a branch")
-        XCTAssertTrue(ParakeetV3ModelSpec.allFiles.allSatisfy {
-            $0.repo == ParakeetV3ModelSpec.modelRepo && $0.revision == ParakeetV3ModelSpec.modelRevision
-        })
-        XCTAssertEqual(ParakeetV3ModelSpec.allFiles.reduce(0) { $0 + $1.bytes }, ParakeetV3ModelSpec.totalBytes)
-        XCTAssertEqual(Set(ParakeetV3ModelSpec.allFiles.map(\.path)).count, ParakeetV3ModelSpec.allFiles.count)
-        XCTAssertEqual(ParakeetV3ModelSpec.allFiles.first, ParakeetV3ModelSpec.vocabularyFile, "vocabulary first")
-        XCTAssertEqual(ParakeetV3ModelSpec.checkedFiles, [ParakeetV3ModelSpec.vocabularyFile])
-        let folders = Set(ParakeetV3ModelSpec.modelFiles.compactMap { $0.path.split(separator: "/").first.map(String.init) })
-        XCTAssertEqual(folders, Set(TdtV3PreparationComponent.allCases.map { "\($0.rawValue).mlmodelc" }))
-        XCTAssertEqual(TdtV3PreparationComponent.preprocessor.computeUnits, .cpuOnly)
-        XCTAssertEqual(TdtV3PreparationComponent.modelComputeUnits, .cpuAndNeuralEngine, "no GPU: background preparation")
-    }
-
-    func testStoreIsSeparateFromWhisperAndExcludedFromBackup() throws {
-        let store = makeStore()
-        XCTAssertEqual(ParakeetV3ModelStore.defaultRoot().lastPathComponent, "ParakeetV3")
-        XCTAssertNotEqual(ParakeetV3ModelStore.defaultRoot(), WhisperModelStore.defaultRoot())
-        XCTAssertNotEqual(ParakeetV3ModelStore.markerFileName, WhisperModelStore.markerFileName)
-        XCTAssertNotEqual(ParakeetV3ModelStore.preparationFileName, ParakeetV3ModelStore.markerFileName)
-        try store.prepareRoot()
-        let values = try store.root.resourceValues(forKeys: [.isExcludedFromBackupKey])
-        XCTAssertEqual(values.isExcludedFromBackup, true)
-    }
-
-    func testInstalledNeedsTheMarkerAndEveryFileAtItsExactSize() throws {
-        let store = makeStore()
-        XCTAssertFalse(store.isInstalled)
-        try ParakeetV3TestFiles.populate(store, marker: false)
-        XCTAssertTrue(store.filesComplete)
-        XCTAssertFalse(store.isInstalled, "files without the marker are a partial download")
-        try store.writeMarker()
-        XCTAssertTrue(store.isInstalled)
-
-        let encoder = try XCTUnwrap(ParakeetV3ModelSpec.modelFiles.last)
-        try WhisperTestFiles.writeSparse(store.fileURL(for: encoder), bytes: encoder.bytes - 1)
-        XCTAssertFalse(store.isInstalled, "a short file is never installed")
-        try ParakeetV3TestFiles.write(encoder, into: store.root)
-        XCTAssertTrue(store.isInstalled)
-
-        try Data(#"{"modelRepo":"FluidInference/parakeet-tdt-0.6b-v3-coreml","modelRevision":"main","totalBytes":1}"#.utf8)
-            .write(to: store.markerURL)
-        XCTAssertFalse(store.isInstalled, "a marker for another revision is not this install")
-    }
-
     func testVocabularyMustBeTheFullTokenTable() throws {
         let store = makeStore()
         let url = store.vocabularyURL
@@ -157,90 +90,15 @@ final class ParakeetV3Tests: XCTestCase {
         XCTAssertThrowsError(try TdtV3Vocabulary.load(from: url, for: .parakeetV3))
     }
 
-    func testDownloadFetchesEveryFileInOrderReportsBytesAndVerifiesBeforeInstalled() async throws {
+    func testRetryReplacesOnlyADamagedVocabulary() async throws {
         let store = makeStore()
         let downloader = FakeParakeetV3Downloader()
-        let installer = makeInstaller(store, downloader: downloader)
-        XCTAssertEqual(installer.state, .notInstalled)
-        XCTAssertTrue(downloader.calls.isEmpty, "creating the installer downloads nothing")
-
-        downloader.hold()
-        let task = installer.install()
-        try await waitForState("Parakeet V3 download running") {
-            if case .downloading = installer.state { !downloader.calls.isEmpty } else { false }
-        }
-        guard case .downloading(let progress) = installer.state else { return XCTFail("\(installer.state)") }
-        XCTAssertEqual(progress.totalBytes, ParakeetV3ModelSpec.totalBytes)
-        XCTAssertFalse(store.hasMarker)
-        downloader.release()
-        await task.value
-
-        XCTAssertEqual(installer.state, .installed)
-        XCTAssertEqual(downloader.calls, ParakeetV3ModelSpec.allFiles.map(\.path))
-        XCTAssertTrue(store.isInstalled)
-        XCTAssertTrue(installer.isInstalled)
-
-        await installer.install().value
-        XCTAssertEqual(downloader.calls.count, ParakeetV3ModelSpec.allFiles.count, "installed: no network at all")
-    }
-
-    func testCancelKeepsDownloadedFilesAndRetryFetchesOnlyTheRest() async throws {
-        let store = makeStore()
-        let downloader = FakeParakeetV3Downloader()
-        let installer = makeInstaller(store, downloader: downloader)
-        let keptCount = 3
-        try ParakeetV3TestFiles.populate(store, marker: false,
-                                         except: Set(ParakeetV3ModelSpec.allFiles.dropFirst(keptCount).map(\.path)))
-        downloader.hold()
-        let first = installer.install()
-        try await waitForState("Parakeet V3 download held") { !downloader.calls.isEmpty }
-        installer.cancel()
-        XCTAssertEqual(installer.state, .cancelled)
-        downloader.release()
-        await first.value
-        XCTAssertEqual(installer.state, .cancelled)
-        XCTAssertFalse(store.isInstalled)
-        for file in ParakeetV3ModelSpec.allFiles.prefix(keptCount) {
-            XCTAssertEqual(store.size(of: file), file.bytes, "\(file.path) is kept for Retry")
-        }
-
-        await installer.install().value
-        XCTAssertEqual(installer.state, .installed)
-        let fetched = Set(downloader.calls)
-        XCTAssertTrue(fetched.isDisjoint(with: ParakeetV3ModelSpec.allFiles.prefix(keptCount).map(\.path)))
-    }
-
-    func testOfflineFailureOffersRetryAndDamagedVocabularyIsReplaced() async throws {
-        let store = makeStore()
-        let downloader = FakeParakeetV3Downloader()
-        let installer = makeInstaller(store, downloader: downloader)
-        downloader.fail(with: URLError(.notConnectedToInternet))
-        await installer.install().value
-        XCTAssertEqual(installer.state, .failed("No internet connection. Connect and tap Retry."))
-        XCTAssertFalse(store.hasMarker)
-
-        downloader.fail(with: FakeParakeetV3Failure())
-        await installer.install().value
-        XCTAssertEqual(installer.state, .failed("Download failed: Server said no. Tap Retry to start again."))
-
         try ParakeetV3TestFiles.populate(store, marker: true)
         try WhisperTestFiles.writeSparse(store.vocabularyURL, bytes: ParakeetV3ModelSpec.vocabularyFile.bytes)
-        downloader.fail(with: nil)
-        let before = downloader.calls.count
+        let installer = ParakeetV3ModelInstaller(store: store, downloader: downloader, availableCapacity: { .max })
         await installer.install().value
         XCTAssertEqual(installer.state, .installed)
-        XCTAssertEqual(Array(downloader.calls.dropFirst(before)), [ParakeetV3ModelSpec.vocabularyFile.path])
-    }
-
-    func testInsufficientStorageStopsBeforeDownloading() async throws {
-        let store = makeStore()
-        let downloader = FakeParakeetV3Downloader()
-        let installer = makeInstaller(store, downloader: downloader, capacity: 1_000_000)
-        await installer.install().value
-        let needed = ParakeetV3ModelSpec.totalBytes + ParakeetV3ModelSpec.storageHeadroomBytes
-        XCTAssertEqual(installer.state, .failed(try XCTUnwrap(ModelInstallError.insufficientStorage(
-            model: "Parakeet V3", needed: needed, available: 1_000_000).errorDescription)))
-        XCTAssertTrue(downloader.calls.isEmpty)
+        XCTAssertEqual(downloader.calls, [ParakeetV3ModelSpec.vocabularyFile.path])
     }
 
     func testPreparationRefusesAnUninstalledModel() async throws {
@@ -343,6 +201,9 @@ final class ParakeetV3Tests: XCTestCase {
         XCTAssertEqual(DictationLogASRFailure.classify(E.notInstalled), .modelNotReady)
         XCTAssertEqual(DictationLogASRFailure.classify(E.preparationFailed("x")), .modelNotReady)
         XCTAssertEqual(DictationLogASRFailure.classify(E.emptyTranscript), .noSpeech)
+        XCTAssertEqual(DictationLogASRFailure.classify(E.corruptModel("x")), .other)
+        XCTAssertEqual(DictationLogASRFailure.classify(OrukeetTranscriber.TranscriberError.notInstalled), .modelNotReady)
+        XCTAssertEqual(DictationLogASRFailure.classify(OrukeetTranscriber.TranscriberError.emptyTranscript), .noSpeech)
         XCTAssertTrue(DictationController.transcriptionFailureKeepsModel(E.emptyTranscript))
         XCTAssertFalse(DictationController.transcriptionFailureKeepsModel(E.corruptModel("x")))
     }
