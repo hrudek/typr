@@ -33,6 +33,7 @@ final class TypingModelTypesTests: XCTestCase {
         ])
         // ±.5 pitch: far-side one-hand thumb aim; the one-pitch label gate is unchanged.
         let bounds = SpatialTouchCalibration.scaleRange(degrees: 9)
+        XCTAssertEqual(bounds.lowerBound, 0.08 * sqrt(7.0 / 9), accuracy: 1e-15)
         XCTAssertEqual(calibration.keys["a"], .init(offsetX: -0.5, offsetY: 0.5,
                                                     sigmaX: bounds.lowerBound, sigmaY: bounds.upperBound))
         XCTAssertEqual(calibration.keys["b"], .init(offsetX: 0.5, offsetY: -0.5,
