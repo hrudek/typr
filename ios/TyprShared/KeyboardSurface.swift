@@ -362,7 +362,6 @@ private struct KeyboardChromePalette {
     var keyMuted: Color { Color(uiColor: keys.textMuted) }
 }
 
-/// A full-keyboard keycap behind a SwiftUI key.
 private struct Keycap: UIViewRepresentable {
     let palette: FullKeyboardPalette
     let isPressed: Bool

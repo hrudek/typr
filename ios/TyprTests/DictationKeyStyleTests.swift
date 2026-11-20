@@ -2,7 +2,6 @@ import SwiftUI
 import XCTest
 @testable import Typr
 
-/// The dictation bar's utility keys use the full keyboard's keycap design.
 @MainActor
 final class DictationKeyStyleTests: XCTestCase {
     private func render(_ model: KeyboardViewModel, host: UIHostingController<KeyboardSurfaceView>? = nil) -> UIImage {
