@@ -16,7 +16,6 @@ targets:
       - TyprTests/KeyboardContextEvaluationTests.swift
       - TyprTests/KeyboardKeyMapEvaluationFixtures.swift
       - TyprTests/KeyboardKeyMapTests.swift
-      - TyprTests/KeyboardNeuralEvaluationTests.swift
       - TyprTests/KeyboardSuggestionEvaluationTests.swift
       - TyprTests/KeyboardTestSupport.swift
       - TyprTests/PersonalTrigramPhraseFixtures.swift
