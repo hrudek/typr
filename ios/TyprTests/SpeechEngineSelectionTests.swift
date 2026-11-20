@@ -900,7 +900,6 @@ final class SpeechEngineSelectionTests: XCTestCase {
             let background = FakeWhisperBackground()
             let f = fixture(preferred: engine, language: .german, autoPrepare: true, provider: provider,
                             modelBackground: background)
-            // Synchronous: launch preparation skips an uninstalled engine without starting a task.
             XCTAssertEqual(f.controller.phase, .modelRequired, "\(engine)")
             XCTAssertEqual(f.controller.engineName, engine.displayName)
             XCTAssertFalse(f.bridge.isModelInstalled, "\(engine)")
@@ -1402,7 +1401,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
             try await f.ready()
             f.controller.startRecording(keyboardJobID: "\(engine)-1")
             try await f.waitUntil { f.controller.phase == .recording }
-            f.controller.setDictationLanguage(.english) // during the capture: applies to the next one
+            f.controller.setDictationLanguage(.english)
             f.controller.finishRecording()
             try await f.waitUntil { f.controller.phase == .ready }
             f.controller.setDictationLanguage(.automatic)
@@ -1544,6 +1543,19 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
         XCTAssertFalse(f.audio.isKeepaliveRunning)
         XCTAssertTrue(f.audio.captures.isEmpty)
+    }
+
+    func testInstalledDownloadedEnginePreparesInItsOwnBackgroundTask() async throws {
+        for engine in SpeechEngineChoice.allCases where engine.requiresExplicitDownload {
+            let background = FakeWhisperBackground()
+            let provider = FakeEngineProvider()
+            provider.installed = [engine]
+            let f = fixture(preferred: engine, provider: provider, modelBackground: background)
+            f.controller.noteSceneDidBecomeActive()
+            try await f.waitUntil { f.controller.phase == .ready }
+            XCTAssertEqual(background.engines, [engine])
+            XCTAssertEqual(background.finishes.last, true, "\(engine)")
+        }
     }
 
     func testBackgroundOnlyLaunchDefersOtherEnginePreparationToo() async throws {
