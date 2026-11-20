@@ -362,7 +362,7 @@ private struct KeyboardChromePalette {
     var keyMuted: Color { Color(uiColor: keys.textMuted) }
 }
 
-private struct Keycap: UIViewRepresentable {
+struct Keycap: UIViewRepresentable {
     let palette: FullKeyboardPalette
     let isPressed: Bool
 
