@@ -231,9 +231,7 @@ final class PersonalTypingBigramTests: XCTestCase {
         }
         XCTAssertTrue(unicode.isValid)
         XCTAssertLessThan(unicode.pairCount, 200)
-        let unicodeBytes = try JSONEncoder().encode(unicode).count
-        XCTAssertLessThanOrEqual(unicodeBytes, unicode.encodedByteBound)
-        print("EVAL P4_bounds pairs=\(full.pairCount) followersMax=\(PersonalBigramModel.followerLimit) encodedBytes=\(bytes) encodedBound=\(full.encodedByteBound) byteCap=\(PersonalBigramModel.maximumBytes) unicodePairs=\(unicode.pairCount) unicodeEncodedBytes=\(unicodeBytes) unicodeBound=\(unicode.encodedByteBound) countCap=\(PersonalBigramModel.countLimit) ageingInterval=\(PersonalBigramModel.ageingInterval)")
+        XCTAssertLessThanOrEqual(try JSONEncoder().encode(unicode).count, unicode.encodedByteBound)
     }
 
     func testWholeStoreStaysWithinFileLimitAtMaximumWordAndPairState() throws {
@@ -268,7 +266,6 @@ final class PersonalTypingBigramTests: XCTestCase {
         let loaded = try XCTUnwrap(store.load().0)
         XCTAssertTrue(loaded.bigrams?.isValid == true)
         if loaded.counts.count < state.counts.count { XCTAssertEqual(loaded.bigrams?.pairCount, 0, "Pairs yield first") }
-        print("EVAL P4_store_bytes fileBytes=\(size) fileCap=\(KeyboardLearningStore.maximumLearningBytes) pairsBefore=\(pairs.pairCount) pairsAfter=\(loaded.bigrams?.pairCount ?? 0) words=\(loaded.counts.count)")
     }
 
     func testDiscountedBackoffAndPersonalTopThreeAgainstExhaustiveUnion() throws {
