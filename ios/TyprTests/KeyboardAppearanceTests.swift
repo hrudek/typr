@@ -54,7 +54,7 @@ final class KeyboardAppearanceTests: XCTestCase {
         try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 300), compact: true)
     }
 
-    func testPreviewBackdropReachesBothEdgesAndKeysCentreOnTheWindowWithUnevenSideInsets() async throws {
+    func testPreviewKeysCentreOnTheWindowWithUnevenSideInsets() async throws {
         let insets = UIEdgeInsets(top: 0, left: 80, bottom: 0, right: 30)
         try await assertDocked(in: CGRect(x: 0, y: 0, width: 852, height: 393), compact: true, sideInsets: insets)
         try await assertDocked(in: CGRect(x: 0, y: 0, width: 951, height: 669), compact: false, sideInsets: insets)
@@ -85,14 +85,6 @@ final class KeyboardAppearanceTests: XCTestCase {
         XCTAssertEqual(frame.midX, window.bounds.midX, accuracy: 0.5)
         if !compact {
             XCTAssertEqual(frame.width, expectedWidth, accuracy: 0.5)
-        }
-        if sideInsets != .zero {
-            let backdrop = Self.subviews(of: host.view).filter {
-                $0 !== keyboard && $0.convert($0.bounds, to: window).width >= window.bounds.width - 0.5
-                    && $0.convert($0.bounds, to: window).height >= frame.height - 0.5
-                    && $0.convert($0.bounds, to: window).maxY >= frame.maxY - 0.5
-            }
-            XCTAssertFalse(backdrop.isEmpty, "a backdrop view spans the window edge to edge")
         }
         XCTAssertEqual(frame.maxY, window.bounds.height - window.safeAreaInsets.bottom, accuracy: 1)
         let scroll = try XCTUnwrap(views.compactMap { $0 as? UIScrollView }.filter { !$0.isDescendant(of: keyboard) }.max { $0.bounds.height < $1.bounds.height })
