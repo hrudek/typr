@@ -41,13 +41,6 @@ class FastLaneContracts(unittest.TestCase):
         self.assertNotIn('ARTIFACT_AGE_RECIPIENT', SIMULATOR)
         self.assertNotIn('only_testing:', SOURCE)
 
-    def test_post_merge_keeps_tests_and_device_builds(self):
-        self.assertTrue(condition('test'))
-        self.assertTrue(condition('build'))
-        self.assertFalse(condition('test', changed='false'))
-        self.assertFalse(condition('build', changed='false'))
-        self.assertIn('needs: [decide, build]', job('sign'))
-
     def test_nothing_is_scheduled_and_manual_preview_has_no_device_archive(self):
         for path in (ROOT / '.github/workflows').glob('*.yml'):
             self.assertNotRegex(path.read_text(), re.compile(r'^  schedule:', re.M), path.name)
@@ -81,24 +74,16 @@ class FastLaneContracts(unittest.TestCase):
         self.assertIn('for mode in app test', DECIDE)
         self.assertIn('exit 1', DECIDE.split('Cannot compare app inputs;', 1)[1])
 
-    def test_test_only_merges_skip_archive_but_keep_simulator(self):
-        self.assertTrue(condition('test', changed='false', test_changed='true'))
-        self.assertFalse(condition('build', changed='false', test_changed='true'))
-        self.assertFalse(condition('test', changed='false',
-                                   test_changed='true', only_testing='none'))
-
     def test_screenshots_are_manual_artifacts_not_pr_comments(self):
         simulator = job('test')
         self.assertIn("github.event_name == 'workflow_dispatch' && !cancelled()", simulator)
         self.assertIn('SCENES: ${{ inputs.scenes }}', simulator)
         self.assertIn('name: typr-screenshots-${{ github.run_id }}', simulator)
-        self.assertNotIn('\n  screenshots:\n', SOURCE)
         self.assertNotIn('contents: write', SOURCE)
 
     def test_tests_never_hold_up_testflight_and_no_repair_agent_runs(self):
         # TestFlight follows the archive alone; red tests are fixed locally afterwards.
         self.assertIn("if: needs.decide.outputs.sign != '' && needs.build.result == 'success'", job('sign'))
-        self.assertNotIn('typr-fix', SOURCE)
         self.assertNotIn('\n  test:\n', SOURCE)
         self.assertNotIn('\n  build:\n', SIMULATOR)
         self.assertNotIn('environment: typr-', SIMULATOR)

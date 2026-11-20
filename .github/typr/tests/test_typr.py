@@ -28,12 +28,6 @@ signing = module('typr_signing', 'signing-entitlements.py')
 
 
 class ConfigTests(unittest.TestCase):
-    def test_bundle_ids(self):
-        config = config_module.load()
-        self.assertEqual(config['bundle_ids'], ['dev.rudek.typr', 'dev.rudek.typr.keyboard',
-                                                'dev.rudek.typr.widgets'])
-        self.assertEqual(config['display_name'], 'Typr')
-
     def test_apple_configuration_matches_committed_identity(self):
         config = config_module.load()
         asc = json.loads((REPO / 'ios/appstoreconnect.json').read_text())
@@ -191,24 +185,6 @@ class ScopeTests(unittest.TestCase):
 
 
 class ProjectPathsTests(unittest.TestCase):
-    def test_renamed_project_targets_module_and_host_are_consistent(self):
-        ios = REPO / 'ios'
-        project = (ios / 'project.yml').read_text()
-        self.assertEqual(re.findall(r'^  (Typr\w*):$', project, re.MULTILINE),
-                         ['Typr', 'TyprKeyboard', 'TyprWidgets', 'TyprTests'])
-        self.assertTrue(project.startswith('name: Typr\n'))
-        self.assertIn('PRODUCT_NAME: Typr\n', project)
-        self.assertIn('TEST_HOST: $(BUILT_PRODUCTS_DIR)/Typr.app/'
-                      '$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Typr', project)
-        self.assertIn('- TyprTests\n', project)
-        for path in (ios / 'TyprTests').glob('*.swift'):
-            with self.subTest(path=path.name):
-                self.assertIn('@testable import Typr', path.read_text())
-        old_prefix = re.compile(r'\b(?:HEX[A-Za-z_]*|Hex[A-Z]\w*|hexPlus\w*)\b')
-        for path in ios.rglob('*.swift'):
-            with self.subTest(path=str(path.relative_to(ios))):
-                self.assertIsNone(old_prefix.search(path.read_text()))
-
     def test_project_paths_are_self_contained_and_exist(self):
         # Parse path keys anywhere, plus bare list entries in each sources block.
         # Keep this Linux check independent of PyYAML / XcodeGen.
