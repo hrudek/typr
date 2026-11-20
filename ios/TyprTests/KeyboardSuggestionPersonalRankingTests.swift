@@ -370,15 +370,13 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
                 return ac
             }
             let off = make(learning: false), on = make(learning: true)
-            var n = 0, off1 = 0, off2 = 0, on1 = 0, on2 = 0, autoDiff = 0, autoCompletion = 0, personalAuto = 0
+            var off2 = 0, on2 = 0, autoDiff = 0, autoCompletion = 0, personalAuto = 0
             for target in targets {
                 let prefix = String(target.prefix(3))
                 let a = alternatives(off, prefix).map { $0.lowercased() }
                 let chips = strip(on, prefix)
                 let b = chips.filter { $0.kind != .keepLiteral }.map { $0.replacement.lowercased() }
-                if a.first == target { off1 += 1 }
                 if a.prefix(2).contains(target) { off2 += 1 }
-                if b.first == target { on1 += 1 }
                 if b.prefix(2).contains(target) { on2 += 1 }
                 if chips.contains(where: { $0.isPersonal && $0.willAutoReplace }) { personalAuto += 1 }
                 for typed in [prefix, target] {
@@ -388,7 +386,6 @@ final class KeyboardSuggestionPersonalRankingTests: XCTestCase {
                     if let y, y.replacement.lowercased().hasPrefix(typed.lowercased()),
                        y.replacement.count > typed.count { autoCompletion += 1 }
                 }
-                n += 1
             }
             XCTAssertEqual(autoDiff, 0, "Personal ranking never changes automatic replacement")
             XCTAssertEqual(autoCompletion, 0)
