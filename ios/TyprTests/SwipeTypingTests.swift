@@ -338,7 +338,6 @@ final class SwipeTypingTests: XCTestCase {
             XCTAssertTrue(ranked.contains(SwipeLexicon.fold(word)), "\(word): \(found.prefix(3).map(\.word))")
             if found.first.map({ SwipeLexicon.fold($0.word) }) == SwipeLexicon.fold(word) { top1 += 1 }
         }
-        print("EVAL swipe_synthetic top1=\(top1)/\(words.count)")
         XCTAssertGreaterThanOrEqual(top1, words.count - 1)
     }
 
