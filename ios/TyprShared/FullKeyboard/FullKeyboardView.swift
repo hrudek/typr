@@ -99,6 +99,11 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         addSubview(accentCallout)
         accentCallout.isHidden = true
 
+        let dismissPan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
+        dismissPan.cancelsTouchesInView = false
+        dismissPan.delegate = self
+        addGestureRecognizer(dismissPan)
+
         stripView.onSelectSuggestion = { [weak self] suggestion in
             guard let self else { return }
             self.keyFeedback()
@@ -774,6 +779,22 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         onShowCompactBar?()
     }
 
+    /// Whether a downward swipe from `point` may hide the keyboard: swipe typing is off and the
+    /// point is on no key, suggestion or panel. Key hit frames tile the whole key area, so this
+    /// leaves the suggestion strip's free space and the split keyboard's middle gap.
+    func startsDismissSwipe(at point: CGPoint) -> Bool {
+        guard !engine.swipeTypingEnabled, let view = hitTest(point, with: nil) else { return false }
+        return view === self || view === stripView || (view === plane && engine.layout.hitTest(point) == nil)
+    }
+
+    @objc private func handleDismissPan(_ pan: UIPanGestureRecognizer) {
+        let translation = pan.translation(in: self)
+        guard pan.state == .ended,
+              KeyboardDismissSwipe.dismisses(translation: CGSize(width: translation.x, height: translation.y))
+        else { return }
+        hostController?.dismissKeyboard()
+    }
+
     /// Hold and slide: light the row under the finger, and pick it on release.
     private func forwardMenuPoint(_ point: CGPoint, release: Bool) {
         guard let menu = styleMenu else { return }
@@ -826,5 +847,11 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
                 for: .allTouchEvents
             )
         }
+    }
+}
+
+extension FullKeyboardView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        startsDismissSwipe(at: touch.location(in: self))
     }
 }
