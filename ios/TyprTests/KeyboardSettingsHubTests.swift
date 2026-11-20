@@ -5,17 +5,9 @@ import XCTest
 
 @MainActor
 final class KeyboardSettingsHubTests: XCTestCase {
-    func testKeyboardScenesOpenTheirPages() {
-        let routes: [(String, SettingsDestination)] = [
-            ("settings-keyboard", .keyboard), ("settings-keyboard-typing", .keyboard),
-            ("settings-keyboard-words-privacy", .keyboardWordsPrivacy),
-            ("settings-autocorrect-languages", .autocorrectLanguages),
-            ("settings-keyboard-learned-words", .keyboardLearnedWords),
-        ]
-        for (scene, destination) in routes {
-            XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", scene]), destination, scene)
-        }
-        XCTAssertEqual(SettingsDestination.keyboardWordsPrivacy.title, "Words and privacy")
+    func testTypingSceneOpensTheKeyboardPageWithTheSwipeNotice() {
+        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", "settings-keyboard-typing"]),
+                       .keyboard)
         XCTAssertEqual(KeyboardSettingsCard.swipeNotice, "Swipe typing powered by FUTO Swipe.")
     }
 

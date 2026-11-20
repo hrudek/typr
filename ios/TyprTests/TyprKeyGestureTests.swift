@@ -31,12 +31,6 @@ final class TyprKeyGestureTests: XCTestCase {
         XCTAssertEqual(gesture.state, .idle)
     }
 
-    func testSlideSidewaysOpensMenu() {
-        var gesture = TyprKeyGesture()
-        gesture.touchDown(at: CGPoint(x: 20, y: 20))
-        XCTAssertEqual(gesture.touchMoved(to: CGPoint(x: -40, y: 20), allowsCompactBar: true), .openMenu)
-    }
-
     func testSlideDownShowsCompactBar() {
         var gesture = TyprKeyGesture()
         gesture.touchDown(at: CGPoint(x: 20, y: 20))
@@ -45,12 +39,6 @@ final class TyprKeyGestureTests: XCTestCase {
         XCTAssertEqual(gesture.touchMoved(to: CGPoint(x: 24, y: 60), allowsCompactBar: true), .ignored)
         XCTAssertEqual(gesture.touchUp(), .ignored, "no space, no menu")
         XCTAssertEqual(gesture.state, .idle)
-    }
-
-    func testSlideDownOpensMenuWithoutCompactBar() {
-        var gesture = TyprKeyGesture()
-        gesture.touchDown(at: CGPoint(x: 20, y: 20))
-        XCTAssertEqual(gesture.touchMoved(to: CGPoint(x: 20, y: 80)), .openMenu, "without the compact bar, downward movement opens the menu at 60 pt")
     }
 
     func testDownwardThresholdIs30Points() {

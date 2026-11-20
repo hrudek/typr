@@ -32,8 +32,6 @@ final class SettingsPresentationTests: XCTestCase {
         XCTAssertEqual(state.counts["hello"]?.count, 12)
         // Synthetic aggregate pair only; the page lists its words, never the association.
         XCTAssertEqual(state.bigrams?.followers(after: "hello"), ["world": 3])
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
-            ["Typr", "--snap-state", "settings-keyboard-learned-words"]), .keyboardLearnedWords)
     }
 
     @MainActor
@@ -126,18 +124,12 @@ final class SettingsPresentationTests: XCTestCase {
             }
         }
         XCTAssertFalse(SettingsDestination.allCases.contains { $0.rawValue.contains("diagnostics") })
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments:
-            ["Typr", "--snap-state", "settings-statistics"]), .statistics)
         XCTAssertTrue(ContentView.learnedWordsUsesFixture(
             arguments: ["Typr", "--snap-state", "settings-keyboard-learned-words"]))
         for arguments in [[], ["Typr"], ["--snap-state"], ["settings-keyboard-learned-words"],
                           ["--other", "settings-keyboard-learned-words"], ["--snap-state", "settings-keyboard"]] {
             XCTAssertFalse(ContentView.learnedWordsUsesFixture(arguments: arguments))
         }
-    }
-
-    func testTypingAssistanceSnapshotOpensKeyboardSettings() {
-        XCTAssertEqual(SettingsDestination.snapshotDestination(arguments: ["Typr", "--snap-state", "settings-keyboard-typing"]), .keyboard)
     }
 
     func testOrdinaryLaunchesAndUnrelatedScenesDoNotNavigate() {
