@@ -22,6 +22,10 @@ class ReviewWorkflowTest(unittest.TestCase):
         self.assertIn('--disallowedTools "Edit,MultiEdit,Write', SOURCE)
         self.assertNotIn('contents: write', SOURCE)
 
+    def test_verdict_follows_findings(self):
+        self.assertIn("count=$(jq '.findings | length'", SOURCE)
+        self.assertIn('if (( count == 0 )); then\n              verdict=pass', SOURCE)
+
     def test_only_the_review_uses_claude(self):
         users = sorted(p.name for p in WORKFLOWS.glob('typr-*.yml')
                        if 'claude-code-action' in p.read_text())
