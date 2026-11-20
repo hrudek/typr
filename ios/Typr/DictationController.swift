@@ -12,6 +12,7 @@ final class DictationController {
         cleanup: TranscriptCleanupProduction.dependencies(),
         dictationLog: .shared,
         statistics: UsageDictationRecorder(store: UsageStatisticsStore()),
+        liveActivity: LiveActivityCoordinator(),
         modelBackground: ModelBackgroundPreparation.shared,
         deferPreparationUntilActive: true
     )
@@ -101,7 +102,7 @@ final class DictationController {
     private let keyboardBridge: KeyboardBridge
     private let fileManager: FileManager
     private let now: () -> TimeInterval
-    private let liveActivity = LiveActivityCoordinator()
+    private let liveActivity: LiveActivityCoordinator?
     private let hostReturner: HostReturner
     /// The app the current cold-start handoff came from, by bundle ID; nil when the keyboard could not name it.
     private var returnHost: String?
@@ -237,6 +238,7 @@ final class DictationController {
         cleanup: TranscriptCleanupDependencies? = nil,
         dictationLog: DictationLogStore? = nil,
         statistics: UsageDictationRecorder? = nil,
+        liveActivity: LiveActivityCoordinator? = nil,
         languageSettings: TyprSettings = TyprSettings(),
         engineProvider: (any SpeechEngineProviding)? = nil,
         audioActivationRetryDelays: [Duration] = DictationController.audioActivationRetryDelays,
@@ -253,6 +255,7 @@ final class DictationController {
         self.cleanup = cleanup
         self.dictationLog = dictationLog
         self.statistics = statistics
+        self.liveActivity = liveActivity
         self.languageSettings = languageSettings
         self.dictationLanguage = languageSettings.dictationLanguage
         self.audio = resolvedAudio
@@ -531,7 +534,7 @@ final class DictationController {
         jobGeneration &+= 1
         transcriptionTask?.cancel()
         transcriptionTask = nil
-        liveActivity.endImmediately()
+        liveActivity?.endImmediately()
 
         if let session = activeCapture {
             activeCapture = nil
@@ -596,7 +599,7 @@ final class DictationController {
             audioLevel = 0
             loudnessDB = -120
             recordingDuration = 0
-            liveActivity.endImmediately()
+            liveActivity?.endImmediately()
             if phase == .recording {
                 phase = .ready
             }
@@ -1167,7 +1170,7 @@ final class DictationController {
                 loudestAverageDBFS = nil
                 recordingDuration = 0
                 phase = .recording
-                liveActivity.startRecording(startedAt: Date(timeIntervalSince1970: startedAt))
+                liveActivity?.startRecording(startedAt: Date(timeIntervalSince1970: startedAt))
                 startMetering(for: captureGeneration)
                 publishKeyboardSnapshot()
 
@@ -1209,7 +1212,7 @@ final class DictationController {
             activeKeyboardJobID = nil
             keyboardMessage = nil
             phase = .ready
-            liveActivity.endImmediately()
+            liveActivity?.endImmediately()
             restoreAudioAfterCapture()
             publishKeyboardSnapshot()
             return
@@ -1237,7 +1240,7 @@ final class DictationController {
                 self.publishKeyboardSnapshot()
             }
         }
-        liveActivity.markTranscribing(startedAt: Date(timeIntervalSince1970: session.startedAt))
+        liveActivity?.markTranscribing(startedAt: Date(timeIntervalSince1970: session.startedAt))
         restoreAudioAfterCapture()
         publishKeyboardSnapshot()
 
@@ -1330,9 +1333,9 @@ final class DictationController {
                 if session.copyToPasteboard && !formatted.isEmpty {
                     UIPasteboard.general.string = formatted
                     self.copied = true
-                    self.liveActivity.finishCopied()
+                    self.liveActivity?.finishCopied()
                 } else {
-                    self.liveActivity.endImmediately()
+                    self.liveActivity?.endImmediately()
                 }
 
                 if keyboardJobID != nil {
@@ -1360,7 +1363,7 @@ final class DictationController {
                 }
                 self.recordingDuration = 0
                 self.activeKeyboardJobID = nil
-                self.liveActivity.endImmediately()
+                self.liveActivity?.endImmediately()
                 self.keyboardMessage = keyboardJobID == nil ? nil : error.localizedDescription
                 self.phase = .failed(error.localizedDescription)
                 self.publishKeyboardSnapshot()
