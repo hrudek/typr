@@ -400,7 +400,7 @@ private struct Keycap: UIViewRepresentable {
 
 private extension View {
     func keycap(_ palette: FullKeyboardPalette, isPressed: Bool = false) -> some View {
-        background(Keycap(palette: palette, isPressed: isPressed).padding(-Keycap.shadowOverhang))
+        background(Keycap(palette: palette, isPressed: isPressed).padding(-Keycap.shadowOverhang).allowsHitTesting(false))
     }
 }
 
@@ -898,6 +898,7 @@ struct KeyboardSurfaceView: View {
                 }
                 .frame(width: 44, height: 42)
                 .keycap(p.keys)
+                .contentShape(RoundedRectangle(cornerRadius: FullKeyboardPalette.cornerRadius, style: .continuous))
             }
 
             Button {
