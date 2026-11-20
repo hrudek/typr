@@ -145,21 +145,6 @@ final class ActivityStatisticsTests: XCTestCase {
     }
 
     @MainActor
-    func testResetClearsEveryActivityPeriodButPreservesSavedAim() throws {
-        let model = StatisticsModel(directory: nil, defaults: nil, fixture: .populated)
-        let learning = model.learning?.model
-        model.reset(); model.refresh()
-        let saved = try XCTUnwrap(model.usage)
-        for range in StatisticsRange.allCases {
-            let result = ActivityStatistics(snapshot: saved, range: range, now: model.presentationDate(at: Date()))
-            XCTAssertEqual(result.totals, UsageTotals())
-            XCTAssertNil(result.totals.typingWPM)
-            XCTAssertEqual(result.activeDays(.dictation), 0)
-        }
-        XCTAssertEqual(model.learning?.model, learning)
-    }
-
-    @MainActor
     func testRefreshSeesExternalWritesAndStoreFailureRemovesOldHistory() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

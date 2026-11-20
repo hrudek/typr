@@ -204,6 +204,7 @@ final class TapStatisticsTests: XCTestCase {
         if let signature { XCTAssertGreaterThan(populated.taps(for: signature).heatSamples, 0) }
         populated.reset(); populated.refresh()
         XCTAssertTrue(populated.usage?.heat.isEmpty == true)
+        XCTAssertTrue(populated.usage?.days.isEmpty == true)
         XCTAssertEqual(populated.learning?.model, saved)
         if let signature {
             XCTAssertEqual(populated.taps(for: signature).heatSamples, 0)
