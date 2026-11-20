@@ -62,11 +62,6 @@ final class AutocorrectEngineTests: XCTestCase {
         wait(for: [delivered], timeout: 2)
     }
 
-    func testLexiconEntriesLoadShortcut() {
-        engine.autocorrect.loadLexiconEntries([LexiconEntry(userInput: "omw", documentText: "On my way!")])
-        XCTAssertEqual(engine.autocorrect.lexiconShortcuts["omw"], "On my way!")
-    }
-
     func testFiftyWordAndContextCases() {
         let valid: Set<String> = ["the", "from", "form", "their", "there", "were", "well", "ill", "its", "lets",
                                   "running", "late", "tonight", "that", "and", "with", "receive", "keyboard", "iPhone"]

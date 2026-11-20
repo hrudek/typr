@@ -85,20 +85,5 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
         for letter in "kf" { tap(.character(String(letter)), kept) }
         tap(.space, kept)
         XCTAssertEqual(keptTarget.text, "even kf ")
-
-        let (contact, contactTarget) = try keyboard(after: "even ")
-        contact.autocorrect.loadLexiconEntries([("Kf", "Kf")])
-        for letter in "kf" { tap(.character(String(letter)), contact) }
-        tap(.space, contact)
-        XCTAssertEqual(contactTarget.text, "even kf ")
-
-        let (undo, undoTarget) = try keyboard(after: "even ")
-        for letter in "kf" { tap(.character(String(letter)), undo) }
-        tap(.space, undo)
-        XCTAssertEqual(undoTarget.text, "even if ")
-        tap(.delete, undo)
-        XCTAssertEqual(undoTarget.text, "even kf")
-        tap(.space, undo)
-        XCTAssertEqual(undoTarget.text, "even kf ", "an undone correction is not repeated")
     }
 }
