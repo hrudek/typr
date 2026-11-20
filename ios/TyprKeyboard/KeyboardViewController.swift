@@ -350,6 +350,8 @@ final class KeyboardViewController: UIInputViewController {
         let now = Date().timeIntervalSince1970
         updateKeyboardTraits()
         fullKeyboard?.syncSettings()
+        let keyDesign = FullKeyboardSettings().design
+        if viewModel.keyDesign != keyDesign { viewModel.keyDesign = keyDesign }
 
         #if targetEnvironment(simulator)
         let simSnap = bridge.snapshot()
