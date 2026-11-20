@@ -258,10 +258,6 @@ private final class EngineClock {
     var now: TimeInterval = 50_000
 }
 
-private enum EngineTestFailure: Error {
-    case timedOut
-}
-
 @MainActor
 private final class EngineFixture {
     let suite = "typr.engine.tests.\(UUID().uuidString)"
@@ -322,16 +318,9 @@ private final class EngineFixture {
 
     var storedPreferenceRaw: String? { defaults.string(forKey: "typr.preferredSpeechEngine") }
 
-    func waitUntil(timeout: TimeInterval = 3, file: StaticString = #filePath, line: UInt = #line,
+    func waitUntil(file: StaticString = #filePath, line: UInt = #line,
                    _ condition: @MainActor () -> Bool) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while !condition() {
-            guard Date() < deadline else {
-                XCTFail("condition not met in time", file: file, line: line)
-                throw EngineTestFailure.timedOut
-            }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("engine fixture condition", file: file, line: line) { condition() }
     }
 
     func ready() async throws {
@@ -340,14 +329,7 @@ private final class EngineFixture {
     }
 
     func waitForCalls(_ asr: EngineASR, count: Int) async throws {
-        let deadline = Date().addingTimeInterval(3)
-        while await asr.languages.count < count {
-            guard Date() < deadline else {
-                XCTFail("transcription did not start")
-                throw EngineTestFailure.timedOut
-            }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("transcription started") { await asr.languages.count >= count }
     }
 
     @discardableResult
@@ -451,22 +433,32 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(row().actionTitle, "Use")
     }
 
-    func testWhisperRowOffersOnlyDownloadUntilInstalledAndExplainsVocabulary() {
-        let missing = row(availability: .downloadRequired("Not downloaded"), install: .notInstalled)
-        XCTAssertEqual(missing.action, .download)
-        XCTAssertEqual(missing.actionTitle, "Download (\(WhisperModelSpec.downloadSizeLabel))")
-        XCTAssertNil(missing.progress)
-        XCTAssertNotNil(missing.note)
-        XCTAssertTrue(missing.note?.contains("not as Whisper hints") == true)
-        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
-        XCTAssertTrue(missing.note?.contains("First optimization") == true)
-        XCTAssertTrue(missing.note?.contains("several minutes") == true, "disclose optimization before choosing Use")
-        XCTAssertTrue(missing.note?.contains("can pause or stop it; reopen Typr to retry") == true)
+    func testEveryDownloadedEngineRowOffersItsOwnDownloadThenUseAndDelete() {
+        let labels: [SpeechEngineChoice: String] = [
+            .whisperLargeV3Turbo: WhisperModelSpec.downloadSizeLabel, .parakeetV3: ParakeetV3ModelSpec.downloadSizeLabel,
+            .orukeet: OrukeetModelSpec.downloadSizeLabel, .cohereTranscribe: CohereModelSpec.downloadSizeLabel,
+        ]
+        XCTAssertEqual(Set(labels.values).count, labels.count, "each engine shows its own size")
+        for (engine, label) in labels {
+            let missing = row(engine, availability: .downloadRequired("Not downloaded"), install: .notInstalled)
+            XCTAssertEqual(missing.action, .download, "\(engine)")
+            XCTAssertEqual(missing.actionTitle, "Download (\(label))")
+            XCTAssertFalse(missing.offersDelete, "\(engine)")
+            XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true, "\(engine)")
+            XCTAssertNil(missing.progress, "\(engine)")
+            for disclosure in ["First optimization", "several minutes", "can pause or stop it; reopen Typr to retry"] {
+                XCTAssertTrue(missing.note?.contains(disclosure) == true, "\(engine): disclose optimization before choosing Use")
+            }
+            XCTAssertEqual(missing.note?.contains("not as Whisper hints") == true, engine == .whisperLargeV3Turbo)
+            XCTAssertNil(row(engine, language: .german).warning, "\(engine)")
+            XCTAssertEqual(row(engine, install: .installed).action, .use, "Use is separate from Download")
+            XCTAssertNil(row(engine, install: .installed).badge, "\(engine)")
+            XCTAssertTrue(row(engine, install: .installed).offersDelete, "\(engine)")
+            XCTAssertEqual(row(engine, preferred: engine, install: .notInstalled, failure: "Not downloaded").action,
+                           .retryDownload, "\(engine)")
+            XCTAssertTrue(SpeechEngineCard.deletionMessage(for: engine).contains("Your engine choice stays"))
+        }
         XCTAssertNil(row(.appleSpeech).note)
-
-        let ready = row(install: .installed)
-        XCTAssertEqual(ready.action, .use, "Use is separate from Download")
-        XCTAssertNil(ready.badge)
     }
 
     func testWhisperRowSeparatesDownloadVerificationAndDevicePreparation() {
@@ -896,29 +888,41 @@ final class SpeechEngineSelectionTests: XCTestCase {
 
     // MARK: - Whisper is downloaded only by its Download button
 
-    private func whisperChosenNotInstalled(autoPrepare: Bool) -> (EngineFixture, CountingDownloader, WhisperModelStore) {
+    func testLaunchWithAnUninstalledDownloadedEngineDoesNotPrepareOrDownload() async throws {
+        let root = WhisperTestFiles.makeRoot()
+        roots.append(root)
+        let provider = ProductionSpeechEngineProvider(
+            whisperStore: WhisperModelStore(root: root.appending(component: "whisper")),
+            parakeetV3Store: ParakeetV3ModelStore(root: root.appending(component: "v3")),
+            orukeetStore: OrukeetModelStore(root: root.appending(component: "orukeet")),
+            cohereStore: CohereModelStore(root: root.appending(component: "cohere")))
+        for engine in SpeechEngineChoice.allCases where engine.requiresExplicitDownload {
+            let background = FakeWhisperBackground()
+            let f = fixture(preferred: engine, language: .german, autoPrepare: true, provider: provider,
+                            modelBackground: background)
+            XCTAssertEqual(f.controller.phase, .modelRequired, "\(engine)")
+            XCTAssertEqual(f.controller.engineName, engine.displayName)
+            XCTAssertFalse(f.bridge.isModelInstalled, "\(engine)")
+            f.controller.noteSceneDidBecomeActive()
+            XCTAssertTrue(background.engines.isEmpty, "\(engine)")
+            XCTAssertEqual(background.maintenance.last, false, "\(engine)")
+
+            let notInstalled = SpeechEngineError.notInstalled(engine).localizedDescription
+            f.controller.performPrimaryAction()
+            try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
+            XCTAssertNil(f.controller.currentEngine)
+            XCTAssertEqual(f.controller.preferredEngine, engine)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.path), "nothing was written for any engine")
+    }
+
+    func testPrepareKeyboardHandoffAndIntentFailWithNotDownloadedAndNeverDownload() async throws {
         let store = whisperRoot()
         let downloader = CountingDownloader()
         _ = WhisperModelInstaller(store: store, downloader: downloader, tokenizerChecker: PassingTokenizerChecker(),
                                   availableCapacity: { .max })
-        let f = fixture(preferred: .whisperLargeV3Turbo, language: .german, autoPrepare: autoPrepare,
+        let f = fixture(preferred: .whisperLargeV3Turbo, language: .german,
                         provider: ProductionSpeechEngineProvider(whisperStore: store))
-        return (f, downloader, store)
-    }
-
-    func testLaunchWithWhisperChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
-        let (f, downloader, store) = whisperChosenNotInstalled(autoPrepare: true)
-        // Synchronous: launch preparation skips an uninstalled Whisper without starting a task.
-        XCTAssertEqual(f.controller.phase, .modelRequired)
-        XCTAssertEqual(f.controller.engineName, "Whisper Large V3 Turbo")
-        XCTAssertEqual(f.controller.preferredEngine, .whisperLargeV3Turbo)
-        XCTAssertFalse(f.bridge.isModelInstalled)
-        XCTAssertTrue(downloader.calls.isEmpty)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path))
-    }
-
-    func testPrepareKeyboardHandoffAndIntentFailWithNotDownloadedAndNeverDownload() async throws {
-        let (f, downloader, store) = whisperChosenNotInstalled(autoPrepare: false)
         let notInstalled = SpeechEngineError.notInstalled(.whisperLargeV3Turbo).localizedDescription
 
         // Primary action (Prepare).
@@ -1035,7 +1039,7 @@ final class SpeechEngineSelectionTests: XCTestCase {
         let f = fixture(provider: ProductionSpeechEngineProvider(whisperStore: store))
         XCTAssertEqual(f.controller.selectEngine(.whisperLargeV3Turbo), .selected)
         XCTAssertEqual(f.storedPreferenceRaw, "whisper-large-v3-turbo")
-        try await f.waitUntil(timeout: 10) { if case .failed = f.controller.phase { true } else { false } }
+        try await f.waitUntil { if case .failed = f.controller.phase { true } else { false } }
         guard case .failed(let message) = f.controller.phase else { return XCTFail() }
         XCTAssertTrue(message.contains("Download Whisper again"), message)
         XCTAssertNil(f.controller.currentEngine)
@@ -1380,24 +1384,36 @@ final class SpeechEngineSelectionTests: XCTestCase {
         XCTAssertEqual(f.controller.currentEngine, .whisperLargeV3Turbo, "Whisper is not re-prepared for a language change")
     }
 
-    func testDictationLogRecordsTheCapturesEngineAndWhisperLanguage() async throws {
-        let env = LogTestEnvironment()
-        logEnvironments.append(env)
-        try await LogTestEnvironment.waitUntilLoaded(env.store)
-        let f = fixture(preferred: .whisperLargeV3Turbo, language: .german, dictationLog: env.store)
-        try await f.ready()
-        f.controller.startRecording(keyboardJobID: "log-1")
-        try await f.waitUntil { f.controller.phase == .recording }
-        f.controller.setDictationLanguage(.english)
-        f.controller.finishRecording()
-        try await f.waitUntil { f.controller.phase == .ready }
-        f.controller.setDictationLanguage(.automatic)
-        _ = try await f.dictate(jobID: "log-2")
+    func testDictationLogRecordsEveryDownloadedEngineAndTheLanguageOfEachCapture() async throws {
+        let expected: [SpeechEngineChoice: Set<String>] = [
+            .whisperLargeV3Turbo: ["German", "Automatic (detected by Whisper)"],
+            .parakeetV3: ["German", "Automatic (detected by Parakeet V3)"],
+            .orukeet: ["Automatic (detected by Orukeet)"],
+            .cohereTranscribe: ["German", CohereTranscriber.languageName(for: .automatic)],
+        ]
+        for (engine, languageNames) in expected {
+            let env = LogTestEnvironment()
+            logEnvironments.append(env)
+            try await LogTestEnvironment.waitUntilLoaded(env.store)
+            let provider = FakeEngineProvider()
+            provider.installed = [engine]
+            let f = fixture(preferred: engine, language: .german, provider: provider, dictationLog: env.store)
+            try await f.ready()
+            f.controller.startRecording(keyboardJobID: "\(engine)-1")
+            try await f.waitUntil { f.controller.phase == .recording }
+            f.controller.setDictationLanguage(.english)
+            f.controller.finishRecording()
+            try await f.waitUntil { f.controller.phase == .ready }
+            f.controller.setDictationLanguage(.automatic)
+            _ = try await f.dictate(jobID: "\(engine)-2")
 
-        let contexts = env.store.entries.map(\.context)
-        XCTAssertEqual(contexts.count, 2)
-        XCTAssertEqual(Set(contexts.map(\.speechEngine)), ["Whisper Large V3 Turbo"])
-        XCTAssertEqual(Set(contexts.map(\.speechLanguage)), ["German", "Automatic (detected by Whisper)"])
+            let contexts = env.store.entries.map(\.context)
+            XCTAssertEqual(contexts.count, 2, "\(engine)")
+            XCTAssertEqual(Set(contexts.map(\.speechEngine)), [engine.displayName])
+            XCTAssertEqual(Set(contexts.map(\.speechLanguage)), languageNames, "\(engine)")
+            let languages = await provider.instances(of: engine).first?.languages
+            XCTAssertEqual(languages, [.german, .automatic], "each capture passes its own language")
+        }
     }
 
     func testAStaleTranscriptionNeverOverwritesAfterCancel() async throws {
@@ -1529,6 +1545,19 @@ extension SpeechEngineSelectionTests {
         XCTAssertTrue(f.audio.captures.isEmpty)
     }
 
+    func testInstalledDownloadedEnginePreparesInItsOwnBackgroundTask() async throws {
+        for engine in SpeechEngineChoice.allCases where engine.requiresExplicitDownload {
+            let background = FakeWhisperBackground()
+            let provider = FakeEngineProvider()
+            provider.installed = [engine]
+            let f = fixture(preferred: engine, provider: provider, modelBackground: background)
+            f.controller.noteSceneDidBecomeActive()
+            try await f.waitUntil { f.controller.phase == .ready }
+            XCTAssertEqual(background.engines, [engine])
+            XCTAssertEqual(background.finishes.last, true, "\(engine)")
+        }
+    }
+
     func testBackgroundOnlyLaunchDefersOtherEnginePreparationToo() async throws {
         let f = fixture(preferred: .appleSpeech, autoPrepare: true, deferPreparationUntilActive: true)
         await Task.yield()
@@ -1567,15 +1596,13 @@ extension SpeechEngineSelectionTests {
         f.controller.noteSceneDidBecomeActive()
         try await f.waitUntil { provider.created.count == 1 }
         // Ensure the cancellation-ignoring fake has actually entered its model operation.
-        for _ in 0..<100 {
-            if await old.prepareCount == 1 { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("held preparation entered") { await old.prepareCount == 1 }
         let count = await old.prepareCount
         XCTAssertEqual(count, 1)
         let expire = try XCTUnwrap(background.expirations.first)
         expire()
-        XCTAssertTrue(f.controller.phase.isFailure)
+        XCTAssertEqual(f.controller.phase, .failed(
+            "Whisper preparation paused. Open Typr or tap Try again to continue. iOS controls background time."))
         XCTAssertFalse(f.controller.isModelReady)
         XCTAssertNil(f.controller.currentEngine)
         f.controller.noteSceneDidBecomeActive()
@@ -1783,91 +1810,6 @@ extension SpeechEngineSelectionTests {
 }
 
 extension SpeechEngineSelectionTests {
-    private func parakeetV3Root() -> ParakeetV3ModelStore {
-        let root = WhisperTestFiles.makeRoot()
-        roots.append(root)
-        return ParakeetV3ModelStore(root: root)
-    }
-
-    func testParakeetV3RowOffersOnlyItsDownloadUntilInstalled() {
-        let missing = row(.parakeetV3, availability: .downloadRequired("Not downloaded"), install: .notInstalled)
-        XCTAssertEqual(missing.action, .download)
-        XCTAssertEqual(missing.actionTitle, "Download (\(ParakeetV3ModelSpec.downloadSizeLabel))")
-        XCTAssertNotEqual(ParakeetV3ModelSpec.downloadSizeLabel, WhisperModelSpec.downloadSizeLabel)
-        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
-        XCTAssertFalse(missing.note?.contains("Whisper") == true)
-        XCTAssertNil(row(.parakeetV3, language: .german).warning, "German is one of its languages")
-
-        let downloading = row(.parakeetV3, install: .downloading(ModelDownloadProgress(completedBytes: 25, totalBytes: 100)))
-        XCTAssertEqual(downloading.progress, 0.25)
-        XCTAssertEqual(downloading.action, .cancelDownload)
-        XCTAssertEqual(row(.parakeetV3, install: .verifying).status, "Checking the downloaded files")
-        XCTAssertEqual(row(.parakeetV3, install: .cancelled).action, .retryDownload)
-        XCTAssertEqual(row(.parakeetV3, install: .failed("offline")).actionTitle, "Retry")
-        XCTAssertEqual(row(.parakeetV3, install: .installed).action, .use)
-        XCTAssertEqual(row(.parakeetV3, preferred: .parakeetV3, failure: "Failed").action, .prepare)
-        XCTAssertEqual(row(.parakeetV3, preferred: .parakeetV3, install: .notInstalled, failure: "Not downloaded").action,
-                       .retryDownload)
-    }
-
-    func testLaunchWithParakeetV3ChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
-        let store = parakeetV3Root()
-        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), parakeetV3Store: store)
-        let background = FakeWhisperBackground()
-        let f = fixture(preferred: .parakeetV3, language: .german, autoPrepare: true, provider: provider,
-                        modelBackground: background)
-        XCTAssertEqual(f.controller.phase, .modelRequired)
-        XCTAssertEqual(f.controller.engineName, "Parakeet V3")
-        XCTAssertFalse(f.bridge.isModelInstalled)
-        f.controller.noteSceneDidBecomeActive()
-        XCTAssertTrue(background.engines.isEmpty)
-        XCTAssertEqual(background.maintenance.last, false)
-
-        let notInstalled = SpeechEngineError.notInstalled(.parakeetV3).localizedDescription
-        f.controller.performPrimaryAction()
-        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
-        XCTAssertNil(f.controller.currentEngine)
-        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Parakeet V3")
-    }
-
-    func testInstalledParakeetV3PreparesOnOpeningWithTheBackgroundRuntime() async throws {
-        let background = FakeWhisperBackground()
-        let provider = FakeEngineProvider()
-        provider.installed = [.parakeetV3]
-        let f = fixture(preferred: .parakeetV3, autoPrepare: true, provider: provider,
-                        modelBackground: background, deferPreparationUntilActive: true)
-        XCTAssertTrue(provider.created.isEmpty)
-        f.controller.noteSceneDidBecomeActive()
-        f.controller.prepareInstalledModelIfNeeded()
-        try await f.waitUntil { f.controller.phase == .ready }
-        XCTAssertEqual(provider.explicitCalls, [.parakeetV3])
-        XCTAssertEqual(background.engines, [.parakeetV3])
-        XCTAssertEqual(background.finishes.last, true)
-        XCTAssertEqual(background.maintenance.last, true)
-        XCTAssertFalse(f.audio.isKeepaliveRunning)
-        XCTAssertEqual(ModelBackgroundPreparation.taskTitle(for: .parakeetV3), "Preparing Parakeet V3")
-        XCTAssertEqual(ModelBackgroundPreparation.taskTitle(for: .orukeet), "Preparing Orukeet")
-    }
-
-    func testParakeetV3PreparationExpiryNamesTheEngineAndKeepsTheChoice() async throws {
-        let background = FakeWhisperBackground()
-        let held = EngineASR(.parakeetV3)
-        await held.holdPrepare()
-        let provider = FakeEngineProvider()
-        provider.installed = [.parakeetV3]
-        provider.queued[.parakeetV3] = [held]
-        let f = fixture(preferred: .parakeetV3, provider: provider, modelBackground: background)
-        f.controller.noteSceneDidBecomeActive()
-        try await f.waitUntil { provider.created.count == 1 }
-        try XCTUnwrap(background.expirations.first)()
-        XCTAssertEqual(f.controller.phase, .failed(
-            "Parakeet V3 preparation paused. Open Typr or tap Try again to continue. iOS controls background time."))
-        XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
-        XCTAssertTrue(provider.automaticCalls.isEmpty)
-        await held.releasePrepare()
-    }
-
     func testParakeetV3StagesDriveTheContinuedTaskLikeWhisper() {
         typealias B = ModelBackgroundPreparation
         let progress = Progress(totalUnitCount: -1)
@@ -1881,33 +1823,10 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(B.taskSubtitle(for: ModelPreparationProgress(
             fractionCompleted: nil, detail: "Checking the Parakeet V3 model", stageProgress: (4, 5))), "Checking model")
     }
-
-    func testDictationLogRecordsParakeetV3AndTheCapturesLanguage() async throws {
-        let env = LogTestEnvironment()
-        logEnvironments.append(env)
-        try await LogTestEnvironment.waitUntilLoaded(env.store)
-        let provider = FakeEngineProvider()
-        provider.installed = [.parakeetV3]
-        let f = fixture(preferred: .parakeetV3, language: .german, provider: provider, dictationLog: env.store)
-        try await f.ready()
-        _ = try await f.dictate(jobID: "v3-1")
-        f.controller.setDictationLanguage(.automatic)
-        _ = try await f.dictate(jobID: "v3-2")
-
-        let contexts = env.store.entries.map(\.context)
-        XCTAssertEqual(contexts.count, 2)
-        XCTAssertEqual(Set(contexts.map(\.speechEngine)), ["Parakeet V3"])
-        XCTAssertEqual(Set(contexts.map(\.speechLanguage)), ["German", "Automatic (detected by Parakeet V3)"])
-        let languages = await provider.instances(of: .parakeetV3).first?.languages
-        XCTAssertEqual(languages, [.german, .automatic], "each capture passes its own language")
-    }
 }
 
 extension SpeechEngineSelectionTests {
     func testRowsOfferDeleteOnlyForModelsOnThisIPhone() {
-        XCTAssertTrue(row(.parakeetV3, install: .installed).offersDelete)
-        XCTAssertTrue(row(.whisperLargeV3Turbo, install: .installed).offersDelete)
-        XCTAssertFalse(row(.parakeetV3, availability: .downloadRequired("Not downloaded"), install: .notInstalled).offersDelete)
         XCTAssertFalse(row(.whisperLargeV3Turbo, install: .downloading(ModelDownloadProgress(completedBytes: 1, totalBytes: 2)))
             .offersDelete)
         XCTAssertFalse(row(.whisperLargeV3Turbo, install: .cancelled).offersDelete)
@@ -1918,7 +1837,6 @@ extension SpeechEngineSelectionTests {
         XCTAssertTrue(row(.parakeetV3, install: .installed).deleteEnabled)
         XCTAssertFalse(row(.parakeetV3, install: .installed, canChange: false).deleteEnabled)
         XCTAssertTrue(SpeechEngineCard.deletionMessage(for: .parakeetV2).contains("downloads it again the next time you use it"))
-        XCTAssertTrue(SpeechEngineCard.deletionMessage(for: .parakeetV3).contains("Your engine choice stays"))
     }
 
     func testDeletingTheCurrentModelReleasesItEndsTheWarmSessionAndKeepsTheChoice() async throws {
@@ -1965,10 +1883,7 @@ extension SpeechEngineSelectionTests {
         let f = fixture(preferred: .parakeetV2)
         f.fake.queued[.parakeetV2] = [held]
         f.controller.prepareModel()
-        for _ in 0..<100 {
-            if await held.prepareCount == 1 { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("held preparation entered") { await held.prepareCount == 1 }
         let deletion = Task { await f.controller.deleteModel(.parakeetV2) }
         try await f.waitUntil { f.controller.isDeletingModel }
         XCTAssertFalse(f.controller.canChangeEngine)
@@ -2012,15 +1927,11 @@ extension SpeechEngineSelectionTests {
 
     func testProductionDeleteRemovesOnlyThatEnginesFilesAndTheChoiceThenFailsAsNotDownloaded() async throws {
         let v3 = ParakeetV3ModelStore(root: WhisperTestFiles.makeRoot())
-        let whisper = whisperRoot()
-        let v2Cache = WhisperTestFiles.makeRoot().appendingPathComponent("parakeet-tdt-0.6b-v2-coreml")
-        roots += [v3.root, v2Cache.deletingLastPathComponent()]
+        roots.append(v3.root)
         try ParakeetV3TestFiles.populate(v3, marker: true)
         let partial = v3.repoFolder(ParakeetV3ModelSpec.modelRepo).appendingPathComponent("Encoder.mlmodelc/weights/weight.bin.incomplete")
         try WhisperTestFiles.writeSparse(partial, bytes: 1_000)
-        try WhisperTestFiles.populate(whisper, marker: true)
-        try WhisperTestFiles.writeSparse(v2Cache.appendingPathComponent("Encoder.mlmodelc/weights/weight.bin.partial"), bytes: 10)
-        let provider = ProductionSpeechEngineProvider(whisperStore: whisper, parakeetV3Store: v3, parakeetV2Cache: v2Cache)
+        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), parakeetV3Store: v3)
         let installer = ParakeetV3ModelInstaller(store: v3, downloader: CountingDownloader(), availableCapacity: { .max })
         XCTAssertEqual(installer.state, .installed)
 
@@ -2029,7 +1940,6 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(result, .deleted)
         XCTAssertFalse(FileManager.default.fileExists(atPath: v3.root.path), "files and partial downloads are gone")
         XCTAssertFalse(provider.isInstalled(.parakeetV3))
-        XCTAssertTrue(whisper.isInstalled, "another engine's model is untouched")
         installer.refresh()
         XCTAssertEqual(installer.state, .notInstalled, "the row returns to Download")
         XCTAssertFalse(f.bridge.isModelInstalled)
@@ -2038,11 +1948,35 @@ extension SpeechEngineSelectionTests {
         f.controller.performPrimaryAction()
         try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
         XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
+    }
 
-        try provider.deleteModel(.parakeetV2)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: v2Cache.path))
+    func testProductionDeleteRemovesOnlyThatEnginesFolder() throws {
+        let root = WhisperTestFiles.makeRoot()
+        roots.append(root)
+        let folders: [SpeechEngineChoice: URL] = [
+            .parakeetV2: root.appending(component: "v2"), .whisperLargeV3Turbo: root.appending(component: "whisper"),
+            .parakeetV3: root.appending(component: "v3"), .orukeet: root.appending(component: "orukeet"),
+            .cohereTranscribe: root.appending(component: "cohere"),
+        ]
+        let provider = ProductionSpeechEngineProvider(
+            whisperStore: WhisperModelStore(root: folders[.whisperLargeV3Turbo]!),
+            parakeetV3Store: ParakeetV3ModelStore(root: folders[.parakeetV3]!),
+            orukeetStore: OrukeetModelStore(root: folders[.orukeet]!),
+            parakeetV2Cache: folders[.parakeetV2]!,
+            cohereStore: CohereModelStore(root: folders[.cohereTranscribe]!))
+        for folder in folders.values {
+            try WhisperTestFiles.writeSparse(folder.appending(path: "models/weight.bin.incomplete"), bytes: 10)
+        }
         try provider.deleteModel(.appleSpeech)
-        XCTAssertTrue(whisper.isInstalled)
+        var remaining = folders
+        for engine in folders.keys {
+            try provider.deleteModel(engine)
+            remaining[engine] = nil
+            XCTAssertFalse(FileManager.default.fileExists(atPath: folders[engine]!.path), "\(engine)")
+            for (other, folder) in remaining {
+                XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path), "deleting \(engine) removed \(other)")
+            }
+        }
     }
 
     func testDeletingAfterAPausedPreparationWaitsForItsRunningLoad() async throws {
@@ -2054,10 +1988,7 @@ extension SpeechEngineSelectionTests {
         provider.queued[.parakeetV3] = [held]
         let f = fixture(preferred: .parakeetV3, provider: provider, modelBackground: background)
         f.controller.noteSceneDidBecomeActive()
-        for _ in 0..<100 {
-            if await held.prepareCount == 1 { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("held preparation entered") { await held.prepareCount == 1 }
         try XCTUnwrap(background.expirations.first)()
         XCTAssertTrue(f.controller.phase.isFailure)
         let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
@@ -2097,10 +2028,7 @@ extension SpeechEngineSelectionTests {
         provider.queued[.parakeetV3] = [held]
         let f = fixture(preferred: .parakeetV3, provider: provider)
         f.controller.prepareModel()
-        for _ in 0..<100 {
-            if await held.prepareCount == 1 { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("held preparation entered") { await held.prepareCount == 1 }
         XCTAssertEqual(f.controller.selectEngine(.whisperLargeV3Turbo), .selected)
         let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
         try await f.waitUntil { f.controller.isDeletingModel }
@@ -2123,10 +2051,7 @@ extension SpeechEngineSelectionTests {
         provider.queued[.parakeetV3] = [held]
         let f = fixture(preferred: .parakeetV3, provider: provider)
         f.controller.prepareModel()
-        for _ in 0..<100 {
-            if await held.prepareCount == 1 { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
+        try await waitForState("held preparation entered") { await held.prepareCount == 1 }
         let deletion = Task { await f.controller.deleteModel(.parakeetV3) }
         try await f.waitUntil { f.controller.isDeletingModel }
         f.controller.handleKeyboardLaunch(.startRecording(jobID: "kb-delete", requestedAt: f.now, style: .polished, host: nil))
@@ -2142,164 +2067,5 @@ extension SpeechEngineSelectionTests {
         XCTAssertEqual(f.bridge.snapshot().message, notInstalled)
         XCTAssertTrue(f.audio.captures.isEmpty)
         XCTAssertEqual(f.controller.preferredEngine, .parakeetV3)
-    }
-}
-
-extension SpeechEngineSelectionTests {
-    func testOrukeetRowOffersOnlyItsDownloadUntilInstalled() {
-        let missing = row(.orukeet, availability: .downloadRequired("Not downloaded"), install: .notInstalled)
-        XCTAssertEqual(missing.action, .download)
-        XCTAssertEqual(missing.actionTitle, "Download (\(OrukeetModelSpec.downloadSizeLabel))")
-        XCTAssertNotEqual(OrukeetModelSpec.downloadSizeLabel, ParakeetV3ModelSpec.downloadSizeLabel)
-        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
-        XCTAssertNil(row(.orukeet, language: .german).warning, "German is one of its languages")
-
-        let downloading = row(.orukeet, install: .downloading(ModelDownloadProgress(completedBytes: 25, totalBytes: 100)))
-        XCTAssertEqual(downloading.progress, 0.25)
-        XCTAssertEqual(downloading.action, .cancelDownload)
-        XCTAssertEqual(row(.orukeet, install: .cancelled).action, .retryDownload)
-        XCTAssertEqual(row(.orukeet, install: .failed("offline")).actionTitle, "Retry")
-        XCTAssertEqual(row(.orukeet, install: .installed).action, .use)
-        XCTAssertTrue(row(.orukeet, install: .installed).offersDelete)
-        XCTAssertFalse(missing.offersDelete)
-        XCTAssertFalse(downloading.offersDelete)
-        XCTAssertEqual(row(.orukeet, preferred: .orukeet, install: .notInstalled, failure: "Not downloaded").action,
-                       .retryDownload)
-    }
-
-    func testLaunchWithOrukeetChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
-        let root = WhisperTestFiles.makeRoot()
-        roots.append(root)
-        let store = OrukeetModelStore(root: root)
-        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), orukeetStore: store)
-        let background = FakeWhisperBackground()
-        let f = fixture(preferred: .orukeet, language: .german, autoPrepare: true, provider: provider,
-                        modelBackground: background)
-        XCTAssertEqual(f.controller.phase, .modelRequired)
-        XCTAssertEqual(f.controller.engineName, "Orukeet")
-        XCTAssertFalse(f.bridge.isModelInstalled)
-        f.controller.noteSceneDidBecomeActive()
-        XCTAssertTrue(background.engines.isEmpty)
-
-        let notInstalled = SpeechEngineError.notInstalled(.orukeet).localizedDescription
-        f.controller.performPrimaryAction()
-        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
-        XCTAssertNil(f.controller.currentEngine)
-        XCTAssertEqual(f.controller.preferredEngine, .orukeet)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Orukeet")
-    }
-
-    func testDictationLogRecordsOrukeetWithItsAutomaticLanguage() async throws {
-        let env = LogTestEnvironment()
-        logEnvironments.append(env)
-        try await LogTestEnvironment.waitUntilLoaded(env.store)
-        let provider = FakeEngineProvider()
-        provider.installed = [.orukeet]
-        let f = fixture(preferred: .orukeet, language: .german, provider: provider, dictationLog: env.store)
-        try await f.ready()
-        _ = try await f.dictate(jobID: "orukeet-1")
-
-        let context = try XCTUnwrap(env.store.entries.first?.context)
-        XCTAssertEqual(context.speechEngine, "Orukeet")
-        XCTAssertEqual(context.speechLanguage, "Automatic (detected by Orukeet)")
-    }
-
-    func testProductionDeleteRemovesOrukeetsModelArchiveAndStagingButKeepsTheChoice() async throws {
-        let root = WhisperTestFiles.makeRoot()
-        roots.append(root)
-        let store = OrukeetModelStore(root: root)
-        let v3 = ParakeetV3ModelStore(root: root.appendingPathComponent("v3"))
-        try OrukeetTestFiles.populateCompiled(store)
-        try store.writeMarker()
-        try WhisperTestFiles.writeSparse(store.fileURL(for: OrukeetModelSpec.archive), bytes: 1_000)
-        try WhisperTestFiles.writeSparse(
-            store.repoFolder(OrukeetModelSpec.modelRepo).appending(path: "unpacking/packages/Encoder.mlpackage/Manifest.json"),
-            bytes: 10)
-        try ParakeetV3TestFiles.populate(v3, marker: true)
-        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), parakeetV3Store: v3, orukeetStore: store)
-        let installer = OrukeetModelInstaller(store: store, downloader: CountingDownloader(), availableCapacity: { .max })
-        XCTAssertEqual(installer.state, .installed)
-
-        let f = fixture(preferred: .orukeet, provider: provider)
-        let result = await f.controller.deleteModel(.orukeet)
-        XCTAssertEqual(result, .deleted)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.modelFolder.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.fileURL(for: OrukeetModelSpec.archive).path),
-                       "a partial archive download is gone too")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.markerURL.path))
-        XCTAssertFalse(provider.isInstalled(.orukeet))
-        installer.refresh()
-        XCTAssertEqual(installer.state, .notInstalled, "the row returns to Download")
-        XCTAssertFalse(f.bridge.isModelInstalled)
-        XCTAssertEqual(f.controller.preferredEngine, .orukeet)
-
-        let notInstalled = SpeechEngineError.notInstalled(.orukeet).localizedDescription
-        f.controller.performPrimaryAction()
-        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
-        XCTAssertEqual(f.controller.preferredEngine, .orukeet)
-    }
-}
-
-extension SpeechEngineSelectionTests {
-    func testCohereRowOffersOnlyItsDownloadUntilInstalledThenDelete() {
-        let missing = row(.cohereTranscribe, availability: .downloadRequired("Not downloaded"), install: .notInstalled)
-        XCTAssertEqual(missing.action, .download)
-        XCTAssertEqual(missing.actionTitle, "Download (\(CohereModelSpec.downloadSizeLabel))")
-        XCTAssertFalse(missing.offersDelete)
-        XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true)
-        XCTAssertNil(row(.cohereTranscribe, language: .german).warning, "German is one of its languages")
-
-        let downloading = row(.cohereTranscribe, install: .downloading(ModelDownloadProgress(completedBytes: 25, totalBytes: 100)))
-        XCTAssertEqual(downloading.progress, 0.25)
-        XCTAssertEqual(downloading.action, .cancelDownload)
-        XCTAssertEqual(row(.cohereTranscribe, install: .verifying).status, "Checking the downloaded files")
-        XCTAssertEqual(row(.cohereTranscribe, install: .cancelled).action, .retryDownload)
-        XCTAssertEqual(row(.cohereTranscribe, install: .failed("offline")).actionTitle, "Retry")
-        XCTAssertEqual(row(.cohereTranscribe, install: .installed).action, .use)
-        XCTAssertTrue(row(.cohereTranscribe, install: .installed).offersDelete)
-        XCTAssertEqual(row(.cohereTranscribe, preferred: .cohereTranscribe, install: .notInstalled,
-                           failure: "Not downloaded").action, .retryDownload)
-        XCTAssertTrue(SpeechEngineCard.deletionMessage(for: .cohereTranscribe).contains("Your engine choice stays"))
-    }
-
-    func testLaunchWithCohereChosenButNotInstalledDoesNotPrepareOrDownload() async throws {
-        let store = CohereModelStore(root: WhisperTestFiles.makeRoot())
-        roots.append(store.root)
-        let provider = ProductionSpeechEngineProvider(whisperStore: whisperRoot(), cohereStore: store)
-        let background = FakeWhisperBackground()
-        let f = fixture(preferred: .cohereTranscribe, language: .german, autoPrepare: true, provider: provider,
-                        modelBackground: background)
-        XCTAssertEqual(f.controller.phase, .modelRequired)
-        XCTAssertEqual(f.controller.engineName, "Cohere Transcribe")
-        XCTAssertFalse(f.bridge.isModelInstalled)
-        f.controller.noteSceneDidBecomeActive()
-        XCTAssertTrue(background.engines.isEmpty)
-
-        let notInstalled = SpeechEngineError.notInstalled(.cohereTranscribe).localizedDescription
-        f.controller.performPrimaryAction()
-        try await f.waitUntil { f.controller.phase == .failed(notInstalled) }
-        XCTAssertNil(f.controller.currentEngine)
-        XCTAssertEqual(f.controller.preferredEngine, .cohereTranscribe)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: store.root.path), "nothing was written for Cohere")
-    }
-
-    func testDictationLogRecordsCohereAndTheLanguageItWasGiven() async throws {
-        let env = LogTestEnvironment()
-        logEnvironments.append(env)
-        try await LogTestEnvironment.waitUntilLoaded(env.store)
-        let provider = FakeEngineProvider()
-        provider.installed = [.cohereTranscribe]
-        let f = fixture(preferred: .cohereTranscribe, language: .german, provider: provider, dictationLog: env.store)
-        try await f.ready()
-        _ = try await f.dictate(jobID: "cohere-1")
-        f.controller.setDictationLanguage(.automatic)
-        _ = try await f.dictate(jobID: "cohere-2")
-
-        let contexts = env.store.entries.map(\.context)
-        XCTAssertEqual(contexts.count, 2)
-        XCTAssertEqual(Set(contexts.map(\.speechEngine)), ["Cohere Transcribe"])
-        XCTAssertEqual(Set(contexts.map(\.speechLanguage)), ["German", CohereTranscriber.languageName(for: .automatic)])
-        let languages = await provider.instances(of: .cohereTranscribe).first?.languages
-        XCTAssertEqual(languages, [.german, .automatic], "each capture passes its own language")
     }
 }
