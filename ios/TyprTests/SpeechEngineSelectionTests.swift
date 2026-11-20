@@ -445,10 +445,14 @@ final class SpeechEngineSelectionTests: XCTestCase {
             XCTAssertEqual(missing.actionTitle, "Download (\(label))")
             XCTAssertFalse(missing.offersDelete, "\(engine)")
             XCTAssertTrue(missing.note?.contains("Opening Typr prepares the installed, chosen model") == true, "\(engine)")
-            XCTAssertTrue(missing.note?.contains("several minutes") == true, "disclose optimization before choosing Use")
+            XCTAssertNil(missing.progress, "\(engine)")
+            for disclosure in ["First optimization", "several minutes", "can pause or stop it; reopen Typr to retry"] {
+                XCTAssertTrue(missing.note?.contains(disclosure) == true, "\(engine): disclose optimization before choosing Use")
+            }
             XCTAssertEqual(missing.note?.contains("not as Whisper hints") == true, engine == .whisperLargeV3Turbo)
             XCTAssertNil(row(engine, language: .german).warning, "\(engine)")
             XCTAssertEqual(row(engine, install: .installed).action, .use, "Use is separate from Download")
+            XCTAssertNil(row(engine, install: .installed).badge, "\(engine)")
             XCTAssertTrue(row(engine, install: .installed).offersDelete, "\(engine)")
             XCTAssertEqual(row(engine, preferred: engine, install: .notInstalled, failure: "Not downloaded").action,
                            .retryDownload, "\(engine)")
