@@ -139,6 +139,29 @@ final class PersonalTypingModelTests: XCTestCase {
         XCTAssertNil(model.calibration(for: KeyboardLayout(width: 393, orientation: .landscape)))
     }
 
+    func testStaggeredAndAlignedSplitLearnSeparately() throws {
+        let staggered = KeyboardLayout(width: 951, orientation: .splitLandscape)
+        let aligned = KeyboardLayout(width: 951, orientation: .splitLandscape, splitColumns: true)
+        let model = PersonalTypingModel()
+        model.learn(Array(repeating: try label(0.3, layout: staggered), count: 20), layout: staggered, source: .keep)
+        let staggeredState = model.state.layouts[KeyboardLayoutSignature(staggered).id]
+        let staggeredCalibration = model.calibration(for: staggered)
+        XCTAssertNotNil(staggeredCalibration)
+        XCTAssertNil(model.calibration(for: aligned))
+
+        model.learn(Array(repeating: try label(-0.3, layout: aligned), count: 20), layout: aligned, source: .keep)
+        model.learnSpace(try XCTUnwrap(aligned.key(.space)).frame.origin, layout: aligned)
+        XCTAssertEqual(model.state.layouts[KeyboardLayoutSignature(staggered).id], staggeredState)
+        XCTAssertEqual(model.calibration(for: staggered), staggeredCalibration)
+        XCTAssertEqual(try stats(model, layout: aligned).meanX, -0.3, accuracy: 1e-9)
+        XCTAssertEqual(try stats(model, layout: staggered).meanX, 0.3, accuracy: 1e-9)
+
+        let decoded = try JSONDecoder().decode(PersonalTypingModel.State.self, from: JSONEncoder().encode(model.state))
+        let reloaded = PersonalTypingModel(state: decoded)
+        XCTAssertEqual(reloaded.state, model.state)
+        XCTAssertEqual(reloaded.calibration(for: staggered), staggeredCalibration)
+    }
+
     func testLearningOffPreservesStateAndProtectionsButHidesPriors() throws {
         let model = PersonalTypingModel()
         model.recordWord("hello")

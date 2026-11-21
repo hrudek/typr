@@ -1,22 +1,54 @@
 import Foundation
 import CoreGraphics
 
-/// Learning is isolated to one orientation, width bucket and accessory configuration.
+/// Learning is isolated to one orientation, width bucket, accessory configuration and split arrangement.
 nonisolated struct KeyboardLayoutSignature: Hashable, Codable, Sendable {
     let orientation: String
     let widthBucket: Int
     let showsStrip: Bool
     let showsGlobe: Bool
+    /// Aligned split columns. Encoded and part of `id` only when true, so staggered and
+    /// non-split data saved before this field keeps its keys.
+    let splitColumns: Bool
 
     init(_ layout: KeyboardLayout) {
         orientation = layout.orientation.rawValue
         widthBucket = Int((layout.width / 8).rounded()) * 8
         showsStrip = layout.showsStrip
         showsGlobe = layout.showsGlobe
+        splitColumns = layout.splitColumns
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case orientation, widthBucket, showsStrip, showsGlobe, splitColumns
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        orientation = try container.decode(String.self, forKey: .orientation)
+        widthBucket = try container.decode(Int.self, forKey: .widthBucket)
+        showsStrip = try container.decode(Bool.self, forKey: .showsStrip)
+        showsGlobe = try container.decode(Bool.self, forKey: .showsGlobe)
+        splitColumns = try container.decodeIfPresent(Bool.self, forKey: .splitColumns) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(orientation, forKey: .orientation)
+        try container.encode(widthBucket, forKey: .widthBucket)
+        try container.encode(showsStrip, forKey: .showsStrip)
+        try container.encode(showsGlobe, forKey: .showsGlobe)
+        if splitColumns { try container.encode(true, forKey: .splitColumns) }
     }
 
     var id: String {
         "\(orientation)-\(widthBucket)-\(showsStrip ? "strip" : "no-strip")-\(showsGlobe ? "globe" : "no-globe")"
+            + (splitColumns ? "-aligned" : "")
+    }
+
+    var isValid: Bool {
+        guard let pose = KeyboardOrientation(rawValue: orientation) else { return false }
+        return (!splitColumns || pose == .splitLandscape) && (8...4096).contains(widthBucket) && widthBucket % 8 == 0
     }
 }
 

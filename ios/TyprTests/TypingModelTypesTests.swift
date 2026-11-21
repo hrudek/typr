@@ -24,6 +24,27 @@ final class TypingModelTypesTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(KeyboardLayoutSignature.self, from: JSONEncoder().encode(signature)), signature)
     }
 
+    func testAlignedColumnsAreASeparateSignatureAndOlderDataStaysStaggered() throws {
+        let staggered = KeyboardLayoutSignature(KeyboardLayout(width: 951, orientation: .splitLandscape))
+        let aligned = KeyboardLayoutSignature(KeyboardLayout(width: 951, orientation: .splitLandscape, splitColumns: true))
+        XCTAssertEqual(staggered.id, "splitLandscape-952-strip-no-globe")
+        XCTAssertEqual(aligned.id, "splitLandscape-952-strip-no-globe-aligned")
+        XCTAssertNotEqual(staggered, aligned)
+        XCTAssertEqual(KeyboardLayoutSignature(KeyboardLayout(width: 951, orientation: .wideLandscape, splitColumns: true)).id,
+                       "wideLandscape-952-strip-no-globe")
+
+        let old = Data(#"{"orientation":"splitLandscape","widthBucket":952,"showsStrip":true,"showsGlobe":false}"#.utf8)
+        XCTAssertEqual(try JSONDecoder().decode(KeyboardLayoutSignature.self, from: old), staggered)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        XCTAssertFalse(String(decoding: try encoder.encode(staggered), as: UTF8.self).contains("splitColumns"))
+        XCTAssertEqual(try JSONDecoder().decode(KeyboardLayoutSignature.self, from: encoder.encode(aligned)), aligned)
+
+        XCTAssertTrue(aligned.isValid)
+        let portrait = Data(#"{"orientation":"portrait","widthBucket":392,"showsStrip":true,"showsGlobe":false,"splitColumns":true}"#.utf8)
+        XCTAssertFalse(try JSONDecoder().decode(KeyboardLayoutSignature.self, from: portrait).isValid)
+    }
+
     func testCalibrationClampsAndPreservesValidEntries() {
         let valid = SpatialTouchCalibration.Key(offsetX: 0.1, offsetY: -0.2, sigmaX: 0.3, sigmaY: 0.4)
         let calibration = SpatialTouchCalibration(keys: [

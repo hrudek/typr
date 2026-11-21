@@ -79,6 +79,26 @@ final class TapStatisticsTests: XCTestCase {
         XCTAssertNil(taps.meanDrift)
         XCTAssertNil(taps.half(left: true))
     }
+    func testAlignedSplitHasItsOwnBoardTitleModelAndHeat() throws {
+        let staggered = KeyboardLayoutSignature(KeyboardLayout(width: 951, orientation: .splitLandscape))
+        let original = KeyboardLayout(width: 951, orientation: .splitLandscape, splitColumns: true)
+        let aligned = KeyboardLayoutSignature(original)
+        let board = TapStatistics.board(aligned)
+        XCTAssertTrue(board.splitColumns)
+        XCTAssertFalse(TapStatistics.board(staggered).splitColumns)
+        XCTAssertEqual(KeyboardLayoutSignature(board), aligned)
+        for letter in ["q", "a", "z", "p"] {
+            XCTAssertEqual(board.key(.character(letter))?.frame.minX ?? 0, original.key(.character(letter))?.frame.minX ?? -1,
+                           accuracy: 4, letter)
+        }
+        XCTAssertNotEqual(aligned.statisticsTitle, staggered.statisticsTitle)
+
+        let heat = UsageHeat(layout: staggered, geometryVersion: 1, cells: Array(repeating: 1, count: 64 * 24), updatedAt: Date())
+        let taps = TapStatistics(signature: aligned, model: summary(staggered), heat: heat)
+        XCTAssertTrue(taps.keys.isEmpty)
+        XCTAssertNil(taps.heat)
+        XCTAssertFalse(TapStatistics(signature: aligned, model: summary(aligned), heat: nil).keys.isEmpty)
+    }
     func testHeatPopulationNeverBecomesAccuracy() {
         let signature = KeyboardLayoutSignature(KeyboardLayout(width: 392))
         let heat = UsageHeat(layout: signature, geometryVersion: 1, cells: Array(repeating: 2, count: 64 * 24), updatedAt: Date())
