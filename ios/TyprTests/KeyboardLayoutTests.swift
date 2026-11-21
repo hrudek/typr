@@ -664,7 +664,7 @@ final class KeyboardLayoutTests: XCTestCase {
 
     func testSplitLeftSpaceEndsFlushWithTheLeftKeysAbove() throws {
         let orders: [[BottomKey]] = [[.space, .period, .typr], [.typr, .space, .period], [.period, .space, .typr]]
-        for width: CGFloat in [801, 951, 1100] {
+        for width: CGFloat in [669, 801, 951, 1100] {
             for layer in [KeyboardLayer.letters, .numbers, .symbols] {
                 for splitColumns in [false, true] {
                     for numberRow in [false, true] {

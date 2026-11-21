@@ -689,8 +689,17 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         trailing += aroundSpace[spaceIndex...].compactMap(arrangedKey)
         trailing.append((.returnKey, returnW, "return"))
 
+        let leftKeysEnd = drawn.filter { $0.1 < spaceRow && $0.2.maxX < width / 2 }.map { $0.2.maxX }.max() ?? 0
+        var leadingScale: CGFloat = 1
+        if m.splitGap > 0 {
+            let room = leftKeysEnd - left - CGFloat(leading.count + 1) * m.gap - lw
+            let natural = leading.reduce(0) { $0 + $1.1 }
+            leadingScale = min(1, max(0, room) / natural)
+        }
+
         var x = left
-        for (kind, w, label) in leading {
+        for (kind, naturalW, label) in leading {
+            let w = naturalW * leadingScale
             add(kind, row: spaceRow, x: x, w: w, label: label)
             x += w + m.gap
         }
@@ -698,12 +707,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         if m.splitGap > 0 {
             let pitch = lw + m.gap
             let rightSpaceEnd = right - trailingWidth
-            let rightSpaceStart = min(left + 5 * pitch + m.splitGap, rightSpaceEnd - 2 * pitch)
-            // The left space ends flush with the right edge of the left-half keys above it, unless leading keys
-            // crowd it below two pitches or a crowded right half would overlap it.
-            let leftKeysEnd = drawn.filter { $0.1 < spaceRow && $0.2.maxX < width / 2 }.map { $0.2.maxX }.max() ?? 0
-            let leftSpaceEnd = min(max(leftKeysEnd, x + 2 * pitch), rightSpaceStart - m.gap)
-            add(.space, row: spaceRow, x: x, w: leftSpaceEnd - x, label: "space")
+            let rightSpaceStart = min(left + 5 * pitch + m.splitGap, rightSpaceEnd - lw)
+            add(.space, row: spaceRow, x: x, w: leftKeysEnd - x, label: "space")
             add(.space, row: spaceRow, x: rightSpaceStart, w: rightSpaceEnd - rightSpaceStart, label: "space")
             x = rightSpaceEnd + m.gap
         } else {
