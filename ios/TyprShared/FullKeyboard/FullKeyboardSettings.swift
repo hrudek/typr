@@ -17,6 +17,7 @@ struct FullKeyboardSettings {
         static let numberRow = "settings.keyboardNumberRow"
         static let splitKeyboard = "settings.keyboardSplit"
         static let splitColumns = "settings.keyboardSplitColumns"
+        static let splitMirrored = "settings.keyboardSplitMirrored"
         static let design = "settings.keyboardDesign"
     }
 
@@ -75,6 +76,12 @@ struct FullKeyboardSettings {
     var splitColumns: Bool {
         get { defaults?.object(forKey: Key.splitColumns) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.splitColumns) }
+    }
+
+    /// The split keyboard's left half moved out so both halves sit equally far from the centre. Off by default.
+    var splitMirrored: Bool {
+        get { defaults?.object(forKey: Key.splitMirrored) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.splitMirrored) }
     }
 
     var design: KeyboardDesign {

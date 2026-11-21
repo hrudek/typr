@@ -44,6 +44,7 @@ final class KeyboardViewController: UIInputViewController {
         viewModel.numberRow = FullKeyboardSettings().numberRow
         viewModel.splitKeyboard = FullKeyboardSettings().splitKeyboard
         viewModel.splitColumns = FullKeyboardSettings().splitColumns
+        viewModel.splitMirrored = FullKeyboardSettings().splitMirrored
         mountSurface()
         refreshProtectedLexicon()
         fullKeyboard?.prepareForField()

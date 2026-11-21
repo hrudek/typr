@@ -250,6 +250,7 @@ final class Replayer {
         engine.bottomRow = layout.bottomRow
         engine.numberRow = layout.numberRow
         engine.splitColumns = layout.splitColumns
+        engine.splitMirrored = layout.splitMirrored
         engine.horizontalInset = layout.horizontalInset
         engine.showsStrip = layout.showsStrip
         engine.configureForField()
