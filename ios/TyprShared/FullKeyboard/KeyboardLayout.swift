@@ -335,8 +335,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     static let modifierWidthRatio: CGFloat = 1.34
     static let bottomSwitchWidthRatio: CGFloat = 1.56
     static let returnWidthRatio: CGFloat = 2.40
-    /// Mirrored halves: the narrowest the left shift key gets, in letter widths.
-    static let minModifierWidthRatio: CGFloat = 0.75
+    static let minLeftKeyWidthRatio: CGFloat = 0.5
     static let compactReturnWidthRatio: CGFloat = 2.18
 
     let width: CGFloat
@@ -587,14 +586,12 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             right - modW - (splitStagger[2] + CGFloat(rightBottom.count)) * pitch,
             right + m.gap - (splitStagger[0] + CGFloat(rightTop)) * pitch
         )
-        // Mirrored halves: how far the left half should move so its innermost letter edge mirrors the right half's.
-        // The screen edge limits it below.
         var leftShift: CGFloat = 0
         if mirrored && m.splitGap > 0 {
             let leftInner = letterRows.indices.map {
                 leftStart + (splitStagger[$0] + CGFloat(leftHalfCount(letterRows[$0].count)) - 1) * pitch + lw
-            }.max() ?? 0
-            let rightInner = letterRows.indices.map { rightStart + splitStagger[$0] * pitch }.min() ?? 0
+            }.reduce(-CGFloat.infinity, max)
+            let rightInner = letterRows.indices.map { rightStart + splitStagger[$0] * pitch }.reduce(CGFloat.infinity, min)
             leftShift = max(0, leftInner + rightInner - width)
         }
 
@@ -695,19 +692,22 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         }
 
         if leftShift > 0 {
-            // The bottom row stays. The left modifier (shift, 123, #+=) stays at the edge and narrows instead of
-            // leaving the screen; everything else on the left moves, but not past the edge margin.
-            let isModifier = { (item: (KeyKind, Int, CGRect, String)) in item.1 == shiftRow && item.2.minX == left }
             let moving = drawn.filter { $0.1 != spaceRow && $0.2.midX < width / 2 }
-            for item in moving {
-                leftShift = min(leftShift, isModifier(item) ? item.2.width - KeyboardLayout.minModifierWidthRatio * lw : item.2.minX - left)
+            let minWidth = KeyboardLayout.minLeftKeyWidthRatio * lw
+            var firstKeys: [Int: CGRect] = [:]
+            for item in moving where item.2.minX < firstKeys[item.1]?.minX ?? .infinity {
+                firstKeys[item.1] = item.2
+            }
+            for first in firstKeys.values {
+                leftShift = min(leftShift, first.maxX - left - minWidth)
             }
             leftShift = max(0, leftShift)
             drawn = drawn.map { item in
                 guard item.1 != spaceRow, item.2.midX < width / 2 else { return item }
-                let frame = isModifier(item)
-                    ? CGRect(x: item.2.minX, y: item.2.minY, width: item.2.width - leftShift, height: item.2.height)
-                    : item.2.offsetBy(dx: -leftShift, dy: 0)
+                var frame = item.2.offsetBy(dx: -leftShift, dy: 0)
+                if firstKeys[item.1] == item.2, frame.minX < left {
+                    frame = CGRect(x: left, y: frame.minY, width: frame.maxX - left, height: frame.height)
+                }
                 return (item.0, item.1, frame, item.3)
             }
         }

@@ -585,35 +585,39 @@ final class KeyboardLayoutTests: XCTestCase {
     func testMirroredHalvesMoveTheLeftHalfOutwardAndKeepTheRightHalf() throws {
         for width: CGFloat in [801, 951] {
             for columns in [false, true] {
-                for layer in layers {
-                    let plain = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer, splitColumns: columns)
-                    let mirrored = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                  splitColumns: columns, splitMirrored: true)
-                    let name = describe(mirrored)
-                    let centre = width / 2
-                    for (a, b) in zip(plain.keys, mirrored.keys) {
-                        XCTAssertEqual(a.kind, b.kind, name)
-                        if a.frame.midX >= centre || b.row == mirrored.bottomRowIndex {
-                            XCTAssertEqual(a.frame, b.frame, name)
-                        } else {
-                            XCTAssertLessThanOrEqual(b.frame.minX, a.frame.minX, name)
-                            XCTAssertGreaterThanOrEqual(b.frame.minX, 0, name)
-                            XCTAssertEqual(a.frame.height, b.frame.height, name)
+                for numberRow in [false, true] {
+                    for layer in layers {
+                        let plain = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
+                                                   numberRow: numberRow, splitColumns: columns)
+                        let mirrored = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
+                                                      numberRow: numberRow, splitColumns: columns, splitMirrored: true)
+                        let name = describe(mirrored)
+                        let centre = width / 2
+                        var moved = 0
+                        for (a, b) in zip(plain.keys, mirrored.keys) {
+                            XCTAssertEqual(a.kind, b.kind, name)
+                            if a.frame.midX >= centre || b.row == mirrored.bottomRowIndex {
+                                XCTAssertEqual(a.frame, b.frame, name)
+                                XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.maxX, name)
+                            } else {
+                                XCTAssertLessThanOrEqual(b.frame.minX, a.frame.minX, name)
+                                XCTAssertGreaterThanOrEqual(b.frame.minX, 0, name)
+                                XCTAssertEqual(a.frame.height, b.frame.height, name)
+                                if a.frame != b.frame { moved += 1 }
+                            }
+                            XCTAssertGreaterThanOrEqual(b.frame.width, mirrored.letterWidth * 0.5 - 0.001, name)
                         }
-                        XCTAssertGreaterThanOrEqual(b.frame.width, mirrored.letterWidth * 0.75 - 0.001, name)
-                    }
-                    let keys = mirrored.keys.map(\.frame)
-                    for (index, a) in keys.enumerated() {
-                        for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
-                    }
-                    if layer == .letters {
-                        // The screen edge stops it short of an exact mirror; the left inner gap grows toward the right half's.
-                        func innerGap(_ layout: KeyboardLayout) throws -> CGFloat {
-                            try centre - XCTUnwrap(layout.key(.character("b"))).frame.maxX
+                        XCTAssertGreaterThan(moved, 0, name)
+                        let keys = mirrored.keys.map(\.frame)
+                        for (index, a) in keys.enumerated() {
+                            for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
                         }
-                        XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 20, name)
-                        XCTAssertLessThan(try XCTUnwrap(mirrored.key(.shift)).frame.width,
-                                          try XCTUnwrap(plain.key(.shift)).frame.width, name)
+                        if layer == .letters {
+                            func innerGap(_ layout: KeyboardLayout) throws -> CGFloat {
+                                try centre - XCTUnwrap(layout.key(.character("b"))).frame.maxX
+                            }
+                            XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 20, name)
+                        }
                     }
                 }
             }
