@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class AutocorrectUnifiedScoreTests: XCTestCase {
     private final class Checker: TextChecking {
-        func isWordValid(_ word: String) -> Bool { ["in", "is", "us", "if", "of"].contains(word.lowercased()) }
+        func isWordValid(_ word: String) -> Bool { ["in", "is", "us", "if", "of", "okay", "yes"].contains(word.lowercased()) }
         func guesses(for word: String) -> [String] { [] }
         func completions(for prefix: String) -> [String] { [] }
     }
@@ -24,7 +24,7 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
     }
 
     private final class GermanChecker: TextChecking {
-        func isWordValid(_ word: String) -> Bool { ["für", "ich", "bin"].contains(word.lowercased()) }
+        func isWordValid(_ word: String) -> Bool { ["für", "ich", "bin", "zwei", "okay", "yes"].contains(word.lowercased()) }
         func guesses(for word: String) -> [String] { [] }
         func completions(for prefix: String) -> [String] { [] }
     }
@@ -77,6 +77,12 @@ final class AutocorrectUnifiedScoreTests: XCTestCase {
     func testSpellingsOfTheTypedLettersNeedNoSystemGuess() throws {
         XCTAssertEqual(try commit("dont", after: "and "), "and don't ")
         XCTAssertEqual(try commit("fuer", after: "ich bin ", german: true), "ich bin für ")
+    }
+
+    func testGermanWordsTypedWithYAndZSwappedAreCorrected() throws {
+        XCTAssertEqual(try commit("okaz", after: "das ist ", german: true), "das ist okay ")
+        XCTAssertEqual(try commit("ywei", after: "ich habe ", german: true), "ich habe zwei ")
+        XCTAssertNotEqual(try commit("zes", after: "I said ", german: true), "I said yes ")
     }
 
     func testOwnerProtectionsOutrankTheScore() throws {

@@ -333,7 +333,7 @@ final class AutocorrectEngine {
             calibration: evidence.flatMap { learning.calibration(for: $0.layout) },
             personal: evidence == nil ? .empty : learning.personalPriors,
             lexicons: spatialDecoder?.resourceSnapshot ?? [:], context: context,
-            variants: evidence == nil ? [] : orthographicVariants(of: token))
+            variants: evidence == nil ? [] : decoderVariants(of: token))
         request.completion = completion
         request.completionReady = held
         request.boundary = boundaryJob(beforeInput: ownership.context)
@@ -1233,7 +1233,7 @@ final class AutocorrectEngine {
             outcome = spatialDecoder.decodeDetailed(evidence, languages: languages,
                                                     calibration: learning.calibration(for: evidence.layout),
                                                     personal: learning.personalPriors, context: context,
-                                                    variants: orthographicVariants(of: token))
+                                                    variants: decoderVariants(of: token))
             if forSuggestions, case .result = outcome, !spatialDecoder.isResourceLoading {
                 learning.increment(.suggestionDecodes)
                 learning.recordLatency(Self.seconds(since: started), kind: .suggestion)
@@ -1440,6 +1440,10 @@ final class AutocorrectEngine {
         }
         if german != nil { variants += GermanAutocorrect.variants(of: lower) }
         return variants
+    }
+
+    private func decoderVariants(of token: String) -> [String] {
+        orthographicVariants(of: token) + (german == nil ? [] : GermanAutocorrect.keySwaps(of: token.lowercased()))
     }
 
     private func spellingFallback(_ token: String, variantsOnly: Bool = false) -> String? {

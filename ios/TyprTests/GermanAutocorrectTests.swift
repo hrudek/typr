@@ -82,6 +82,13 @@ final class GermanAutocorrectTests: XCTestCase {
         XCTAssertNotNil(german.costAdjustedForUmlauts(from: "brucke", to: "brücke"))
     }
 
+    func testSpellingFallbackDoesNotSwapYAndZ() {
+        let engine = makeEngine(english: ["okay", "yes"], german: ["okay", "yes", "zwei"])
+        XCTAssertNil(fix(engine, "zes"))
+        XCTAssertNil(fix(engine, "okaz"))
+        XCTAssertNil(fix(engine, "ywei"))
+    }
+
     func testLanguageSettingsPersistIndependently() {
         let settings = TyprSettings(defaults: defaults)
         for german in [false, true] {

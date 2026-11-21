@@ -170,7 +170,7 @@ final class SpatialWordDecoder {
         let edit: Edit
         /// Candidate letter -> observed tap; missing letters have no tap.
         let alignment: [Int?]
-        /// Another spelling of the literal's own letters (`dont` -> `don't`, `fuer` -> `für`).
+        /// Another spelling of the literal's own taps (`dont` -> `don't`, `fuer` -> `für`, `okaz` -> `okay`).
         var isVariant = false
 
         /// P(taps | word) of the reading: touch densities and its edit's probability.
