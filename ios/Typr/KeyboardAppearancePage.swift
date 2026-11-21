@@ -167,7 +167,7 @@ struct KeyboardAppearancePage: View {
                         SettingsToggle(title: "Aligned columns", detail: "Letters straight above each other.", isOn: $splitColumns)
                             .onChange(of: splitColumns) { _, aligned in FullKeyboardSettings().splitColumns = aligned }
                         SettingsDivider()
-                        SettingsToggle(title: "Mirrored halves", detail: "Left half moves into the left safe area.", isOn: $splitMirrored)
+                        SettingsToggle(title: "Mirrored halves", detail: "Left half moves toward the left edge.", isOn: $splitMirrored)
                             .onChange(of: splitMirrored) { _, mirrored in FullKeyboardSettings().splitMirrored = mirrored }
                     }
                 }

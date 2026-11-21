@@ -588,10 +588,9 @@ final class KeyboardLayoutTests: XCTestCase {
                 for numberRow in [false, true] {
                     for layer in layers {
                         let plain = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                   numberRow: numberRow, splitColumns: columns, horizontalInset: 60)
+                                                   numberRow: numberRow, splitColumns: columns)
                         let mirrored = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                      numberRow: numberRow, splitColumns: columns, splitMirrored: true,
-                                                      horizontalInset: 60)
+                                                      numberRow: numberRow, splitColumns: columns, splitMirrored: true)
                         let name = describe(mirrored)
                         let centre = width / 2
                         var moved = 0
@@ -606,7 +605,10 @@ final class KeyboardLayoutTests: XCTestCase {
                                 XCTAssertEqual(a.frame.height, b.frame.height, name)
                                 if a.frame != b.frame { moved += 1 }
                             }
-                            XCTAssertEqual(a.frame.width, b.frame.width, accuracy: 0.001, name)
+                            XCTAssertGreaterThanOrEqual(b.frame.width, mirrored.letterWidth * 0.5 - 0.001, name)
+                            if b.character?.first?.isLetter == true {
+                                XCTAssertEqual(a.frame.width, b.frame.width, accuracy: 0.001, name)
+                            }
                         }
                         XCTAssertGreaterThan(moved, 0, name)
                         let keys = mirrored.keys.map(\.frame)
@@ -617,33 +619,11 @@ final class KeyboardLayoutTests: XCTestCase {
                             func innerGap(_ layout: KeyboardLayout) throws -> CGFloat {
                                 try centre - XCTUnwrap(layout.key(.character("b"))).frame.maxX
                             }
-                            XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 1, name)
+                            XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 20, name)
                         }
                     }
                 }
             }
-        }
-    }
-
-    func testMirroredLeftHalfIgnoresTheSafeAreaInsetAndKeepsKeySizes() {
-        for layer in layers {
-            let plain = KeyboardLayout(width: 951, orientation: .splitLandscape, layer: layer, horizontalInset: 60)
-            let mirrored = KeyboardLayout(width: 951, orientation: .splitLandscape, layer: layer,
-                                          splitMirrored: true, horizontalInset: 60)
-            let name = describe(mirrored)
-            var leftMost = CGFloat.infinity
-            var plainLeftMost = CGFloat.infinity
-            for (a, b) in zip(plain.keys, mirrored.keys) {
-                XCTAssertEqual(a.frame.size, b.frame.size, name)
-                if a.frame.midX >= 951 / 2 || b.row == mirrored.bottomRowIndex {
-                    XCTAssertEqual(a.frame, b.frame, name)
-                } else {
-                    leftMost = min(leftMost, b.frame.minX)
-                    plainLeftMost = min(plainLeftMost, a.frame.minX)
-                    XCTAssertGreaterThanOrEqual(b.frame.minX, mirrored.metrics.side - 0.001, name)
-                }
-            }
-            XCTAssertLessThan(leftMost, plainLeftMost, name)
         }
     }
 
@@ -657,11 +637,8 @@ final class KeyboardLayoutTests: XCTestCase {
                 XCTAssertFalse(mirrored.splitMirrored)
             }
         }
-        XCTAssertEqual(KeyboardLayout(width: 951, orientation: .splitLandscape).keys,
-                       KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true).keys)
-        XCTAssertNotEqual(KeyboardLayout(width: 951, orientation: .splitLandscape, horizontalInset: 44).keys,
-                          KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true,
-                                         horizontalInset: 44).keys)
+        XCTAssertNotEqual(KeyboardLayout(width: 951, orientation: .splitLandscape).keys,
+                          KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true).keys)
     }
 
     func testOnlyTheSplitLettersPageGainsASlashKey() {
