@@ -130,14 +130,20 @@ nonisolated enum DoubleSpacePeriod {
     static let window: TimeInterval = 0.35
 
     /// `lastSpaceAt` is when this keyboard typed the space now before the cursor (nil if
-    /// anything else happened since). Requires a letter or digit right before that space.
+    /// anything else happened since). Requires a letter or digit right before one or two
+    /// trailing spaces (the first may be an automatic separator).
     static func shouldReplace(before: String?, lastSpaceAt: TimeInterval?, now: TimeInterval) -> Bool {
         guard let before, let lastSpaceAt, now - lastSpaceAt <= window, now >= lastSpaceAt else {
             return false
         }
-        guard before.last == " " else { return false }
-        guard let previous = before.dropLast().last else { return false }
-        return previous.isLetter || previous.isNumber
+        return trailingSpaceCount(before) != nil
+    }
+
+    /// Number of spaces (1 or 2) between the last letter or digit and the cursor.
+    static func trailingSpaceCount(_ before: String) -> Int? {
+        let spaces = before.reversed().prefix { $0 == " " }.count
+        guard (1...2).contains(spaces), let previous = before.dropLast(spaces).last else { return nil }
+        return previous.isLetter || previous.isNumber ? spaces : nil
     }
 }
 

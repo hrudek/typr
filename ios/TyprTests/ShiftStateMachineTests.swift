@@ -134,11 +134,20 @@ final class ShiftStateMachineTests: XCTestCase {
         XCTAssertTrue(DoubleSpacePeriod.shouldReplace(before: "at 7 ", lastSpaceAt: 10, now: 10.35))
     }
 
+    func testDoubleSpaceAfterAutomaticSeparatorReplacesBothSpaces() {
+        XCTAssertTrue(DoubleSpacePeriod.shouldReplace(before: "late  ", lastSpaceAt: 10, now: 10.2))
+        XCTAssertEqual(DoubleSpacePeriod.trailingSpaceCount("late "), 1)
+        XCTAssertEqual(DoubleSpacePeriod.trailingSpaceCount("late  "), 2)
+        XCTAssertNil(DoubleSpacePeriod.trailingSpaceCount("late"))
+    }
+
     func testDoubleSpaceEdgeCases() {
         XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late ", lastSpaceAt: 10, now: 10.4), "too slow")
         XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late ", lastSpaceAt: nil, now: 10), "not our space")
         XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late. ", lastSpaceAt: 10, now: 10.1), "already punctuated")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late  ", lastSpaceAt: 10, now: 10.1), "third space")
+        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late   ", lastSpaceAt: 10, now: 10.1), "third space")
+        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late.  ", lastSpaceAt: 10, now: 10.1), "punctuated")
+        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "  ", lastSpaceAt: 10, now: 10.1), "no word")
         XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: " ", lastSpaceAt: 10, now: 10.1), "start of field")
         XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: nil, lastSpaceAt: 10, now: 10.1), "no context")
         XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late", lastSpaceAt: 10, now: 10.1), "cursor moved")

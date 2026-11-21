@@ -1053,7 +1053,10 @@ final class FullKeyboardEngine {
             autocorrect.touchInput.clear()
             autocorrect.forgetSpaceTaps()
             autocorrect.clearPendingUndo()
-            target.deleteBackward()
+            let spaces = DoubleSpacePeriod.trailingSpaceCount(target.documentContextBeforeInput ?? "") ?? 1
+            for _ in 0..<spaces {
+                target.deleteBackward()
+            }
             target.insertText(". ")
             logTyping { $0.boundary(" ") }
             lastSpaceAt = nil
