@@ -605,10 +605,7 @@ final class KeyboardLayoutTests: XCTestCase {
                                 XCTAssertEqual(a.frame.height, b.frame.height, name)
                                 if a.frame != b.frame { moved += 1 }
                             }
-                            XCTAssertGreaterThanOrEqual(b.frame.width, mirrored.letterWidth * 0.5 - 0.001, name)
-                            if b.character?.first?.isLetter == true {
-                                XCTAssertEqual(a.frame.width, b.frame.width, accuracy: 0.001, name)
-                            }
+                            XCTAssertEqual(a.frame.width, b.frame.width, accuracy: 0.001, name)
                         }
                         XCTAssertGreaterThan(moved, 0, name)
                         let keys = mirrored.keys.map(\.frame)
@@ -624,6 +621,28 @@ final class KeyboardLayoutTests: XCTestCase {
                     }
                 }
             }
+        }
+    }
+
+    func testMirroredLeftHalfIgnoresTheSafeAreaInsetAndKeepsKeySizes() {
+        for layer in layers {
+            let plain = KeyboardLayout(width: 951, orientation: .splitLandscape, layer: layer, horizontalInset: 60)
+            let mirrored = KeyboardLayout(width: 951, orientation: .splitLandscape, layer: layer,
+                                          splitMirrored: true, horizontalInset: 60)
+            let name = describe(mirrored)
+            var leftMost = CGFloat.infinity
+            var plainLeftMost = CGFloat.infinity
+            for (a, b) in zip(plain.keys, mirrored.keys) {
+                XCTAssertEqual(a.frame.size, b.frame.size, name)
+                if a.frame.midX >= 951 / 2 || b.row == mirrored.bottomRowIndex {
+                    XCTAssertEqual(a.frame, b.frame, name)
+                } else {
+                    leftMost = min(leftMost, b.frame.minX)
+                    plainLeftMost = min(plainLeftMost, a.frame.minX)
+                    XCTAssertGreaterThanOrEqual(b.frame.minX, mirrored.metrics.side - 0.001, name)
+                }
+            }
+            XCTAssertLessThan(leftMost, plainLeftMost, name)
         }
     }
 

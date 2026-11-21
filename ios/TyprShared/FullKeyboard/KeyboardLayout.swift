@@ -335,7 +335,6 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     static let modifierWidthRatio: CGFloat = 1.34
     static let bottomSwitchWidthRatio: CGFloat = 1.56
     static let returnWidthRatio: CGFloat = 2.40
-    static let minLeftKeyWidthRatio: CGFloat = 0.5
     static let compactReturnWidthRatio: CGFloat = 2.18
 
     let width: CGFloat
@@ -693,26 +692,17 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
 
         if leftShift > 0 {
             let moving = drawn.filter { $0.1 != spaceRow && $0.2.midX < width / 2 }
-            let minWidth = KeyboardLayout.minLeftKeyWidthRatio * lw
-            var firstKeys: [Int: (KeyKind, Int, CGRect, String)] = [:]
-            for item in moving where item.2.minX < firstKeys[item.1]?.2.minX ?? .infinity {
-                firstKeys[item.1] = item
+            var firstKeys: [Int: CGFloat] = [:]
+            for item in moving where item.2.minX < firstKeys[item.1] ?? .infinity {
+                firstKeys[item.1] = item.2.minX
             }
-            func isLetter(_ kind: KeyKind) -> Bool {
-                if case .character(let ch) = kind { return ch.first?.isLetter == true }
-                return false
-            }
-            for first in firstKeys.values {
-                leftShift = min(leftShift, isLetter(first.0) ? first.2.minX - left : first.2.maxX - left - minWidth)
+            for minX in firstKeys.values {
+                leftShift = min(leftShift, minX - m.side)
             }
             leftShift = max(0, leftShift)
             drawn = drawn.map { item in
                 guard item.1 != spaceRow, item.2.midX < width / 2 else { return item }
-                var frame = item.2.offsetBy(dx: -leftShift, dy: 0)
-                if firstKeys[item.1]?.2 == item.2, frame.minX < left {
-                    frame = CGRect(x: left, y: frame.minY, width: frame.maxX - left, height: frame.height)
-                }
-                return (item.0, item.1, frame, item.3)
+                return (item.0, item.1, item.2.offsetBy(dx: -leftShift, dy: 0), item.3)
             }
         }
 
