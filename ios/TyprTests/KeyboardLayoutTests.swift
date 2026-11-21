@@ -607,11 +607,11 @@ final class KeyboardLayoutTests: XCTestCase {
                         for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
                     }
                     if layer == .letters {
-                        // The screen edge stops it short of an exact mirror; the left inner gap still shrinks.
+                        // The screen edge stops it short of an exact mirror; the left inner gap grows toward the right half's.
                         func innerGap(_ layout: KeyboardLayout) throws -> CGFloat {
                             try centre - XCTUnwrap(layout.key(.character("b"))).frame.maxX
                         }
-                        XCTAssertLessThan(try innerGap(mirrored), try innerGap(plain) - 20, name)
+                        XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 20, name)
                         XCTAssertLessThan(try XCTUnwrap(mirrored.key(.shift)).frame.width,
                                           try XCTUnwrap(plain.key(.shift)).frame.width, name)
                     }

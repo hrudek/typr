@@ -350,8 +350,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     let numberRow: Bool
     /// Settings › Aligned columns: the split letters in straight columns. Always false off `.splitLandscape`.
     let splitColumns: Bool
-    /// Settings › Mirrored halves: the split's left half moves left until its inner letter edge is as far from the
-    /// display centre as the right half's. Always false off `.splitLandscape`.
+    /// Settings › Mirrored halves: the split's left half moves left, up to where its inner letter edge would be as far
+    /// from the display centre as the right half's; the screen edge limits it. Always false off `.splitLandscape`.
     let splitMirrored: Bool
     let horizontalInset: CGFloat
     /// Typr: whether the suggestion bar sits above the keys.

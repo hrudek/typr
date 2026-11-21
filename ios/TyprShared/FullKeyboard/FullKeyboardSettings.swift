@@ -78,7 +78,7 @@ struct FullKeyboardSettings {
         nonmutating set { defaults?.set(newValue, forKey: Key.splitColumns) }
     }
 
-    /// The split keyboard's left half moved out so both halves sit equally far from the centre. Off by default.
+    /// The split keyboard's left half moved toward the left edge, as far as the screen allows. Off by default.
     var splitMirrored: Bool {
         get { defaults?.object(forKey: Key.splitMirrored) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.splitMirrored) }
