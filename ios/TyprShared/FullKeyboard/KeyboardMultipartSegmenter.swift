@@ -67,7 +67,7 @@ nonisolated enum KeyboardMultipartSegmenter {
                 let literal = KeyboardBoundaryTouch.letterDensity(sample.point, key: sample.key,
                                                                   layout: touch.layout, calibration: calibration)
                 gains.append(SpatialWordLexicon.alphabet.map { letter in
-                    guard let literal, let key = touch.layout.key(.character(String(letter))),
+                    guard let literal, let key = touch.layout.key(.character(String(letter)), nearest: sample.point),
                           let score = KeyboardBoundaryTouch.letterDensity(sample.point, key: key,
                                                                           layout: touch.layout, calibration: calibration)
                     else { return -Double.infinity }

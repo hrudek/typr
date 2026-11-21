@@ -42,7 +42,7 @@ nonisolated struct KeyboardKeyMap: Sendable {
                   priors.count == Self.keyLimit else { return nil }
             return Entry(key: key, density: calibration.keys[letter] ?? SpatialTouchCalibration.prior,
                          logPrior: log(priors[index] * 26))
-        }.prefix(Self.keyLimit).map { $0 }
+        }
     }
 
     /// The map for the next tap after `prefix`, or nil for a prefix the priors cannot read.

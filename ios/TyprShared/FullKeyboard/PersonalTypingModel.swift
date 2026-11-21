@@ -377,7 +377,7 @@ final class PersonalTypingModel {
             else if !label.point.x.isFinite || !label.point.y.isFinite { rejection = .nonFinite }
             else if !label.letter.isLetter || String(label.letter) != String(label.letter).lowercased() {
                 rejection = .unknownKey
-            } else if let key = layout.key(.character(String(label.letter))) {
+            } else if let key = layout.key(.character(String(label.letter)), nearest: label.point) {
                 let pitchX = key.frame.width + layout.metrics.gap
                 let pitchY = key.frame.height + layout.metrics.rowGap
                 let x = Double((label.point.x - key.frame.midX) / pitchX)

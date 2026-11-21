@@ -61,25 +61,26 @@ nonisolated enum KeyboardLetterMap {
               !word.samples.isEmpty, word.samples.count <= 32 else { return nil }
         let alphabet = SpatialWordLexicon.alphabet
         let holders = alphabet.map { holder(of: $0) }
-        let frames = holders.map { word.layout.key(.character(String($0)))?.frame }
+        let frames = holders.map { holder in word.layout.keys.filter { $0.kind == .character(String(holder)) }.map(\.frame) }
         let keys = holders.map { calibration?.keys[$0] ?? SpatialTouchCalibration.prior }
         let gap = word.layout.metrics.gap, rowGap = word.layout.metrics.rowGap
-        var frozen = [FrozenKey?](repeating: nil, count: alphabet.count)
+        var frozen = [[FrozenKey]](repeating: [], count: alphabet.count)
         for index in alphabet.indices {
-            guard let frame = frames[index] else { continue }
-            let width = Double(frame.width + gap), height = Double(frame.height + rowGap)
-            guard frame.width > 0, frame.height > 0, width.isFinite, height.isFinite,
-                  width > 0, height > 0 else { return nil }
-            if prepared { frozen[index] = FrozenKey(frame: frame, gap: gap, rowGap: rowGap, key: keys[index]) }
+            for frame in frames[index] {
+                let width = Double(frame.width + gap), height = Double(frame.height + rowGap)
+                guard frame.width > 0, frame.height > 0, width.isFinite, height.isFinite,
+                      width > 0, height > 0 else { return nil }
+                if prepared { frozen[index].append(FrozenKey(frame: frame, gap: gap, rowGap: rowGap, key: keys[index])) }
+            }
         }
         var likelihoods: [[Double]] = []
         var bestScores: [Double] = []
         var literalSpatial = 0.0
         for sample in word.samples {
             guard sample.text.count == 1, sample.text.lowercased().count == 1,
-                  sample.key == word.layout.key(sample.key.kind),
+                  word.layout.keys.contains(sample.key),
                   (sample.attributedKey ?? sample.key).character?.lowercased() == sample.text.lowercased(),
-                  sample.attributedKey.map({ $0 == word.layout.key($0.kind) }) ?? true,
+                  sample.attributedKey.map(word.layout.keys.contains) ?? true,
                   sample.point.x.isFinite, sample.point.y.isFinite,
                   let letter = sample.text.lowercased().first,
                   let label = alphabet.firstIndex(of: letter),
@@ -87,15 +88,15 @@ nonisolated enum KeyboardLetterMap {
             var scores = [Double](repeating: -.infinity, count: alphabet.count)
             for index in alphabet.indices {
                 if prepared {
-                    scores[index] = frozen[index]?.score(sample.point) ?? -.infinity
+                    scores[index] = frozen[index].map { $0.score(sample.point) }.max() ?? -.infinity
                     continue
                 }
-                guard let frame = frames[index] else { continue }
                 let key = keys[index]
-                let x = Double(sample.point.x - frame.midX) / Double(frame.width + gap)
-                let y = Double(sample.point.y - frame.midY) / Double(frame.height + rowGap)
                 // The entire density is frozen before search, preserving max-path bounds.
-                scores[index] = key.logDensity(x: x, y: y)
+                scores[index] = frames[index].map { frame in
+                    key.logDensity(x: Double(sample.point.x - frame.midX) / Double(frame.width + gap),
+                                   y: Double(sample.point.y - frame.midY) / Double(frame.height + rowGap))
+                }.max() ?? -.infinity
             }
             guard scores[label].isFinite, let best = scores.max(), best.isFinite else { return nil }
             literalSpatial += scores[label]

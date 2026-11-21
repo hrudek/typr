@@ -63,6 +63,11 @@ nonisolated struct TapStatistics {
                        showsGlobe: signature.showsGlobe, splitColumns: signature.splitColumns,
                        horizontalInset: 0, showsStrip: signature.showsStrip)
     }
+    /// Each letter once, in key order: the split letters have g and v on both halves.
+    var letters: [String] {
+        var seen = Set<String>()
+        return layout.keys.compactMap(\.character).filter { seen.insert($0).inserted }
+    }
     var effectiveSamples: Int { keys.reduce(0) { $0 + $1.samples } }
     var heatSamples: UInt64 { heat?.cells.reduce(0, +) ?? 0 }
     var onTarget: Double? { Self.weighted(keys) }

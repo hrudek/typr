@@ -38,7 +38,7 @@ nonisolated struct KeyboardBoundaryTouch: Equatable, Sendable {
             word.learningIntact && !word.samples.isEmpty && word.samples.allSatisfy { sample in
                 sample.text.count == 1 && sample.text.first?.isLetter == true
                     && sample.point.x.isFinite && sample.point.y.isFinite
-                    && sample.key == word.layout.key(sample.key.kind)
+                    && word.layout.keys.contains(sample.key)
                     && sample.key.character?.lowercased() == sample.text.lowercased()
             }
         }

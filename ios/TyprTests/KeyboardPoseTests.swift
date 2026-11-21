@@ -87,8 +87,8 @@ final class KeyboardPoseTests: XCTestCase {
     }
 
     func testSplitHalvesSitAtTheEdgesWithTheFoldBetween() {
-        let left = Set("qwertasdfgzxcvb".map(String.init))
-        let right = Set("yuiophjklnm".map(String.init))
+        let left = Set("qwertasdfgzxcv".map(String.init))
+        let right = Set("yuiopghjklvbnm".map(String.init))
         let phoneLetter = KeyboardLayout(width: outerPortrait.width).letterWidth
         for width: CGFloat in [801, innerLandscape.width] {
             for layout in variants(width: width, orientation: .splitLandscape) {
