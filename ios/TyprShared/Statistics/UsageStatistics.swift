@@ -48,7 +48,7 @@ nonisolated struct UsageDay: Codable, Equatable, Sendable {
 }
 
 /// Fixed measured density, never a label or a model estimate. Geometry 1: letter/text,
-/// zero inset only; normalized board coordinates, separate orientation/width/accessories.
+/// zero inset only; normalized board coordinates, separate orientation/width/accessories/split arrangement.
 nonisolated struct UsageHeat: Codable, Equatable, Sendable {
     static let columns = 64
     static let rows = 24
@@ -58,8 +58,7 @@ nonisolated struct UsageHeat: Codable, Equatable, Sendable {
     var updatedAt: Date
     var id: String { "g\(geometryVersion)-\(layout.id)" }
     var isValid: Bool {
-        geometryVersion == 1 && KeyboardOrientation(rawValue: layout.orientation) != nil
-            && (8...4096).contains(layout.widthBucket) && layout.widthBucket % 8 == 0
+        geometryVersion == 1 && layout.isValid
             && cells.count == Self.columns * Self.rows && cells.allSatisfy { $0 <= UsageTotals.ceiling }
             && UsageTotals.validDate(updatedAt)
     }

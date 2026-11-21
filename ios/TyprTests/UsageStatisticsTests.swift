@@ -155,6 +155,20 @@ final class UsageStatisticsTests: XCTestCase {
         XCTAssertEqual(heat.cells.filter { $0 > 0 }, [2], "both q taps share one cell; the digit is off the board")
     }
 
+    func testStaggeredAndAlignedSplitKeepSeparateHeat() throws {
+        let staggered = KeyboardLayout(width: 951, orientation: .splitLandscape)
+        let aligned = KeyboardLayout(width: 951, orientation: .splitLandscape, splitColumns: true)
+        let q = try XCTUnwrap(staggered.key(.character("q")))
+        session.recordHeat(point: CGPoint(x: q.frame.midX, y: q.frame.midY), layout: staggered)
+        session.recordHeat(point: CGPoint(x: q.frame.midX, y: q.frame.midY), layout: aligned)
+        session.recordHeat(point: CGPoint(x: q.frame.midX, y: q.frame.midY), layout: aligned)
+        session.flush()
+        let heat = try store.snapshot().heat
+        XCTAssertEqual(heat.count, 2)
+        XCTAssertEqual(heat.first { $0.layout == KeyboardLayoutSignature(staggered) }?.cells.reduce(0, +), 1)
+        XCTAssertEqual(heat.first { $0.layout == KeyboardLayoutSignature(aligned) }?.cells.reduce(0, +), 2)
+    }
+
     func testLayoutRetentionAndSessionRecentLabelsAreBounded() throws {
         for width in [320, 350, 375, 393, 430] {
             session.recordHeat(point: CGPoint(x: 50, y: 90), layout: KeyboardLayout(width: CGFloat(width)))
