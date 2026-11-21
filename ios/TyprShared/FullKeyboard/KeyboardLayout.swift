@@ -420,6 +420,24 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         CGRect(x: horizontalInset, y: metrics.stripTop, width: width - 2 * horizontalInset, height: metrics.stripHeight)
     }
 
+    /// Where the three suggestions sit, in the strip's coordinates: over the split letters' right half (its letter
+    /// rows and delete, on every page), so the right thumb and eye stay there; else the whole strip.
+    var suggestionSlotsFrame: CGRect {
+        let strip = CGRect(origin: .zero, size: stripFrame.size)
+        guard metrics.splitGap > 0 else { return strip }
+        let letters = layer == .letters ? self : KeyboardLayout(
+            width: width, orientation: orientation, field: field, showsGlobe: showsGlobe, globeKey: globeKey,
+            bottomRow: bottomRow, numberRow: numberRow, splitColumns: splitColumns,
+            horizontalInset: horizontalInset, showsStrip: showsStrip
+        )
+        let firstLetterRow = letters.showsNumberRow ? 1 : 0
+        let right = letters.keys
+            .filter { (firstLetterRow..<letters.bottomRowIndex).contains($0.row) && $0.frame.midX > width / 2 }
+            .map(\.frame)
+        guard let minX = right.map(\.minX).min(), let maxX = right.map(\.maxX).max() else { return strip }
+        return CGRect(x: minX - horizontalInset, y: 0, width: maxX - minX, height: strip.height)
+    }
+
     var keysAreaFrame: CGRect {
         CGRect(x: 0, y: metrics.stripArea, width: width, height: metrics.keysArea)
     }

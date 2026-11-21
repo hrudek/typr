@@ -100,6 +100,28 @@ final class SuggestionBarTests: XCTestCase {
         XCTAssertEqual(activationCount, 2)
     }
 
+    func testSplitKeyboardCentresTheSuggestionsOverTheRightHalf() throws {
+        let (view, _) = keyboard(showsBar: true)
+        view.orientationOverride = .splitLandscape
+        view.frame = CGRect(x: 0, y: 0, width: 951, height: view.preferredHeight)
+        view.layoutIfNeeded()
+        let layout = view.engine.layout
+        let strip = try XCTUnwrap(view.subviews.first { $0 is KeyboardStripView })
+        let slots = strip.subviews.compactMap { $0 as? UIControl }.sorted { $0.tag < $1.tag }
+        XCTAssertEqual(slots.count, 3)
+        let frames = slots.map { strip.convert($0.frame, to: view) }
+        let y = try XCTUnwrap(layout.key(.character("y"))).frame
+        let delete = try XCTUnwrap(layout.key(.delete)).frame
+        XCTAssertLessThanOrEqual(frames[0].minX, y.minX + 0.001)
+        XCTAssertGreaterThan(frames[0].minX, layout.width / 2)
+        XCTAssertEqual(frames[2].maxX, delete.maxX, accuracy: 0.001)
+        for (left, right) in zip(frames, frames.dropFirst()) {
+            XCTAssertEqual(left.maxX, right.minX, accuracy: 0.001)
+            XCTAssertEqual(left.width, right.width, accuracy: 0.001)
+        }
+        XCTAssertGreaterThan(frames[1].midX, y.maxX, "The middle suggestion sits over the right half")
+    }
+
     func testSwitchingTheBarRebuildsTheKeys() {
         let (view, _) = keyboard(showsBar: true)
         view.suggestionBarOverride = false
