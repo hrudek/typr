@@ -183,10 +183,11 @@ nonisolated final class SpatialWordRanking {
     /// Every reading is scored by one contract: touch log likelihood, edit penalties, lexical log
     /// prior, personal bonus and the sentence-context lift of `context`; the literal (also an OOV
     /// literal, at the floor prior) is scored the same way. `variants` are other spellings of the
-    /// literal's own letters (apostrophes, umlaut digraphs): same taps, one `log .5` per
-    /// transliteration step, priced by the word lists or else the context packs. An extra tap is,
-    /// with even odds, a second touch on the next letter's key (the last letter's after the word)
-    /// or a stray uniform over the keyboard (iikb's stray density), in key-pitch units.
+    /// literal's own letters (apostrophes, umlaut digraphs) or its y/z swaps: same taps, one `log .5`
+    /// per transliteration step or swap, priced by the word lists or else the context packs (a swap
+    /// only by the German word list). An extra tap is, with even odds, a second touch on the next
+    /// letter's key (the last letter's after the word) or a stray uniform over the keyboard (iikb's
+    /// stray density), in key-pitch units.
     func decodeDetailed(_ word: KeyboardTouchWord, languages: Set<Language>,
                         budget: Int = SpatialWordDecoder.searchBudget,
                         calibration: SpatialTouchCalibration? = nil,
@@ -275,14 +276,16 @@ nonisolated final class SpatialWordRanking {
                              spatialScore: reading.spatial, edit: reading.edit, alignment: reading.alignment))
         }
         for variant in variants {
-            guard let spelling = Self.transliteration(of: variant), spelling.letters == literal,
+            guard let spelling = Self.transliteration(of: variant), let swaps = Self.germanKeySwaps(spelling.letters, literal),
                   variant.lowercased() != literal else { continue }
             let key = variant.lowercased()
-            let lexical = sources.compactMap { language, source in source.logPrior(for: key).map { (language, $0) } }
+            let lexical = sources.filter { swaps == 0 || $0.0 == .german }
+                .compactMap { language, source in source.logPrior(for: key).map { (language, $0) } }
                 .max { $0.1 < $1.1 }
+            if swaps > 0 && lexical == nil { continue }
             let prior = lexical?.1 ?? context?.logUnigram(variant) ?? floorPrior
             retain(Candidate(word: variant, language: lexical?.0,
-                             score: literalSpatial + Double(spelling.steps) * Self.transliterationPenalty
+                             score: literalSpatial + Double(spelling.steps + swaps) * Self.transliterationPenalty
                                 + Self.priorWeight * prior + personal.bonus(for: key) + lift(variant),
                              spatialScore: literalSpatial, edit: .none, alignment: [],
                              isVariant: true))
@@ -419,6 +422,18 @@ nonisolated final class SpatialWordRanking {
         let pitch = Double((key.width + layout.metrics.gap) * (key.height + layout.metrics.rowGap))
         let area = Double(bounds.width * bounds.height) / pitch
         return area.isFinite && area > 0 ? -log(area) : nil
+    }
+
+    /// Positions where `letters` has y and `literal` z or the reverse (a QWERTZ habit on QWERTY);
+    /// `nil` when they differ otherwise.
+    private static func germanKeySwaps(_ letters: String, _ literal: String) -> Int? {
+        guard letters.count == literal.count else { return nil }
+        var swaps = 0
+        for (a, b) in zip(letters, literal) where a != b {
+            guard Set([a, b]) == ["y", "z"] else { return nil }
+            swaps += 1
+        }
+        return swaps
     }
 
     private static func extraTap(_ stray: Double, near: Double) -> Double {

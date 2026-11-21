@@ -333,7 +333,7 @@ final class AutocorrectEngine {
             calibration: evidence.flatMap { learning.calibration(for: $0.layout) },
             personal: evidence == nil ? .empty : learning.personalPriors,
             lexicons: spatialDecoder?.resourceSnapshot ?? [:], context: context,
-            variants: evidence == nil ? [] : orthographicVariants(of: token))
+            variants: evidence == nil ? [] : decoderVariants(of: token))
         request.completion = completion
         request.completionReady = held
         request.boundary = boundaryJob(beforeInput: ownership.context)
@@ -1233,7 +1233,7 @@ final class AutocorrectEngine {
             outcome = spatialDecoder.decodeDetailed(evidence, languages: languages,
                                                     calibration: learning.calibration(for: evidence.layout),
                                                     personal: learning.personalPriors, context: context,
-                                                    variants: orthographicVariants(of: token))
+                                                    variants: decoderVariants(of: token))
             if forSuggestions, case .result = outcome, !spatialDecoder.isResourceLoading {
                 learning.increment(.suggestionDecodes)
                 learning.recordLatency(Self.seconds(since: started), kind: .suggestion)
@@ -1442,6 +1442,14 @@ final class AutocorrectEngine {
         return variants
     }
 
+    private func germanKeySwaps(of token: String) -> [String] {
+        german == nil ? [] : GermanAutocorrect.keySwaps(of: token.lowercased())
+    }
+
+    private func decoderVariants(of token: String) -> [String] {
+        orthographicVariants(of: token) + germanKeySwaps(of: token)
+    }
+
     private func spellingFallback(_ token: String, variantsOnly: Bool = false) -> String? {
         let lower = token.lowercased()
         var costs: [String: Double] = [:]
@@ -1450,6 +1458,7 @@ final class AutocorrectEngine {
             costs[candidate] = min(costs[candidate] ?? .infinity, cost)
         }
         for spelling in orthographicVariants(of: token).compactMap(validSpelling) { offer(spelling, 0) }
+        for spelling in germanKeySwaps(of: token).compactMap(germanSpelling) { offer(spelling, 0.4) }
         func letters(_ guess: String) -> String? {
             let letters = guess.replacingOccurrences(of: "'", with: "").lowercased()
             return letters == lower ? nil : letters
@@ -1469,6 +1478,10 @@ final class AutocorrectEngine {
 
     private func validSpelling(_ variant: String) -> String? {
         if variant.contains("'") || (englishEnabled && checker.isWordValid(variant)) { return variant }
+        return germanSpelling(variant)
+    }
+
+    private func germanSpelling(_ variant: String) -> String? {
         guard let german else { return nil }
         let title = variant.prefix(1).uppercased() + variant.dropFirst()
         return german.isValid(variant) ? variant : german.isValid(title) ? title : nil

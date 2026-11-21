@@ -60,17 +60,36 @@ final class GermanAutocorrect {
 
     /// Every combination of replacing each digraph occurrence (at most 4 occurrences), minus the identity.
     static func variants(of lower: String) -> [String] {
+        spellings(of: lower) { chars, i in
+            guard i + 1 < chars.count else { return nil }
+            return digraphs.first { Array($0.ascii) == [chars[i], chars[i + 1]] }
+        }
+    }
+
+    /// Every combination of swapping y and z (at most 4 occurrences), minus the identity: a German
+    /// typing on QWERTY often hits the QWERTZ key (`okaz` for `okay`).
+    static func keySwaps(of lower: String) -> [String] {
+        spellings(of: lower) { chars, i in
+            switch chars[i] {
+            case "y": return ("y", "z")
+            case "z": return ("z", "y")
+            default: return nil
+            }
+        }
+    }
+
+    private static func spellings(of lower: String,
+                                  replacement: ([Character], Int) -> (ascii: String, replacement: String)?) -> [String] {
         var parts: [[String]] = []
         let chars = Array(lower)
         var i = 0
         var occurrences = 0
         while i < chars.count {
-            if i + 1 < chars.count,
-               let hit = digraphs.first(where: { Array($0.ascii) == [chars[i], chars[i + 1]] }) {
+            if let hit = replacement(chars, i) {
                 occurrences += 1
                 if occurrences > 4 { return [] }
                 parts.append([hit.ascii, hit.replacement])
-                i += 2
+                i += hit.ascii.count
             } else {
                 parts.append([String(chars[i])])
                 i += 1

@@ -82,6 +82,20 @@ final class GermanAutocorrectTests: XCTestCase {
         XCTAssertNotNil(german.costAdjustedForUmlauts(from: "brucke", to: "brücke"))
     }
 
+    func testSwappedYAndZFixGermanWords() {
+        let engine = makeEngine(german: ["okay", "zwei", "Typ", "zu"])
+        XCTAssertEqual(fix(engine, "okaz"), "okay")
+        XCTAssertEqual(fix(engine, "Okaz"), "Okay")
+        XCTAssertEqual(fix(engine, "ywei"), "zwei", "z typed as y")
+        XCTAssertEqual(fix(engine, "tzp"), "Typ", "y typed as z")
+        XCTAssertNil(fix(engine, "zu"), "a valid word stays")
+    }
+
+    func testSwappedYAndZNeedAGermanWord() {
+        XCTAssertNil(fix(makeEngine(english: ["okay", "yes"], germanOn: false), "okaz"))
+        XCTAssertNil(fix(makeEngine(english: ["okay", "yes"]), "zes"), "English-only word")
+    }
+
     func testLanguageSettingsPersistIndependently() {
         let settings = TyprSettings(defaults: defaults)
         for german in [false, true] {

@@ -640,6 +640,19 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertEqual(forward.automaticCandidate?.word, "grüße")
     }
 
+    func testGermanKeySwapsUseOnlyTheGermanWordList() throws {
+        let source = SpatialWordDecoder(lexicons: try XCTUnwrap(BundledKeyboardData.lexicons))
+        func decode(_ typed: String, _ languages: Set<SpatialWordDecoder.Language>) -> SpatialWordDecoder.Result? {
+            source.decode(evidence(typed, aimedAt: typed), languages: languages,
+                          variants: GermanAutocorrect.keySwaps(of: typed))
+        }
+        XCTAssertEqual(decode("okaz", [.german, .english])?.automaticCandidate?.word, "okay")
+        XCTAssertEqual(decode("ywei", [.german, .english])?.automaticCandidate?.word, "zwei")
+        XCTAssertEqual(decode("jetyt", [.german])?.automaticCandidate?.word, "jetzt")
+        XCTAssertFalse(try XCTUnwrap(decode("okaz", [.english])).candidates.contains(where: \.isVariant))
+        XCTAssertNil(decode("zu", [.german, .english])?.automaticCandidate, "a valid word stays")
+    }
+
     func testPolicyRefusals() {
         typealias Decoder = SpatialWordDecoder
         func candidate(_ word: String, score: Double, spatial: Double, edit: Decoder.Edit = .none) -> Decoder.Candidate {
