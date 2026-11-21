@@ -14,6 +14,7 @@ nonisolated struct TapStatistics {
         let drift: Double
         let onTarget: Double?
         let neighbors: [(letter: String, share: Double)]
+        var rightCopyShare: Double?
         var id: String { letter }
     }
     let signature: KeyboardLayoutSignature
@@ -54,7 +55,7 @@ nonisolated struct TapStatistics {
             onTarget = nil
         }
         return Key(letter: summary.letter, samples: summary.n, center: center, xx: xx, xy: xy, yy: yy,
-                   drift: hypot(dx, dy), onTarget: onTarget, neighbors: neighbors)
+                   drift: hypot(dx, dy), onTarget: onTarget, neighbors: neighbors, rightCopyShare: summary.rightCopyShare)
     }
 
     static func board(_ signature: KeyboardLayoutSignature) -> KeyboardLayout {
@@ -75,11 +76,20 @@ nonisolated struct TapStatistics {
         guard effectiveSamples > 0 else { return nil }
         return keys.reduce(0) { $0 + $1.drift * Double($1.samples) } / Double(effectiveSamples)
     }
+    /// Letters on both split halves count on each half by the share of taps their copy there took.
     func half(left: Bool) -> Double? {
-        Self.weighted(keys.filter { key in
-            guard let frame = layout.key(.character(key.letter))?.frame else { return false }
-            return (frame.midX < layout.width / 2) == left
-        })
+        var n = 0.0, onTarget = 0.0
+        for key in keys {
+            guard let keyOnTarget = key.onTarget else { continue }
+            let copies = layout.keys.filter { $0.character == key.letter }
+            for (index, copy) in copies.enumerated() where (copy.frame.midX < layout.width / 2) == left {
+                let right = key.rightCopyShare ?? 0
+                let samples = Double(key.samples) * (copies.count == 1 ? 1 : index == 1 ? right : 1 - right)
+                n += samples
+                onTarget += keyOnTarget * samples
+            }
+        }
+        return n > 0 ? onTarget / n : nil
     }
     static func weighted(_ keys: [Key]) -> Double? {
         let eligible = keys.filter { $0.onTarget != nil }
