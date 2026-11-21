@@ -551,7 +551,6 @@ final class KeyboardLayoutTests: XCTestCase {
         XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .symbols)), 0)
     }
 
-    /// Pins every key frame and touch target outside the split letters page to dev at e3c7f058.
     func testLayoutsBesideTheSplitLettersKeepTheirFrames() {
         var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         func mix<T: FixedWidthInteger>(_ value: T) {
