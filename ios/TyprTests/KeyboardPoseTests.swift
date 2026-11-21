@@ -99,10 +99,8 @@ final class KeyboardPoseTests: XCTestCase {
                 XCTAssertLessThanOrEqual(layout.letterWidth, KeyboardMetrics.maxWideLetterWidth, name)
                 assertKeysInTheNorm(layout)
 
-                let q = layout.key(.character("q"))!
-                let p = layout.key(.character("p"))!
-                XCTAssertEqual(q.frame.minX, layout.metrics.side, accuracy: 0.001, name)
-                XCTAssertEqual(p.frame.maxX, width - layout.metrics.side, accuracy: 0.001, name)
+                XCTAssertEqual(layout.key(.shift)!.frame.minX, layout.metrics.side, accuracy: 0.001, name)
+                XCTAssertEqual(layout.key(.delete)!.frame.maxX, width - layout.metrics.side, accuracy: 0.001, name)
 
                 let leftKeys = layout.keys.filter { $0.frame.midX < width / 2 }
                 let rightKeys = layout.keys.filter { $0.frame.midX > width / 2 }

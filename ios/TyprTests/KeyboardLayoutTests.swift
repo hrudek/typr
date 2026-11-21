@@ -514,6 +514,92 @@ final class KeyboardLayoutTests: XCTestCase {
         XCTAssertEqual(layout.key(.character("l"))!.hitFrame.maxX, layout.width)
     }
 
+    func testSplitLettersFollowTheKeychronRowStaggerWithSlashRightOfM() throws {
+        for width: CGFloat in [801, 951] {
+            for numberRow in [false, true] {
+                let layout = KeyboardLayout(width: width, orientation: .splitLandscape, numberRow: numberRow)
+                let name = describe(layout)
+                let pitch = layout.letterWidth + layout.metrics.gap
+                func frame(_ ch: String) throws -> CGRect { try XCTUnwrap(layout.key(.character(ch)), ch).frame }
+                for (first, second, third) in [("q", "a", "z"), ("y", "h", "n")] {
+                    XCTAssertEqual(try frame(second).minX - frame(first).minX, pitch / 4, accuracy: 0.001, name)
+                    XCTAssertEqual(try frame(third).minX - frame(first).minX, 3 * pitch / 4, accuracy: 0.001, name)
+                }
+
+                let shift = try XCTUnwrap(layout.key(.shift)).frame
+                let delete = try XCTUnwrap(layout.key(.delete)).frame
+                let slash = try XCTUnwrap(layout.key(.character("/")))
+                XCTAssertEqual(shift.width, layout.letterWidth * KeyboardLayout.modifierWidthRatio, accuracy: 0.001, name)
+                XCTAssertEqual(delete.width, shift.width, accuracy: 0.001, name)
+                XCTAssertEqual(try frame("z").minX - shift.maxX, layout.metrics.gap, accuracy: 0.001, name)
+                XCTAssertEqual(slash.row, layout.key(.character("m"))?.row, name)
+                XCTAssertEqual(slash.frame.width, layout.letterWidth, accuracy: 0.001, name)
+                XCTAssertEqual(try slash.frame.minX - frame("m").maxX, layout.metrics.gap, accuracy: 0.001, name)
+                XCTAssertEqual(delete.minX - slash.frame.maxX, layout.metrics.gap, accuracy: 0.001, name)
+            }
+        }
+    }
+
+    func testOnlyTheSplitLettersPageGainsASlashKey() {
+        func slashes(_ layout: KeyboardLayout) -> Int {
+            layout.keys.filter { $0.character == "/" && $0.row != layout.bottomRowIndex }.count
+        }
+        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape)), 1)
+        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape, field: .url)), 1)
+        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .wideLandscape)), 0)
+        XCTAssertEqual(slashes(KeyboardLayout(width: 393)), 0)
+        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .symbols)), 0)
+    }
+
+    /// Pins every key frame and touch target outside the split letters page to dev at e3c7f058.
+    func testLayoutsBesideTheSplitLettersKeepTheirFrames() {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        func mix<T: FixedWidthInteger>(_ value: T) {
+            withUnsafeBytes(of: value.littleEndian) { bytes in
+                for byte in bytes { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+            }
+        }
+        var count = 0
+        let widths: [(KeyboardOrientation, [CGFloat])] = [
+            (.portrait, [320, 393, 440]), (.landscape, [852, 932]), (.widePortrait, [669]),
+            (.wideLandscape, [801, 951]), (.splitLandscape, [801, 951]),
+        ]
+        for (orientation, orientationWidths) in widths {
+            for width in orientationWidths {
+                for layer in layers where orientation != .splitLandscape || layer != .letters {
+                    for field in fields {
+                        for numberRow in [false, true] {
+                            for showsStrip in [false, true] {
+                                for showsGlobe in [false, true] {
+                                    for inset: CGFloat in [0, 30] {
+                                        for periodKey in [false, true] {
+                                            let layout = KeyboardLayout(
+                                                width: width, orientation: orientation, layer: layer, field: field,
+                                                showsGlobe: showsGlobe, bottomRow: BottomRow(periodKey: periodKey),
+                                                numberRow: numberRow, horizontalInset: inset, showsStrip: showsStrip
+                                            )
+                                            for key in layout.keys {
+                                                count += 1
+                                                key.label.utf8.forEach(mix)
+                                                for rect in [key.frame, key.hitFrame] {
+                                                    for value in [rect.minX, rect.minY, rect.width, rect.height] {
+                                                        mix(Int64((value * 1000).rounded()))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        XCTAssertEqual(count, 93376)
+        XCTAssertEqual(hash, 17_883_152_473_971_929_109)
+    }
+
     func testLandscapeKeepsInsetsAndHeight() {
         let layout = KeyboardLayout(width: 932, orientation: .landscape, horizontalInset: 60)
         XCTAssertEqual(layout.totalHeight, 176)

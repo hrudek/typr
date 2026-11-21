@@ -483,6 +483,9 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         count >= 7 ? 5 : (count + 1) / 2
     }
 
+    /// The split letters' row offsets within each half, in key pitches, after a Keychron Q11 split: q/a/z, y/h/n.
+    static let splitLetterStagger: [CGFloat] = [0, 0.25, 0.75]
+
     static let numberRowCharacters = "1234567890".map(String.init)
 
     static func characterRows(for layer: KeyboardLayer) -> [[String]] {
@@ -560,13 +563,37 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             addCharacters(numberRowCharacters, row: 0, startX: centredStart(count: 10, keyWidth: lw), keyWidth: lw)
         }
 
-        // Rows 1 and 2.
-        for row in 0..<2 {
-            let chars = rows[row]
-            addCharacters(chars, row: firstRow + row, startX: centredStart(count: chars.count, keyWidth: lw), keyWidth: lw)
+        if layer == .letters && m.splitGap > 0 {
+            let pitch = lw + m.gap
+            let rightBottom = rows[2][leftHalfCount(rows[2].count)...] + ["/"]
+            let leftStart = left + modW + m.gap - splitLetterStagger[2] * pitch
+            let rightStart = right - modW - (splitLetterStagger[2] + CGFloat(rightBottom.count)) * pitch
+            for (row, chars) in rows.enumerated() {
+                let half = leftHalfCount(chars.count)
+                for (start, keys) in [(leftStart, chars[..<half]), (rightStart, row == 2 ? rightBottom : chars[half...])] {
+                    for (index, ch) in keys.enumerated() {
+                        let x = start + (splitLetterStagger[row] + CGFloat(index)) * pitch
+                        add(.character(ch), row: firstRow + row, x: x, w: lw, label: ch)
+                    }
+                }
+            }
+        } else {
+            for row in 0..<2 {
+                let chars = rows[row]
+                addCharacters(chars, row: firstRow + row, startX: centredStart(count: chars.count, keyWidth: lw), keyWidth: lw)
+            }
+            let middle = rows[2]
+            if layer == .letters {
+                addCharacters(middle, row: shiftRow, startX: centredStart(count: middle.count, keyWidth: lw), keyWidth: lw)
+            } else {
+                // Apple's punctuation row: five wide keys aligned to the s..k columns between modifiers.
+                let edgeGap = 1.5 * (lw + m.gap) - modW
+                let count = CGFloat(middle.count)
+                let middleW = (boardWidth - 2 * m.side - 2 * modW - 2 * edgeGap - (count - 1) * m.gap) / count
+                addCharacters(middle, row: shiftRow, startX: left + modW + edgeGap, keyWidth: middleW)
+            }
         }
 
-        // Row 3: shift (or the symbol-page switch), the middle keys, delete.
         switch layer {
         case .letters:
             add(.shift, row: shiftRow, x: left, w: modW, label: "shift")
@@ -574,16 +601,6 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             add(.layerSwitch(.symbols), row: shiftRow, x: left, w: modW, label: "#+=")
         case .symbols:
             add(.layerSwitch(.numbers), row: shiftRow, x: left, w: modW, label: "123")
-        }
-        let middle = rows[2]
-        if layer == .letters {
-            addCharacters(middle, row: shiftRow, startX: centredStart(count: middle.count, keyWidth: lw), keyWidth: lw)
-        } else {
-            // Apple's punctuation row: five wide keys aligned to the s..k columns between modifiers.
-            let edgeGap = 1.5 * (lw + m.gap) - modW
-            let count = CGFloat(middle.count)
-            let middleW = (boardWidth - 2 * m.side - 2 * modW - 2 * edgeGap - (count - 1) * m.gap) / count
-            addCharacters(middle, row: shiftRow, startX: left + modW + edgeGap, keyWidth: middleW)
         }
         add(.delete, row: shiftRow, x: right - modW, w: modW, label: "delete")
 
