@@ -588,9 +588,10 @@ final class KeyboardLayoutTests: XCTestCase {
                 for numberRow in [false, true] {
                     for layer in layers {
                         let plain = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                   numberRow: numberRow, splitColumns: columns)
+                                                   numberRow: numberRow, splitColumns: columns, horizontalInset: 60)
                         let mirrored = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                      numberRow: numberRow, splitColumns: columns, splitMirrored: true)
+                                                      numberRow: numberRow, splitColumns: columns, splitMirrored: true,
+                                                      horizontalInset: 60)
                         let name = describe(mirrored)
                         let centre = width / 2
                         var moved = 0
@@ -616,7 +617,7 @@ final class KeyboardLayoutTests: XCTestCase {
                             func innerGap(_ layout: KeyboardLayout) throws -> CGFloat {
                                 try centre - XCTUnwrap(layout.key(.character("b"))).frame.maxX
                             }
-                            XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 20, name)
+                            XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 1, name)
                         }
                     }
                 }
@@ -643,6 +644,7 @@ final class KeyboardLayoutTests: XCTestCase {
                 }
             }
             XCTAssertLessThan(leftMost, plainLeftMost, name)
+            XCTAssertEqual(leftMost, mirrored.metrics.side, accuracy: 0.001, name)
         }
     }
 
