@@ -499,13 +499,12 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
         typrKey.isWarm = model.hasFullAccess && model.isWarmAvailable
         if engine.showsGlobe != model.needsGlobeKey || engine.globeKey != model.globeKey
             || engine.bottomRow != model.bottomRow || engine.numberRow != model.numberRow
-            || engine.splitColumns != model.splitColumns || engine.splitMirrored != model.splitMirrored {
+            || engine.splitColumns != model.splitColumns {
             engine.showsGlobe = model.needsGlobeKey
             engine.globeKey = model.globeKey
             engine.bottomRow = model.bottomRow
             engine.numberRow = model.numberRow
             engine.splitColumns = model.splitColumns
-            engine.splitMirrored = model.splitMirrored
             setNeedsLayout()
             hostController?.view.setNeedsLayout()
         }

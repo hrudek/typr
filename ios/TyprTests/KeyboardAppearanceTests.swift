@@ -194,7 +194,6 @@ final class KeyboardAppearanceTests: XCTestCase {
             let full = settings.orientation
             settings.splitKeyboard = true
             settings.splitColumns = true
-            settings.splitMirrored = true
             XCTAssertEqual(settings.orientation, full.allowsSplit ? .splitLandscape : full, "\(display)")
             let view = KeyboardAppearancePreview.makeKeyboard(settings)
             view.frame = CGRect(x: 0, y: 0, width: KeyboardAppearancePage.keyboardWidth(display: display),
@@ -202,7 +201,6 @@ final class KeyboardAppearanceTests: XCTestCase {
             view.layoutIfNeeded()
             XCTAssertEqual(view.engine.layout.orientation, settings.orientation, "\(display)")
             XCTAssertEqual(view.engine.layout.splitColumns, full.allowsSplit, "\(display)")
-            XCTAssertEqual(view.engine.layout.splitMirrored, full.allowsSplit, "\(display)")
         }
     }
 

@@ -582,65 +582,6 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
-    func testMirroredHalvesMoveTheLeftHalfOutwardAndKeepTheRightHalf() throws {
-        for width: CGFloat in [801, 951] {
-            for columns in [false, true] {
-                for numberRow in [false, true] {
-                    for layer in layers {
-                        let plain = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                   numberRow: numberRow, splitColumns: columns)
-                        let mirrored = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
-                                                      numberRow: numberRow, splitColumns: columns, splitMirrored: true)
-                        let name = describe(mirrored)
-                        let centre = width / 2
-                        var moved = 0
-                        for (a, b) in zip(plain.keys, mirrored.keys) {
-                            XCTAssertEqual(a.kind, b.kind, name)
-                            if a.frame.midX >= centre || b.row == mirrored.bottomRowIndex {
-                                XCTAssertEqual(a.frame, b.frame, name)
-                                XCTAssertEqual(a.hitFrame.maxX, b.hitFrame.maxX, name)
-                            } else {
-                                XCTAssertLessThanOrEqual(b.frame.minX, a.frame.minX, name)
-                                XCTAssertGreaterThanOrEqual(b.frame.minX, 0, name)
-                                XCTAssertEqual(a.frame.height, b.frame.height, name)
-                                if a.frame != b.frame { moved += 1 }
-                            }
-                            XCTAssertGreaterThanOrEqual(b.frame.width, mirrored.letterWidth * 0.5 - 0.001, name)
-                            if b.character?.first?.isLetter == true {
-                                XCTAssertEqual(a.frame.width, b.frame.width, accuracy: 0.001, name)
-                            }
-                        }
-                        XCTAssertGreaterThan(moved, 0, name)
-                        let keys = mirrored.keys.map(\.frame)
-                        for (index, a) in keys.enumerated() {
-                            for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
-                        }
-                        if layer == .letters {
-                            func innerGap(_ layout: KeyboardLayout) throws -> CGFloat {
-                                try centre - XCTUnwrap(layout.key(.character("b"))).frame.maxX
-                            }
-                            XCTAssertGreaterThan(try innerGap(mirrored), try innerGap(plain) + 20, name)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    func testMirroredHalvesChangeOnlySplitLandscape() {
-        for (orientation, width) in [(KeyboardOrientation.portrait, 393), (.landscape, 932), (.widePortrait, 669),
-                                     (.wideLandscape, 951)] as [(KeyboardOrientation, CGFloat)] {
-            for layer in layers {
-                let plain = KeyboardLayout(width: width, orientation: orientation, layer: layer)
-                let mirrored = KeyboardLayout(width: width, orientation: orientation, layer: layer, splitMirrored: true)
-                XCTAssertEqual(plain.keys, mirrored.keys, describe(mirrored))
-                XCTAssertFalse(mirrored.splitMirrored)
-            }
-        }
-        XCTAssertNotEqual(KeyboardLayout(width: 951, orientation: .splitLandscape).keys,
-                          KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true).keys)
-    }
-
     func testOnlyTheSplitLettersPageGainsASlashKey() {
         func slashes(_ layout: KeyboardLayout) -> Int {
             layout.keys.filter { $0.character == "/" && $0.row != layout.bottomRowIndex }.count
@@ -928,7 +869,6 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertFalse(settings.numberRow)
         XCTAssertFalse(settings.splitKeyboard)
         XCTAssertFalse(settings.splitColumns)
-        XCTAssertFalse(settings.splitMirrored)
         XCTAssertEqual(settings.design, .standard)
         XCTAssertEqual(settings.bottomRow, BottomRow(order: [.space, .period, .typr], periodKey: false))
 
@@ -937,7 +877,6 @@ final class FullKeyboardSettingsTests: XCTestCase {
         settings.numberRow = true
         settings.splitKeyboard = true
         settings.splitColumns = true
-        settings.splitMirrored = true
         settings.design = .mechanical
         let arranged = BottomRow(order: [.typr, .space, .period], periodKey: true)
         settings.bottomRow = arranged
@@ -946,17 +885,14 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertTrue(fresh().numberRow)
         XCTAssertTrue(fresh().splitKeyboard)
         XCTAssertTrue(fresh().splitColumns)
-        XCTAssertTrue(fresh().splitMirrored)
         XCTAssertEqual(fresh().design, .mechanical)
         XCTAssertEqual(fresh().bottomRow, arranged)
         settings.numberRow = false
         settings.splitKeyboard = false
         settings.splitColumns = false
-        settings.splitMirrored = false
         XCTAssertFalse(fresh().numberRow)
         XCTAssertFalse(fresh().splitKeyboard)
         XCTAssertFalse(fresh().splitColumns)
-        XCTAssertFalse(fresh().splitMirrored)
 
         defaults.set("neon", forKey: "settings.keyboardDesign")
         defaults.set(["typr", "emoji"], forKey: "settings.keyboardBottomRowOrder")

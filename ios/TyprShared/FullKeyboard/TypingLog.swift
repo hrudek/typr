@@ -81,7 +81,6 @@ nonisolated struct TypingLogLayout: Codable, Equatable, Sendable {
     var numberRow: Bool
     /// Only written when on, so logs from before the setting still decode and compare equal.
     var splitColumns: Bool?
-    var splitMirrored: Bool?
     var horizontalInset: Double
     var showsStrip: Bool
     var metrics: Metrics
@@ -102,7 +101,6 @@ nonisolated struct TypingLogLayout: Codable, Equatable, Sendable {
         periodKey = layout.bottomRow.periodKey
         numberRow = layout.numberRow
         splitColumns = layout.splitColumns ? true : nil
-        splitMirrored = layout.splitMirrored ? true : nil
         horizontalInset = layout.horizontalInset
         showsStrip = layout.showsStrip
         let m = layout.metrics
@@ -132,7 +130,7 @@ nonisolated struct TypingLogLayout: Codable, Equatable, Sendable {
         return KeyboardLayout(width: width, orientation: orientation, layer: layer, field: field,
                               showsGlobe: showsGlobe, globeKey: globeKey,
                               bottomRow: BottomRow(order: order, periodKey: periodKey),
-                              numberRow: numberRow, splitColumns: splitColumns ?? false, splitMirrored: splitMirrored ?? false,
+                              numberRow: numberRow, splitColumns: splitColumns ?? false,
                               horizontalInset: horizontalInset, showsStrip: showsStrip)
     }
 }

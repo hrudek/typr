@@ -11,7 +11,6 @@ struct KeyboardAppearancePage: View {
     @State private var numberRow = FullKeyboardSettings().numberRow
     @State private var splitKeyboard = FullKeyboardSettings().splitKeyboard
     @State private var splitColumns = FullKeyboardSettings().splitColumns
-    @State private var splitMirrored = FullKeyboardSettings().splitMirrored
     @State private var draggedOrder: [BottomKey]?
     @State private var window: WindowReader.Window?
 
@@ -41,8 +40,7 @@ struct KeyboardAppearancePage: View {
             isDark: Self.snapshotIsDark() ?? window?.systemIsDark ?? true,
             container: container,
             splitKeyboard: splitKeyboard,
-            splitColumns: splitColumns,
-            splitMirrored: splitMirrored
+            splitColumns: splitColumns
         )
     }
 
@@ -166,9 +164,6 @@ struct KeyboardAppearancePage: View {
                         SettingsDivider()
                         SettingsToggle(title: "Aligned columns", detail: "Letters straight above each other.", isOn: $splitColumns)
                             .onChange(of: splitColumns) { _, aligned in FullKeyboardSettings().splitColumns = aligned }
-                        SettingsDivider()
-                        SettingsToggle(title: "Mirrored halves", detail: "Left half moves toward the left edge.", isOn: $splitMirrored)
-                            .onChange(of: splitMirrored) { _, mirrored in FullKeyboardSettings().splitMirrored = mirrored }
                     }
                 }
                 SettingsFooter(Self.splitKeyboardFooter)
@@ -224,7 +219,6 @@ struct KeyboardAppearancePage: View {
         numberRow = FullKeyboardSettings().numberRow
         splitKeyboard = FullKeyboardSettings().splitKeyboard
         splitColumns = FullKeyboardSettings().splitColumns
-        splitMirrored = FullKeyboardSettings().splitMirrored
     }
 }
 
@@ -300,7 +294,6 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         var container: CGSize
         var splitKeyboard = false
         var splitColumns = false
-        var splitMirrored = false
 
         var orientation: KeyboardOrientation { KeyboardOrientation(container: container, split: splitKeyboard) }
 
@@ -315,7 +308,6 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
                     "number row \(numberRow ? "on" : "off")",
                     orientation == .splitLandscape ? "split" : nil,
                     orientation == .splitLandscape && splitColumns ? "aligned columns" : nil,
-                    orientation == .splitLandscape && splitMirrored ? "mirrored halves" : nil,
                     "suggestions \(showsSuggestionBar ? "shown" : "hidden")"].compactMap { $0 }.joined(separator: ", ")
         }
     }
@@ -339,7 +331,6 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         model.numberRow = settings.numberRow
         model.splitKeyboard = settings.splitKeyboard
         model.splitColumns = settings.splitColumns
-        model.splitMirrored = settings.splitMirrored
         let learning = KeyboardLearningSession(store: nil, defaults: nil, allowsPersistence: { false })
         let view = FullKeyboardView(
             model: model,
@@ -360,7 +351,6 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         view.model.numberRow = settings.numberRow
         view.model.splitKeyboard = settings.splitKeyboard
         view.model.splitColumns = settings.splitColumns
-        view.model.splitMirrored = settings.splitMirrored
         view.applyPreview(FullKeyboardView.Preview(design: settings.design, showsSuggestionBar: settings.showsSuggestionBar))
         view.appearanceOverride = settings.isDark
         view.containerSize = settings.container
