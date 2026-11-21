@@ -110,14 +110,15 @@ final class SuggestionBarTests: XCTestCase {
         let slots = strip.subviews.compactMap { $0 as? UIControl }.sorted { $0.tag < $1.tag }
         XCTAssertEqual(slots.count, 3)
         let frames = slots.map { strip.convert($0.frame, to: view) }
-        let rightHalfMinX = layout.width / 2 + (layout.metrics.splitGap + layout.metrics.gap) / 2
-        XCTAssertEqual(frames[0].minX, rightHalfMinX, accuracy: 0.001)
-        XCTAssertEqual(frames[2].maxX, layout.width - layout.metrics.side, accuracy: 0.001)
+        let y = try XCTUnwrap(layout.key(.character("y"))).frame
+        let delete = try XCTUnwrap(layout.key(.delete)).frame
+        XCTAssertLessThanOrEqual(frames[0].minX, y.minX + 0.001)
+        XCTAssertGreaterThan(frames[0].minX, layout.width / 2)
+        XCTAssertEqual(frames[2].maxX, delete.maxX, accuracy: 0.001)
         for (left, right) in zip(frames, frames.dropFirst()) {
             XCTAssertEqual(left.maxX, right.minX, accuracy: 0.001)
             XCTAssertEqual(left.width, right.width, accuracy: 0.001)
         }
-        let y = try XCTUnwrap(layout.key(.character("y"))).frame
         XCTAssertGreaterThan(frames[1].midX, y.maxX, "The middle suggestion sits over the right half")
     }
 

@@ -540,21 +540,32 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
-    func testSuggestionSlotsSpanTheSplitRightHalfAndTheWholeStripElsewhere() {
+    func testSuggestionSlotsSpanTheSplitRightHalfAndTheWholeStripElsewhere() throws {
         for (orientation, width) in [(KeyboardOrientation.portrait, 393), (.landscape, 852),
                                      (.wideLandscape, 951)] as [(KeyboardOrientation, CGFloat)] {
             let layout = KeyboardLayout(width: width, orientation: orientation, horizontalInset: 20)
             XCTAssertEqual(layout.suggestionSlotsFrame, CGRect(origin: .zero, size: layout.stripFrame.size), describe(layout))
         }
+        let rightLetters = Set("yuiophjklbnmgv".map { KeyKind.character(String($0)) } + [.delete])
         for width: CGFloat in [801, 951] {
             for inset: CGFloat in [0, 20] {
-                let layout = KeyboardLayout(width: width, orientation: .splitLandscape, horizontalInset: inset)
-                let m = layout.metrics
-                let slots = layout.suggestionSlotsFrame.offsetBy(dx: layout.stripFrame.minX, dy: 0)
-                let leftHalfMaxX = inset + m.side + 5 * layout.letterWidth + 4 * m.gap
-                XCTAssertEqual(slots.minX, leftHalfMaxX + m.splitGap + m.gap, accuracy: 0.001, describe(layout))
-                XCTAssertEqual(slots.maxX, width - inset - m.side, accuracy: 0.001, describe(layout))
-                XCTAssertEqual(slots.height, layout.stripFrame.height)
+                for splitColumns in [false, true] {
+                    for numberRow in [false, true] {
+                        let layout = KeyboardLayout(width: width, orientation: .splitLandscape, numberRow: numberRow,
+                                                    splitColumns: splitColumns, horizontalInset: inset)
+                        let name = describe(layout)
+                        let keys = layout.keys.filter { rightLetters.contains($0.kind) && $0.frame.midX > width / 2 }
+                        let slots = layout.suggestionSlotsFrame.offsetBy(dx: layout.stripFrame.minX, dy: 0)
+                        XCTAssertEqual(slots.minX, try XCTUnwrap(keys.map(\.frame.minX).min()), accuracy: 0.001, name)
+                        XCTAssertEqual(slots.maxX, try XCTUnwrap(keys.map(\.frame.maxX).max()), accuracy: 0.001, name)
+                        XCTAssertEqual(slots.height, layout.stripFrame.height, name)
+                        for layer in [KeyboardLayer.numbers, .symbols] {
+                            let page = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer, numberRow: numberRow,
+                                                      splitColumns: splitColumns, horizontalInset: inset)
+                            XCTAssertEqual(page.suggestionSlotsFrame, layout.suggestionSlotsFrame, "\(name) \(layer)")
+                        }
+                    }
+                }
             }
         }
     }
