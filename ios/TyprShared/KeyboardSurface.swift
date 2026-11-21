@@ -54,7 +54,6 @@ final class KeyboardViewModel: ObservableObject {
     @Published var numberRow = false
     @Published var splitKeyboard = false
     @Published var splitColumns = false
-    @Published var splitMirrored = false
     @Published var keyDesign = KeyboardDesign.standard
     @Published var returnKeyLabel = "Return"
     @Published var isModelInstalled = false
