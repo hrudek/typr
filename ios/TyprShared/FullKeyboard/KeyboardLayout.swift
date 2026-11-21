@@ -420,6 +420,15 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         CGRect(x: horizontalInset, y: metrics.stripTop, width: width - 2 * horizontalInset, height: metrics.stripHeight)
     }
 
+    /// Where the three suggestions sit, in the strip's coordinates: over the split keyboard's right half,
+    /// so the right thumb and eye stay there; else the whole strip.
+    var suggestionSlotsFrame: CGRect {
+        let strip = CGRect(origin: .zero, size: stripFrame.size)
+        guard metrics.splitGap > 0 else { return strip }
+        let minX = (strip.width + metrics.splitGap + metrics.gap) / 2
+        return CGRect(x: minX, y: 0, width: max(0, strip.width - metrics.side - minX), height: strip.height)
+    }
+
     var keysAreaFrame: CGRect {
         CGRect(x: 0, y: metrics.stripArea, width: width, height: metrics.keysArea)
     }
