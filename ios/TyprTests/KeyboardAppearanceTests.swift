@@ -193,12 +193,14 @@ final class KeyboardAppearanceTests: XCTestCase {
             settings.container = display
             let full = settings.orientation
             settings.splitKeyboard = true
+            settings.splitColumns = true
             XCTAssertEqual(settings.orientation, full.allowsSplit ? .splitLandscape : full, "\(display)")
             let view = KeyboardAppearancePreview.makeKeyboard(settings)
             view.frame = CGRect(x: 0, y: 0, width: KeyboardAppearancePage.keyboardWidth(display: display),
                                 height: view.preferredHeight)
             view.layoutIfNeeded()
             XCTAssertEqual(view.engine.layout.orientation, settings.orientation, "\(display)")
+            XCTAssertEqual(view.engine.layout.splitColumns, full.allowsSplit, "\(display)")
         }
     }
 

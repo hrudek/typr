@@ -346,6 +346,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     let bottomRow: BottomRow
     /// Settings › Number row: 1 to 0 above the letters. The other pages keep four taller rows.
     let numberRow: Bool
+    /// Settings › Aligned columns: the split letters in straight columns. Always false off `.splitLandscape`.
+    let splitColumns: Bool
     let horizontalInset: CGFloat
     /// Typr: whether the suggestion bar sits above the keys.
     let showsStrip: Bool
@@ -361,6 +363,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         globeKey: GlobeKey = .switches,
         bottomRow: BottomRow = BottomRow(),
         numberRow: Bool = false,
+        splitColumns: Bool = false,
         horizontalInset: CGFloat = 0,
         showsStrip: Bool = true
     ) {
@@ -372,6 +375,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         self.globeKey = globeKey
         self.bottomRow = bottomRow
         self.numberRow = numberRow
+        self.splitColumns = splitColumns && orientation == .splitLandscape
         self.horizontalInset = max(0, horizontalInset)
         self.showsStrip = showsStrip
         let innerWidth = width - 2 * self.horizontalInset
@@ -386,7 +390,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             aroundSpace: BottomKey.arranged(bottomRow.order).filter {
                 $0 != .period || Self.showsPeriodKey(bottomRow, layer: layer, field: field)
             },
-            inset: self.horizontalInset
+            inset: self.horizontalInset,
+            splitStagger: self.splitColumns ? [0, 0, 0] : Self.splitLetterStagger
         )
     }
 
@@ -515,7 +520,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         field: KeyboardFieldKind,
         globe: GlobeKey,
         aroundSpace: [BottomKey],
-        inset: CGFloat
+        inset: CGFloat,
+        splitStagger: [CGFloat]
     ) -> [KeyboardKey] {
         let lw = letterWidth(innerWidth: width - 2 * inset, metrics: m)
         let boardWidth = width - 2 * inset - m.splitGap
@@ -566,13 +572,17 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         if layer == .letters && m.splitGap > 0 {
             let pitch = lw + m.gap
             let rightBottom = rows[2][leftHalfCount(rows[2].count)...] + ["/"]
-            let leftStart = left + modW + m.gap - splitLetterStagger[2] * pitch
-            let rightStart = right - modW - (splitLetterStagger[2] + CGFloat(rightBottom.count)) * pitch
+            let leftStart = left + modW + m.gap - splitStagger[2] * pitch
+            let rightTop = rows[0].count - leftHalfCount(rows[0].count)
+            let rightStart = min(
+                right - modW - (splitStagger[2] + CGFloat(rightBottom.count)) * pitch,
+                right + m.gap - (splitStagger[0] + CGFloat(rightTop)) * pitch
+            )
             for (row, chars) in rows.enumerated() {
                 let half = leftHalfCount(chars.count)
                 for (start, keys) in [(leftStart, chars[..<half]), (rightStart, row == 2 ? rightBottom : chars[half...])] {
                     for (index, ch) in keys.enumerated() {
-                        let x = start + (splitLetterStagger[row] + CGFloat(index)) * pitch
+                        let x = start + (splitStagger[row] + CGFloat(index)) * pitch
                         add(.character(ch), row: firstRow + row, x: x, w: lw, label: ch)
                     }
                 }

@@ -10,6 +10,7 @@ struct KeyboardAppearancePage: View {
     @State private var bottomRow = FullKeyboardSettings().bottomRow
     @State private var numberRow = FullKeyboardSettings().numberRow
     @State private var splitKeyboard = FullKeyboardSettings().splitKeyboard
+    @State private var splitColumns = FullKeyboardSettings().splitColumns
     @State private var draggedOrder: [BottomKey]?
     @State private var window: WindowReader.Window?
 
@@ -38,7 +39,8 @@ struct KeyboardAppearancePage: View {
             // The app is always dark; the keyboard follows the system like it does in most apps.
             isDark: Self.snapshotIsDark() ?? window?.systemIsDark ?? true,
             container: container,
-            splitKeyboard: splitKeyboard
+            splitKeyboard: splitKeyboard,
+            splitColumns: splitColumns
         )
     }
 
@@ -158,6 +160,11 @@ struct KeyboardAppearancePage: View {
                 SettingsSection(title: "Split") {
                     SettingsToggle(title: "Split keyboard", detail: "Half the keys under each thumb.", isOn: $splitKeyboard)
                         .onChange(of: splitKeyboard) { _, split in FullKeyboardSettings().splitKeyboard = split }
+                    if splitKeyboard {
+                        SettingsDivider()
+                        SettingsToggle(title: "Aligned columns", detail: "Letters straight above each other.", isOn: $splitColumns)
+                            .onChange(of: splitColumns) { _, aligned in FullKeyboardSettings().splitColumns = aligned }
+                    }
                 }
                 SettingsFooter(Self.splitKeyboardFooter)
             }
@@ -211,6 +218,7 @@ struct KeyboardAppearancePage: View {
         bottomRow = FullKeyboardSettings().bottomRow
         numberRow = FullKeyboardSettings().numberRow
         splitKeyboard = FullKeyboardSettings().splitKeyboard
+        splitColumns = FullKeyboardSettings().splitColumns
     }
 }
 
@@ -285,6 +293,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         /// The window the page is in: the display the preview stands in for.
         var container: CGSize
         var splitKeyboard = false
+        var splitColumns = false
 
         var orientation: KeyboardOrientation { KeyboardOrientation(container: container, split: splitKeyboard) }
 
@@ -320,6 +329,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         model.bottomRow = settings.bottomRow
         model.numberRow = settings.numberRow
         model.splitKeyboard = settings.splitKeyboard
+        model.splitColumns = settings.splitColumns
         let learning = KeyboardLearningSession(store: nil, defaults: nil, allowsPersistence: { false })
         let view = FullKeyboardView(
             model: model,
@@ -339,6 +349,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
         view.model.bottomRow = settings.bottomRow
         view.model.numberRow = settings.numberRow
         view.model.splitKeyboard = settings.splitKeyboard
+        view.model.splitColumns = settings.splitColumns
         view.applyPreview(FullKeyboardView.Preview(design: settings.design, showsSuggestionBar: settings.showsSuggestionBar))
         view.appearanceOverride = settings.isDark
         view.containerSize = settings.container

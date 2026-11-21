@@ -68,6 +68,7 @@ final class KeyboardPoseTests: XCTestCase {
             KeyboardLayout(width: 669, orientation: .widePortrait),
             KeyboardLayout(width: 801, orientation: .wideLandscape, numberRow: true),
             KeyboardLayout(width: 801, orientation: .splitLandscape),
+            KeyboardLayout(width: 801, orientation: .splitLandscape, splitColumns: true),
         ] {
             XCTAssertEqual(TypingLogLayout(layout).keyboardLayout, layout)
             XCTAssertEqual(KeyboardLayoutSignature(layout).orientation, layout.orientation.rawValue)
