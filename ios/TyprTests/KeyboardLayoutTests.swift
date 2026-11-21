@@ -606,6 +606,9 @@ final class KeyboardLayoutTests: XCTestCase {
                                 if a.frame != b.frame { moved += 1 }
                             }
                             XCTAssertGreaterThanOrEqual(b.frame.width, mirrored.letterWidth * 0.5 - 0.001, name)
+                            if b.character?.first?.isLetter == true {
+                                XCTAssertEqual(a.frame.width, b.frame.width, accuracy: 0.001, name)
+                            }
                         }
                         XCTAssertGreaterThan(moved, 0, name)
                         let keys = mirrored.keys.map(\.frame)
