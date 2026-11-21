@@ -335,6 +335,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     static let modifierWidthRatio: CGFloat = 1.34
     static let bottomSwitchWidthRatio: CGFloat = 1.56
     static let returnWidthRatio: CGFloat = 2.40
+    static let minLeftKeyWidthRatio: CGFloat = 0.5
     static let compactReturnWidthRatio: CGFloat = 2.18
 
     let width: CGFloat
@@ -348,6 +349,9 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     let numberRow: Bool
     /// Settings › Aligned columns: the split letters in straight columns. Always false off `.splitLandscape`.
     let splitColumns: Bool
+    /// Settings › Mirrored halves: the split's left half moves left, up to where its inner letter edge would be as far
+    /// from the display centre as the right half's; the screen edge limits it. Always false off `.splitLandscape`.
+    let splitMirrored: Bool
     let horizontalInset: CGFloat
     /// Typr: whether the suggestion bar sits above the keys.
     let showsStrip: Bool
@@ -364,6 +368,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         bottomRow: BottomRow = BottomRow(),
         numberRow: Bool = false,
         splitColumns: Bool = false,
+        splitMirrored: Bool = false,
         horizontalInset: CGFloat = 0,
         showsStrip: Bool = true
     ) {
@@ -376,6 +381,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         self.bottomRow = bottomRow
         self.numberRow = numberRow
         self.splitColumns = splitColumns && orientation == .splitLandscape
+        self.splitMirrored = splitMirrored && orientation == .splitLandscape
         self.horizontalInset = max(0, horizontalInset)
         self.showsStrip = showsStrip
         let innerWidth = width - 2 * self.horizontalInset
@@ -391,7 +397,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
                 $0 != .period || Self.showsPeriodKey(bottomRow, layer: layer, field: field)
             },
             inset: self.horizontalInset,
-            splitStagger: self.splitColumns ? [0, 0, 0] : Self.splitLetterStagger
+            splitStagger: self.splitColumns ? [0, 0, 0] : Self.splitLetterStagger,
+            mirrored: self.splitMirrored
         )
     }
 
@@ -521,7 +528,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         globe: GlobeKey,
         aroundSpace: [BottomKey],
         inset: CGFloat,
-        splitStagger: [CGFloat]
+        splitStagger: [CGFloat],
+        mirrored: Bool
     ) -> [KeyboardKey] {
         let lw = letterWidth(innerWidth: width - 2 * inset, metrics: m)
         let boardWidth = width - 2 * inset - m.splitGap
@@ -569,15 +577,25 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             addCharacters(numberRowCharacters, row: 0, startX: centredStart(count: 10, keyWidth: lw), keyWidth: lw)
         }
 
+        let pitch = lw + m.gap
+        let letterRows = characterRows(for: .letters)
+        let rightBottom = letterRows[2][leftHalfCount(letterRows[2].count)...] + ["/"]
+        let leftStart = left + modW + m.gap - splitStagger[2] * pitch
+        let rightTop = letterRows[0].count - leftHalfCount(letterRows[0].count)
+        let rightStart = min(
+            right - modW - (splitStagger[2] + CGFloat(rightBottom.count)) * pitch,
+            right + m.gap - (splitStagger[0] + CGFloat(rightTop)) * pitch
+        )
+        var leftShift: CGFloat = 0
+        if mirrored && m.splitGap > 0 {
+            let leftInner = letterRows.indices.map {
+                leftStart + (splitStagger[$0] + CGFloat(leftHalfCount(letterRows[$0].count)) - 1) * pitch + lw
+            }.reduce(-CGFloat.infinity, max)
+            let rightInner = letterRows.indices.map { rightStart + splitStagger[$0] * pitch }.reduce(CGFloat.infinity, min)
+            leftShift = max(0, leftInner + rightInner - width)
+        }
+
         if layer == .letters && m.splitGap > 0 {
-            let pitch = lw + m.gap
-            let rightBottom = rows[2][leftHalfCount(rows[2].count)...] + ["/"]
-            let leftStart = left + modW + m.gap - splitStagger[2] * pitch
-            let rightTop = rows[0].count - leftHalfCount(rows[0].count)
-            let rightStart = min(
-                right - modW - (splitStagger[2] + CGFloat(rightBottom.count)) * pitch,
-                right + m.gap - (splitStagger[0] + CGFloat(rightTop)) * pitch
-            )
             for (row, chars) in rows.enumerated() {
                 let half = leftHalfCount(chars.count)
                 for (start, keys) in [(leftStart, chars[..<half]), (rightStart, row == 2 ? rightBottom : chars[half...])] {
@@ -657,7 +675,6 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         }
         let trailingWidth = trailing.reduce(0) { $0 + $1.1 } + CGFloat(trailing.count) * m.gap
         if m.splitGap > 0 {
-            let pitch = lw + m.gap
             let leftSpaceEnd = max(left + 5 * pitch - m.gap, x + 2 * pitch)
             add(.space, row: spaceRow, x: x, w: leftSpaceEnd - x, label: "space")
             let rightSpaceEnd = right - trailingWidth
@@ -672,6 +689,31 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         for (kind, w, label) in trailing {
             add(kind, row: spaceRow, x: x, w: w, label: label)
             x += w + m.gap
+        }
+
+        if leftShift > 0 {
+            let moving = drawn.filter { $0.1 != spaceRow && $0.2.midX < width / 2 }
+            let minWidth = KeyboardLayout.minLeftKeyWidthRatio * lw
+            var firstKeys: [Int: (KeyKind, Int, CGRect, String)] = [:]
+            for item in moving where item.2.minX < firstKeys[item.1]?.2.minX ?? .infinity {
+                firstKeys[item.1] = item
+            }
+            func isLetter(_ kind: KeyKind) -> Bool {
+                if case .character(let ch) = kind { return ch.first?.isLetter == true }
+                return false
+            }
+            for first in firstKeys.values {
+                leftShift = min(leftShift, isLetter(first.0) ? first.2.minX - left : first.2.maxX - left - minWidth)
+            }
+            leftShift = max(0, leftShift)
+            drawn = drawn.map { item in
+                guard item.1 != spaceRow, item.2.midX < width / 2 else { return item }
+                var frame = item.2.offsetBy(dx: -leftShift, dy: 0)
+                if firstKeys[item.1]?.2 == item.2, frame.minX < left {
+                    frame = CGRect(x: left, y: frame.minY, width: frame.maxX - left, height: frame.height)
+                }
+                return (item.0, item.1, frame, item.3)
+            }
         }
 
         // Touch targets: split every gap down the middle; outer keys reach the edges. Like Apple's, the split halves'
