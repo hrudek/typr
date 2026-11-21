@@ -129,15 +129,13 @@ nonisolated enum AutoCapitalization {
 nonisolated enum DoubleSpacePeriod {
     static let window: TimeInterval = 0.35
 
-    /// `lastSpaceAt` is when this keyboard typed the space now before the cursor (nil if
-    /// anything else happened since). Requires a letter or digit right before that space.
-    static func shouldReplace(before: String?, lastSpaceAt: TimeInterval?, now: TimeInterval) -> Bool {
+    static func trailingSpacesToReplace(before: String?, lastSpaceAt: TimeInterval?, now: TimeInterval) -> Int? {
         guard let before, let lastSpaceAt, now - lastSpaceAt <= window, now >= lastSpaceAt else {
-            return false
+            return nil
         }
-        guard before.last == " " else { return false }
-        guard let previous = before.dropLast().last else { return false }
-        return previous.isLetter || previous.isNumber
+        let spaces = before.reversed().prefix { $0 == " " }.count
+        guard (1...2).contains(spaces), let previous = before.dropLast(spaces).last else { return nil }
+        return previous.isLetter || previous.isNumber ? spaces : nil
     }
 }
 

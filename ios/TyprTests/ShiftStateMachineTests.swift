@@ -130,18 +130,24 @@ final class ShiftStateMachineTests: XCTestCase {
     // MARK: - Double-space period
 
     func testDoubleSpaceAfterAWordTypesAPeriod() {
-        XCTAssertTrue(DoubleSpacePeriod.shouldReplace(before: "late ", lastSpaceAt: 10, now: 10.2))
-        XCTAssertTrue(DoubleSpacePeriod.shouldReplace(before: "at 7 ", lastSpaceAt: 10, now: 10.35))
+        XCTAssertEqual(DoubleSpacePeriod.trailingSpacesToReplace(before: "late ", lastSpaceAt: 10, now: 10.2), 1)
+        XCTAssertEqual(DoubleSpacePeriod.trailingSpacesToReplace(before: "at 7 ", lastSpaceAt: 10, now: 10.35), 1)
+    }
+
+    func testDoubleSpaceAfterAutomaticSeparatorReplacesBothSpaces() {
+        XCTAssertEqual(DoubleSpacePeriod.trailingSpacesToReplace(before: "late  ", lastSpaceAt: 10, now: 10.2), 2)
     }
 
     func testDoubleSpaceEdgeCases() {
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late ", lastSpaceAt: 10, now: 10.4), "too slow")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late ", lastSpaceAt: nil, now: 10), "not our space")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late. ", lastSpaceAt: 10, now: 10.1), "already punctuated")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late  ", lastSpaceAt: 10, now: 10.1), "third space")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: " ", lastSpaceAt: 10, now: 10.1), "start of field")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: nil, lastSpaceAt: 10, now: 10.1), "no context")
-        XCTAssertFalse(DoubleSpacePeriod.shouldReplace(before: "late", lastSpaceAt: 10, now: 10.1), "cursor moved")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "late ", lastSpaceAt: 10, now: 10.4), "too slow")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "late ", lastSpaceAt: nil, now: 10), "not our space")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "late. ", lastSpaceAt: 10, now: 10.1), "already punctuated")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "late   ", lastSpaceAt: 10, now: 10.1), "third space")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "late.  ", lastSpaceAt: 10, now: 10.1), "punctuated")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "  ", lastSpaceAt: 10, now: 10.1), "no word")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: " ", lastSpaceAt: 10, now: 10.1), "start of field")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: nil, lastSpaceAt: 10, now: 10.1), "no context")
+        XCTAssertNil(DoubleSpacePeriod.trailingSpacesToReplace(before: "late", lastSpaceAt: 10, now: 10.1), "cursor moved")
     }
 
     // MARK: - Layers and fields

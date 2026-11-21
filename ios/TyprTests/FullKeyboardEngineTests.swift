@@ -310,6 +310,42 @@ final class FullKeyboardEngineTests: XCTestCase {
         }
     }
 
+    func testDelayedSpaceThenQuickSpaceAfterSeparatorTypesPeriodRightAfterWord() {
+        for explicit in [false, true] {
+            resetText()
+            type("teh")
+            if explicit {
+                engine.acceptOwnedFixtureSuggestion(KeyboardSuggestion(displayText: "the", replacement: "the", kind: .secondary))
+            } else {
+                tap(.space)
+            }
+            now += 2
+            tap(.space)
+            XCTAssertEqual(target.text, "the  ")
+            now += 0.2
+            tap(.space)
+            XCTAssertEqual(target.text, "the. ")
+        }
+    }
+
+    func testSlowSecondTapAfterDelayedSpaceDoesNotInsertPeriod() {
+        type("ok")
+        tap(.space)
+        now += 2
+        tap(.space)
+        now += 0.5
+        tap(.space)
+        XCTAssertEqual(target.text, "ok   ")
+    }
+
+    func testSpacesAfterNonWordDoNotInsertPeriod() {
+        resetText("ok. ")
+        tap(.space)
+        now += 0.2
+        tap(.space)
+        XCTAssertEqual(target.text, "ok.   ")
+    }
+
     func testSlowSpaceAfterSuggestionDoesNotInsertPeriod() {
         type("teh")
         engine.acceptOwnedFixtureSuggestion(KeyboardSuggestion(displayText: "the", replacement: "the", kind: .secondary))
