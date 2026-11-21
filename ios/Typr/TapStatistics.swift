@@ -82,9 +82,9 @@ nonisolated struct TapStatistics {
         for key in keys {
             guard let keyOnTarget = key.onTarget else { continue }
             let copies = layout.keys.filter { $0.character == key.letter }
-            for (index, copy) in copies.enumerated() where (copy.frame.midX < layout.width / 2) == left {
+            for copy in copies where (copy.frame.midX < layout.width / 2) == left {
                 let right = key.rightCopyShare ?? 0
-                let samples = Double(key.samples) * (copies.count == 1 ? 1 : index == 1 ? right : 1 - right)
+                let samples = Double(key.samples) * (copies.count == 1 ? 1 : left ? 1 - right : right)
                 n += samples
                 onTarget += keyOnTarget * samples
             }
