@@ -657,8 +657,11 @@ final class KeyboardLayoutTests: XCTestCase {
                 XCTAssertFalse(mirrored.splitMirrored)
             }
         }
-        XCTAssertNotEqual(KeyboardLayout(width: 951, orientation: .splitLandscape).keys,
-                          KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true).keys)
+        XCTAssertEqual(KeyboardLayout(width: 951, orientation: .splitLandscape).keys,
+                       KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true).keys)
+        XCTAssertNotEqual(KeyboardLayout(width: 951, orientation: .splitLandscape, horizontalInset: 44).keys,
+                          KeyboardLayout(width: 951, orientation: .splitLandscape, splitMirrored: true,
+                                         horizontalInset: 44).keys)
     }
 
     func testOnlyTheSplitLettersPageGainsASlashKey() {
