@@ -47,6 +47,20 @@ final class FullKeyboardEngineTests: XCTestCase {
         }
     }
 
+    func testOnlyTheTouchedCopyOfARepeatedSplitKeyIsPressed() {
+        engine.width = 951
+        engine.orientation = .splitLandscape
+        let copies = engine.layout.keys.filter { $0.kind == .character("g") }
+        XCTAssertEqual(copies.count, 2)
+        for (index, copy) in copies.enumerated() {
+            let at = CGPoint(x: copy.frame.midX, y: copy.frame.midY)
+            engine.touchBegan(id: 1, at: at)
+            XCTAssertEqual(copies.map(engine.isPressed), copies.indices.map { $0 == index }, "copy \(index)")
+            engine.touchEnded(id: 1, at: at)
+        }
+        XCTAssertEqual(target.text, "gg")
+    }
+
     func testRolloverKeepsOrder() {
         down(1, .character("t"))
         down(2, .character("h"))

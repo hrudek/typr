@@ -514,28 +514,36 @@ final class KeyboardLayoutTests: XCTestCase {
         XCTAssertEqual(layout.key(.character("l"))!.hitFrame.maxX, layout.width)
     }
 
-    func testSplitLettersFollowTheKeychronRowStaggerWithSlashRightOfM() throws {
+    func testSplitLettersFollowApplesSplitWithGAndVOnBothHalves() throws {
         for width: CGFloat in [801, 951] {
             for numberRow in [false, true] {
                 let layout = KeyboardLayout(width: width, orientation: .splitLandscape, numberRow: numberRow)
                 let name = describe(layout)
                 let pitch = layout.letterWidth + layout.metrics.gap
-                func frame(_ ch: String) throws -> CGRect { try XCTUnwrap(layout.key(.character(ch)), ch).frame }
-                for (first, second, third) in [("q", "a", "z"), ("y", "h", "n")] {
-                    XCTAssertEqual(try frame(second).minX - frame(first).minX, pitch / 4, accuracy: 0.001, name)
-                    XCTAssertEqual(try frame(third).minX - frame(first).minX, 3 * pitch / 4, accuracy: 0.001, name)
+                let rows = (0..<3).map { row in
+                    layout.keys.filter { $0.row == layout.bottomRowIndex - 3 + row }.sorted { $0.frame.minX < $1.frame.minX }
                 }
+                XCTAssertEqual(rows.map { $0.map(\.label).joined(separator: " ") }, [
+                    "q w e r t y u i o p", "a s d f g g h j k l", "shift z x c v v b n m delete",
+                ], name)
+                func minX(_ row: Int, _ label: String, _ copy: Int = 0) -> CGFloat {
+                    rows[row].filter { $0.label == label }[copy].frame.minX
+                }
+                XCTAssertEqual(minX(1, "a") - minX(0, "q"), pitch / 2, accuracy: 0.001, "a half a key in: \(name)")
+                XCTAssertEqual(minX(2, "z"), minX(1, "s"), accuracy: 0.001, "z under s: \(name)")
+                XCTAssertEqual(minX(2, "v"), minX(1, "g"), accuracy: 0.001, "left v under g: \(name)")
+                XCTAssertEqual(minX(0, "y") - minX(1, "g", 1), pitch / 2, accuracy: 0.001, "g half a key left of y: \(name)")
+                XCTAssertEqual(minX(2, "v", 1), minX(1, "g", 1), accuracy: 0.001, "right v under g: \(name)")
+                XCTAssertEqual(minX(0, "q"), layout.metrics.side, accuracy: 0.001, name)
+                XCTAssertEqual(rows[0].last!.frame.maxX, width - layout.metrics.side, accuracy: 0.001, "p at the edge: \(name)")
 
                 let shift = try XCTUnwrap(layout.key(.shift)).frame
                 let delete = try XCTUnwrap(layout.key(.delete)).frame
-                let slash = try XCTUnwrap(layout.key(.character("/")))
                 XCTAssertEqual(shift.width, layout.letterWidth * KeyboardLayout.modifierWidthRatio, accuracy: 0.001, name)
                 XCTAssertEqual(delete.width, shift.width, accuracy: 0.001, name)
-                XCTAssertEqual(try frame("z").minX - shift.maxX, layout.metrics.gap, accuracy: 0.001, name)
-                XCTAssertEqual(slash.row, layout.key(.character("m"))?.row, name)
-                XCTAssertEqual(slash.frame.width, layout.letterWidth, accuracy: 0.001, name)
-                XCTAssertEqual(try slash.frame.minX - frame("m").maxX, layout.metrics.gap, accuracy: 0.001, name)
-                XCTAssertEqual(delete.minX - slash.frame.maxX, layout.metrics.gap, accuracy: 0.001, name)
+                XCTAssertEqual(minX(2, "z") - shift.maxX, delete.minX - rows[2][rows[2].count - 2].frame.maxX,
+                               accuracy: 0.001, "shift and delete as far from the letters: \(name)")
+                XCTAssertGreaterThan(minX(2, "z") - shift.maxX, layout.metrics.gap, name)
             }
         }
     }
@@ -570,24 +578,26 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
-    func testAlignedColumnsStackTheSplitLettersWithZBesideShift() throws {
+    func testAlignedColumnsStackTheSplitLettersInAFiveByThreeGridPerHalf() throws {
         for width: CGFloat in [801, 951] {
             for numberRow in [false, true] {
                 let layout = KeyboardLayout(width: width, orientation: .splitLandscape, numberRow: numberRow, splitColumns: true)
                 let name = describe(layout)
-                func frame(_ ch: String) throws -> CGRect { try XCTUnwrap(layout.key(.character(ch)), ch).frame }
-                for column in ["qaz", "wsx", "edc", "rfv", "tgb", "yhn", "ujm", "ik/", "ol", "p"] {
-                    let minXs = try column.map { try frame(String($0)).minX }
-                    for minX in minXs { XCTAssertEqual(minX, minXs[0], accuracy: 0.001, "\(column) \(name)") }
+                let firstRow = layout.bottomRowIndex - 3
+                let grid = (0..<3).map { row in
+                    layout.keys.filter { $0.row == firstRow + row }.sorted { $0.frame.minX < $1.frame.minX }
                 }
-
-                let shift = try XCTUnwrap(layout.key(.shift)).frame
-                let delete = try XCTUnwrap(layout.key(.delete)).frame
-                XCTAssertEqual(shift.width, layout.letterWidth * KeyboardLayout.modifierWidthRatio, accuracy: 0.001, name)
-                XCTAssertEqual(delete.width, shift.width, accuracy: 0.001, name)
-                XCTAssertEqual(try frame("z").minX - shift.maxX, layout.metrics.gap, accuracy: 0.001, name)
-                XCTAssertEqual(try frame("p").maxX, layout.width - layout.metrics.side, accuracy: 0.001, name)
-                XCTAssertGreaterThanOrEqual(try delete.minX - frame("/").maxX, layout.metrics.gap, name)
+                XCTAssertEqual(grid.map { $0.map(\.label).joined(separator: " ") }, [
+                    "q w e r t y u i o p", "a s d f g g h j k l", "shift z x c v v b n m delete",
+                ], name)
+                for column in 0..<10 {
+                    for row in 1..<3 {
+                        XCTAssertEqual(grid[row][column].frame.minX, grid[0][column].frame.minX, accuracy: 0.001,
+                                       "\(grid[row][column].label) under \(grid[0][column].label): \(name)")
+                        XCTAssertEqual(grid[row][column].frame.width, layout.letterWidth, accuracy: 0.001, name)
+                    }
+                }
+                XCTAssertEqual(grid[0][9].frame.maxX, width - layout.metrics.side, accuracy: 0.001, name)
                 let keys = layout.keys.map(\.frame)
                 for (index, a) in keys.enumerated() {
                     for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
@@ -612,18 +622,64 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
-    func testOnlyTheSplitLettersPageGainsASlashKey() {
-        func slashes(_ layout: KeyboardLayout) -> Int {
-            layout.keys.filter { $0.character == "/" && $0.row != layout.bottomRowIndex }.count
+    func testSplitNumbersAndSymbolsFollowApplesSplitInStraightColumns() throws {
+        let pages: [(KeyboardLayer, [String], String)] = [
+            (.numbers, ["1 2 3 4 5 6 7 8 9 0", "- / : ; ( ) € & @ \"", ". , ? ? ! '"], "#+="),
+            (.symbols, ["[ ] { } # % ^ * + =", "_ \\ | ~ < > $ £ ¥ •", ". , ? ? ! '"], "123"),
+        ]
+        for width: CGFloat in [801, 951] {
+            for (layer, labels, switchLabel) in pages {
+                for splitColumns in [false, true] {
+                    let layout = KeyboardLayout(width: width, orientation: .splitLandscape, layer: layer,
+                                                splitColumns: splitColumns)
+                    let name = describe(layout)
+                    let pitch = layout.letterWidth + layout.metrics.gap
+                    let rows = (0..<3).map { row in
+                        layout.keys.filter { $0.row == row && $0.character != nil }.sorted { $0.frame.minX < $1.frame.minX }
+                    }
+                    XCTAssertEqual(rows.map { $0.map(\.label).joined(separator: " ") }, labels, name)
+                    for column in 0..<10 {
+                        XCTAssertEqual(rows[1][column].frame.minX, rows[0][column].frame.minX, accuracy: 0.001, name)
+                    }
+                    XCTAssertEqual(rows[0][9].frame.maxX, width - layout.metrics.side, accuracy: 0.001, name)
+
+                    let letters = KeyboardLayout(width: width, orientation: .splitLandscape)
+                    func letter(_ ch: String, _ copy: Int = 0) -> CGRect {
+                        letters.keys.filter { $0.label == ch }[copy].frame
+                    }
+                    let wide = rows[2].map(\.frame)
+                    XCTAssertEqual(wide[0].minX, letter("z").minX, accuracy: 0.001, ". starts under z: \(name)")
+                    XCTAssertEqual(wide[2].maxX, letter("g").maxX + layout.metrics.gap, accuracy: 0.001, name)
+                    XCTAssertEqual(wide[3].minX, letter("g", 1).minX - layout.metrics.gap, accuracy: 0.001, name)
+                    XCTAssertEqual(wide[5].maxX, letter("m").maxX, accuracy: 0.001, "' ends under m: \(name)")
+                    for key in wide {
+                        XCTAssertEqual(key.width, (4 * pitch - 2 * layout.metrics.gap) / 3, accuracy: 0.001, name)
+                    }
+                    XCTAssertEqual(layout.keys.first { $0.label == switchLabel }?.frame, letters.key(.shift)?.frame, name)
+                    XCTAssertEqual(layout.key(.delete)?.frame, letters.key(.delete)?.frame, name)
+                }
+            }
         }
-        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape)), 1)
-        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape, field: .url)), 1)
-        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .wideLandscape)), 0)
-        XCTAssertEqual(slashes(KeyboardLayout(width: 393)), 0)
-        XCTAssertEqual(slashes(KeyboardLayout(width: 951, orientation: .splitLandscape, layer: .symbols)), 0)
     }
 
-    func testLayoutsBesideTheSplitLettersKeepTheirFrames() {
+    func testBothCopiesOfASplitLetterTypeIt() throws {
+        for splitColumns in [false, true] {
+            let layout = KeyboardLayout(width: 951, orientation: .splitLandscape, splitColumns: splitColumns)
+            for letter in ["g", "v"] {
+                let copies = layout.keys.filter { $0.kind == .character(letter) }
+                XCTAssertEqual(copies.count, 2, letter)
+                for copy in copies {
+                    let near = CGPoint(x: copy.frame.midX + 3, y: copy.frame.midY)
+                    XCTAssertEqual(layout.hitTest(near), copy, letter)
+                    XCTAssertEqual(layout.key(.character(letter), nearest: near), copy, letter)
+                    XCTAssertTrue(layout.reaches(near, letter: letter), letter)
+                }
+            }
+            XCTAssertFalse(layout.keys.contains { $0.character == "/" }, "no slash key")
+        }
+    }
+
+    func testLayoutsBesideTheSplitKeyboardKeepTheirFrames() {
         var hash: UInt64 = 0xcbf2_9ce4_8422_2325
         func mix<T: FixedWidthInteger>(_ value: T) {
             withUnsafeBytes(of: value.littleEndian) { bytes in
@@ -633,11 +689,11 @@ final class KeyboardLayoutTests: XCTestCase {
         var count = 0
         let widths: [(KeyboardOrientation, [CGFloat])] = [
             (.portrait, [320, 393, 440]), (.landscape, [852, 932]), (.widePortrait, [669]),
-            (.wideLandscape, [801, 951]), (.splitLandscape, [801, 951]),
+            (.wideLandscape, [801, 951]),
         ]
         for (orientation, orientationWidths) in widths {
             for width in orientationWidths {
-                for layer in layers where orientation != .splitLandscape || layer != .letters {
+                for layer in layers {
                     for field in fields {
                         for numberRow in [false, true] {
                             for showsStrip in [false, true] {
@@ -667,8 +723,8 @@ final class KeyboardLayoutTests: XCTestCase {
                 }
             }
         }
-        XCTAssertEqual(count, 93376)
-        XCTAssertEqual(hash, 17_883_152_473_971_929_109)
+        XCTAssertEqual(count, 80384)
+        XCTAssertEqual(hash, 2_914_680_564_323_653_661)
     }
 
     func testLandscapeKeepsInsetsAndHeight() {

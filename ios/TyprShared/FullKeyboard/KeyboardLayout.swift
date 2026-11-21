@@ -241,8 +241,8 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
     /// Split letters are never narrower than the outer display's (39.9 pt across 466 pt).
     static let minSplitLetterWidth: CGFloat = 40
 
-    /// The inner display sideways, split: `wideLandscape`'s rows at the phone's key gap, the keys as wide as the left
-    /// half's widest row (shift to b, 6.5 key pitches) allows within `splitHalfShare`, the rest the gap between halves.
+    /// The inner display sideways, split: `wideLandscape`'s rows at the phone's key gap, the keys as wide as 6.5 key
+    /// pitches per half allow within `splitHalfShare`, the rest the gap between halves.
     private static func splitLandscape(innerWidth: CGFloat?) -> KeyboardMetrics {
         var metrics = KeyboardMetrics(
             side: 9, gap: 6, rowGap: 13, keyHeight: 39,
@@ -391,7 +391,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
                 $0 != .period || Self.showsPeriodKey(bottomRow, layer: layer, field: field)
             },
             inset: self.horizontalInset,
-            splitStagger: self.splitColumns ? [0, 0, 0] : Self.splitLetterStagger
+            splitColumns: self.splitColumns
         )
     }
 
@@ -455,13 +455,20 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         keys.first { $0.kind == kind }
     }
 
+    /// The copy of `kind` closest to `point`: the split letters have g and v on both halves.
+    func key(_ kind: KeyKind, nearest point: CGPoint) -> KeyboardKey? {
+        keys.filter { $0.kind == kind }.min {
+            hypot($0.frame.midX - point.x, $0.frame.midY - point.y) < hypot($1.frame.midX - point.x, $1.frame.midY - point.y)
+        }
+    }
+
     func hitTest(_ point: CGPoint) -> KeyboardKey? {
         keys.first { $0.hitFrame.contains(point) }
     }
 
     /// iikb KeyGrid.reaches (73c2ed9016b802e5bf017a2d595d037d1e748ccf, MIT © 2026 Bassim Shahidy).
     func reaches(_ point: CGPoint, letter: String) -> Bool {
-        guard let key = key(.character(letter)) else { return false }
+        guard let key = key(.character(letter), nearest: point) else { return false }
         let cell = key.frame.insetBy(dx: -metrics.gap / 2, dy: -metrics.rowGap / 2)
         let dx = max(cell.minX - point.x, 0, point.x - cell.maxX)
         let dy = max(cell.minY - point.y, 0, point.y - cell.maxY)
@@ -501,13 +508,25 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         (innerWidth - metrics.splitGap - 2 * metrics.side - 9 * metrics.gap) / 10
     }
 
-    /// How many of a row's keys the split keyboard's left half takes, as in touch typing: q–t, a–g, z–b, 1–5.
-    static func leftHalfCount(_ count: Int) -> Int {
-        count >= 7 ? 5 : (count + 1) / 2
+    /// Apple's split keyboard, left half then right half: the rows and where each starts, in key pitches from the half's
+    /// first column. The letters repeat g and v, staggered so z sits under s and the right v under g; aligned columns put
+    /// shift under a and delete under l. The other pages end in `splitPunctuation`.
+    static func splitHalves(_ layer: KeyboardLayer, aligned: Bool) -> [(rows: [[String]], offsets: [CGFloat])] {
+        func rows(_ rows: String...) -> [[String]] { rows.map { $0.map(String.init) } }
+        switch layer {
+        case .letters:
+            return [(rows("qwert", "asdfg", "zxcv"), aligned ? [0, 0, 1] : [0, 0.5, 1.5]),
+                    (rows("yuiop", "ghjkl", "vbnm"), aligned ? [0, 0, 0] : [0, -0.5, -0.5])]
+        case .numbers:
+            return [(rows("12345", "-/:;("), [0, 0]), (rows("67890", ")€&@\""), [0, 0])]
+        case .symbols:
+            return [(rows("[]{}#", "_\\|~<"), [0, 0]), (rows("%^*+=", ">$£¥•"), [0, 0])]
+        }
     }
 
-    /// The split letters' row offsets within each half, in key pitches, after a Keychron Q11 split: q/a/z, y/h/n.
-    static let splitLetterStagger: [CGFloat] = [0, 0.25, 0.75]
+    /// The split numbers and symbols pages' last row: three wide keys per half across four key pitches, from z's column
+    /// to a gap past g and from a gap before the right g to m's end; "?" on both halves.
+    static let splitPunctuation = [[".", ",", "?"], ["?", "!", "'"]]
 
     static let numberRowCharacters = "1234567890".map(String.init)
 
@@ -539,7 +558,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         globe: GlobeKey,
         aroundSpace: [BottomKey],
         inset: CGFloat,
-        splitStagger: [CGFloat]
+        splitColumns: Bool
     ) -> [KeyboardKey] {
         let lw = letterWidth(innerWidth: width - 2 * inset, metrics: m)
         let boardWidth = width - 2 * inset - m.splitGap
@@ -572,7 +591,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
         func addCharacters(_ chars: [String], row: Int, startX: CGFloat, keyWidth: CGFloat) {
             var x = startX
             for (index, ch) in chars.enumerated() {
-                let shift = index < leftHalfCount(chars.count) ? 0 : m.splitGap
+                let shift = index < 5 ? 0 : m.splitGap
                 add(.character(ch), row: row, x: x + shift, w: keyWidth, label: ch)
                 x += keyWidth + m.gap
             }
@@ -587,21 +606,23 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
             addCharacters(numberRowCharacters, row: 0, startX: centredStart(count: 10, keyWidth: lw), keyWidth: lw)
         }
 
-        if layer == .letters && m.splitGap > 0 {
+        let shiftRowModW = splitColumns && layer == .letters ? lw : modW
+        if m.splitGap > 0 {
             let pitch = lw + m.gap
-            let rightBottom = rows[2][leftHalfCount(rows[2].count)...] + ["/"]
-            let leftStart = left + modW + m.gap - splitStagger[2] * pitch
-            let rightTop = rows[0].count - leftHalfCount(rows[0].count)
-            let rightStart = min(
-                right - modW - (splitStagger[2] + CGFloat(rightBottom.count)) * pitch,
-                right + m.gap - (splitStagger[0] + CGFloat(rightTop)) * pitch
-            )
-            for (row, chars) in rows.enumerated() {
-                let half = leftHalfCount(chars.count)
-                for (start, keys) in [(leftStart, chars[..<half]), (rightStart, row == 2 ? rightBottom : chars[half...])] {
-                    for (index, ch) in keys.enumerated() {
-                        let x = start + (splitStagger[row] + CGFloat(index)) * pitch
+            let starts = [left, right + m.gap - 5 * pitch]
+            for (half, start) in zip(splitHalves(layer, aligned: splitColumns), starts) {
+                for (row, chars) in half.rows.enumerated() {
+                    for (index, ch) in chars.enumerated() {
+                        let x = start + (half.offsets[row] + CGFloat(index)) * pitch
                         add(.character(ch), row: firstRow + row, x: x, w: lw, label: ch)
+                    }
+                }
+            }
+            if layer != .letters {
+                let w = (4 * pitch - 2 * m.gap) / 3
+                for (chars, start) in zip(splitPunctuation, [left + 1.5 * pitch, starts[1] - 0.5 * pitch - m.gap]) {
+                    for (index, ch) in chars.enumerated() {
+                        add(.character(ch), row: shiftRow, x: start + CGFloat(index) * (w + m.gap), w: w, label: ch)
                     }
                 }
             }
@@ -624,13 +645,13 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
 
         switch layer {
         case .letters:
-            add(.shift, row: shiftRow, x: left, w: modW, label: "shift")
+            add(.shift, row: shiftRow, x: left, w: shiftRowModW, label: "shift")
         case .numbers:
             add(.layerSwitch(.symbols), row: shiftRow, x: left, w: modW, label: "#+=")
         case .symbols:
             add(.layerSwitch(.numbers), row: shiftRow, x: left, w: modW, label: "123")
         }
-        add(.delete, row: shiftRow, x: right - modW, w: modW, label: "delete")
+        add(.delete, row: shiftRow, x: right - shiftRowModW, w: shiftRowModW, label: "delete")
 
         let isCompactBottomRow = globe != .hidden || field != .text || aroundSpace.contains(.period)
         let switchW = isCompactBottomRow ? modW : lw * bottomSwitchWidthRatio

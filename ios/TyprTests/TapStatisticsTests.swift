@@ -99,6 +99,24 @@ final class TapStatisticsTests: XCTestCase {
         XCTAssertNil(taps.heat)
         XCTAssertFalse(TapStatistics(signature: aligned, model: summary(aligned), heat: nil).keys.isEmpty)
     }
+    @MainActor
+    func testRepeatedSplitLettersCountOnTheHalfOfTheCopyHit() throws {
+        let signature = KeyboardLayoutSignature(KeyboardLayout(width: 951, orientation: .splitLandscape))
+        let board = TapStatistics.board(signature)
+        let copies = board.keys.filter { $0.kind == .character("g") }
+        XCTAssertEqual(copies.count, 2)
+        for (index, copy) in copies.enumerated() {
+            let model = PersonalTypingModel()
+            let tap = CGPoint(x: copy.frame.midX + 2, y: copy.frame.midY)
+            model.learn(Array(repeating: TouchLabel(point: tap, letter: "g"), count: 24), layout: board, source: .keep)
+            let stored = try JSONDecoder().decode(PersonalTypingModel.State.self, from: JSONEncoder().encode(model.state))
+            let taps = TapStatistics(signature: signature, model: PersonalTypingModel(state: stored).summary.layouts.first,
+                                     heat: nil)
+            let onTarget = try XCTUnwrap(taps.onTarget)
+            XCTAssertEqual(taps.half(left: index == 0), onTarget, "copy \(index)")
+            XCTAssertNil(taps.half(left: index == 1), "copy \(index)")
+        }
+    }
     func testHeatPopulationNeverBecomesAccuracy() {
         let signature = KeyboardLayoutSignature(KeyboardLayout(width: 392))
         let heat = UsageHeat(layout: signature, geometryVersion: 1, cells: Array(repeating: 2, count: 64 * 24), updatedAt: Date())

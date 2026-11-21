@@ -261,7 +261,7 @@ final class FullKeyboardEngine {
         Set(touches.values.filter { !$0.isSwipe }.map(\.key.kind))
     }
 
-    /// Like `pressedKinds`, for one key: the split keyboard has a space bar in each half.
+    /// Like `pressedKinds`, for one key: the split keyboard repeats some keys (space, g, v, ?) on both halves.
     func isPressed(_ key: KeyboardKey) -> Bool {
         touches.values.contains { !$0.isSwipe && $0.key == key }
     }

@@ -112,6 +112,27 @@ final class TouchPosteriorTests: XCTestCase {
         XCTAssertEqual(cold.attributedKey(at: tap, geometric: f, layout: layout, prefix: ""), f)
     }
 
+    func testBothCopiesOfASplitLetterLearnAndScoreAgainstThemselves() throws {
+        let split = KeyboardLayout(width: 951, orientation: .splitLandscape)
+        let uniform = [Double](repeating: 1.0 / 26, count: KeyboardKeyMap.keyLimit)
+        let assignment = KeyboardKeyMap(layout: split, prefix: "", calibration: SpatialTouchCalibration(keys: [:]),
+                                        priors: uniform)
+        XCTAssertEqual(Set(assignment.entries.compactMap(\.key.character)).count, 26, "every letter competes")
+        for copy in split.keys.filter({ $0.kind == .character("g") }) {
+            let tap = CGPoint(x: copy.frame.midX + 0.2 * (copy.frame.width + split.metrics.gap), y: copy.frame.midY)
+            let model = PersonalTypingModel()
+            XCTAssertEqual(model.learn([TouchLabel(point: tap, letter: "g")], layout: split, source: .keep).accepted, 1)
+            let stats = try XCTUnwrap(model.state.layouts[KeyboardLayoutSignature(split).id]?.keys["g"])
+            XCTAssertEqual(stats.meanX, 0.2, accuracy: 1e-9)
+
+            let typed = KeyboardTouchWord(layout: split, samples: [.init(text: "g", point: tap, key: copy)])
+            let emissions = try XCTUnwrap(KeyboardLetterMap.emissions(for: typed, calibration: nil))
+            XCTAssertEqual(emissions.likelihoods[0][index("g")], SpatialTouchCalibration.prior.logDensity(x: 0.2, y: 0),
+                           accuracy: 1e-12)
+            XCTAssertEqual(assignment.attributedKey(at: tap, geometric: copy, layout: split, prefix: ""), copy)
+        }
+    }
+
     func testDensitiesDoNotDependOnKeyboardSize() throws {
         let wide = KeyboardLayout(width: 786)
         for n in [1, 3, 10] {

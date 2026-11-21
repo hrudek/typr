@@ -30,7 +30,7 @@ struct TapStatisticsBoard: View {
                             context.draw(Text(TapStatistics.percent(stats?.onTarget)).font(.system(size: 12)).foregroundColor(.white),
                                          at: CGPoint(x: rect.midX, y: rect.midY + 9))
                         }
-                        if mode == .aim, let stats {
+                        if mode == .aim, let stats, key == taps.layout.key(key.kind) {
                             drawAim(&context, key: key, stats: stats)
                         }
                     }
@@ -50,8 +50,9 @@ struct TapStatisticsBoard: View {
                     }
                 }
                 .accessibilityHidden(true)
-                ForEach(taps.layout.keys.compactMap(\.character), id: \.self) { letter in
-                    if let key = taps.layout.key(.character(letter)) {
+                ForEach(taps.layout.keys.indices, id: \.self) { index in
+                    let key = taps.layout.keys[index]
+                    if let letter = key.character {
                         Button { selected = letter } label: { Color.clear.contentShape(Rectangle()) }
                             .frame(width: key.hitFrame.width * scale, height: key.hitFrame.height * scale)
                             .offset(x: key.hitFrame.minX * scale, y: key.hitFrame.minY * scale)

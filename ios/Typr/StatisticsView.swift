@@ -63,7 +63,7 @@ struct StatisticsView: View {
                             }
                             Picker("Key details", selection: $selected) {
                                 Text("Choose a key").tag(String?.none)
-                                ForEach(taps.layout.keys.compactMap(\.character), id: \.self) { letter in
+                                ForEach(taps.letters, id: \.self) { letter in
                                     Text(letter.uppercased()).tag(Optional(letter))
                                 }
                             }

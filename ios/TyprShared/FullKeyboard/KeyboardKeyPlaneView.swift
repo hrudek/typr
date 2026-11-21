@@ -80,7 +80,7 @@ final class KeyboardKeyPlaneView: UIView {
             case .character:
                 // The pressed key is drawn by its balloon in portrait.
                 if key.kind == preview { continue }
-                let fill = pressed.contains(key.kind) ? palette.keyPressedFill : palette.keyFill
+                let fill = engine.isPressed(key) ? palette.keyPressedFill : palette.keyFill
                 context.fillKeycap(key.frame, palette: palette, fill: fill, radius: radius)
                 guard !hideGlyphs else { continue }
                 let label = engine.displayLabel(for: key)

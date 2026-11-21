@@ -138,6 +138,8 @@ final class PersonalTypingModel {
         var space: TouchStats?
         // Optional for stores saved before aim memories; a missing key's aim is seeded from its stats.
         var aims: [String: KeyAim]?
+        /// For letters on both split halves: the weighted share of their taps on the right copy. Missing in older stores.
+        var rightCopyShares: [String: Double]?
 
         var pooled: SpatialTouchCalibration.Spread {
             .init(pooling: keys.keys.sorted().compactMap { keys[$0].flatMap { $0.isValid ? $0.moments : nil } })
@@ -202,7 +204,8 @@ final class PersonalTypingModel {
                       !layout.keys.isEmpty || layout.space != nil, layout.keys.count <= 26,
                       layout.global == nil || layout.global?.isValid == true,
                       layout.space == nil || layout.space?.isValid == true,
-                      (layout.aims ?? [:]).allSatisfy({ layout.keys[$0.key] != nil && $0.value.isValid })
+                      (layout.aims ?? [:]).allSatisfy({ layout.keys[$0.key] != nil && $0.value.isValid }),
+                      (layout.rightCopyShares ?? [:]).allSatisfy({ layout.keys[$0.key] != nil && (0...1).contains($0.value) })
                 else { return nil }
                 for (key, stats) in layout.keys {
                     guard key.count == 1, key.utf8.count == 1,
@@ -243,6 +246,7 @@ final class PersonalTypingModel {
                     key.utf8.count == 1 && key.utf8.allSatisfy { (97...122).contains($0) } && stats.isValid
                 }
                 layout.aims = layout.aims?.filter { layout.keys[$0.key] != nil && $0.value.isValid }
+                layout.rightCopyShares = layout.rightCopyShares?.filter { layout.keys[$0.key] != nil && (0...1).contains($0.value) }
                 if layout.global?.isValid == false { layout.global = nil }
                 if layout.space?.isValid == false { layout.space = nil }
                 if layout.keys.isEmpty && layout.space == nil { layouts.removeValue(forKey: id) }
@@ -330,6 +334,7 @@ final class PersonalTypingModel {
         let sigmaY: Double
         var covarianceXY: Double = 0
         let degrees: Double
+        var rightCopyShare: Double?
     }
 
     nonisolated struct LayoutSummary: Equatable, Sendable {
@@ -377,7 +382,7 @@ final class PersonalTypingModel {
             else if !label.point.x.isFinite || !label.point.y.isFinite { rejection = .nonFinite }
             else if !label.letter.isLetter || String(label.letter) != String(label.letter).lowercased() {
                 rejection = .unknownKey
-            } else if let key = layout.key(.character(String(label.letter))) {
+            } else if let key = layout.key(.character(String(label.letter)), nearest: label.point) {
                 let pitchX = key.frame.width + layout.metrics.gap
                 let pitchY = key.frame.height + layout.metrics.rowGap
                 let x = Double((label.point.x - key.frame.midX) / pitchX)
@@ -399,6 +404,14 @@ final class PersonalTypingModel {
                     aims[letter] = aim
                     stats.aims = aims
                     stats.keys[letter, default: TouchStats()].update(x: x, y: y)
+                    let copies = layout.keys.filter { $0.kind == key.kind }
+                    if copies.count == 2, let n = stats.keys[letter]?.n {
+                        var shares = stats.rightCopyShares ?? [:]
+                        let share = shares[letter] ?? 0
+                        let weight = max(1 / Double(n), 1 / 64.0)
+                        shares[letter] = max(0, min(1, share + weight * ((key == copies[1] ? 1 : 0) - share)))
+                        stats.rightCopyShares = shares
+                    }
                     stats.global = stats.global ?? TouchStats()
                     stats.global?.update(x: x, y: y)
                     stats.lastUpdated = now()
@@ -564,7 +577,8 @@ final class PersonalTypingModel {
                     let variance = key.degrees / (key.degrees - 2)
                     return KeySummary(letter: letter, n: stats.n, offsetX: key.offsetX, offsetY: key.offsetY,
                                       sigmaX: key.sigmaX * sqrt(variance), sigmaY: key.sigmaY * sqrt(variance),
-                                      covarianceXY: key.covarianceXY * variance, degrees: key.degrees)
+                                      covarianceXY: key.covarianceXY * variance, degrees: key.degrees,
+                                      rightCopyShare: layout.rightCopyShares?[letter])
                 })
         }
         return Summary(layouts: layouts, keptWords: state.kept.count, countedWords: state.counts.count,
