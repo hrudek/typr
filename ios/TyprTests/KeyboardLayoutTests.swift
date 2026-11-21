@@ -598,6 +598,10 @@ final class KeyboardLayoutTests: XCTestCase {
                     }
                 }
                 XCTAssertEqual(grid[0][9].frame.maxX, width - layout.metrics.side, accuracy: 0.001, name)
+                let keys = layout.keys.map(\.frame)
+                for (index, a) in keys.enumerated() {
+                    for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
+                }
             }
         }
     }
