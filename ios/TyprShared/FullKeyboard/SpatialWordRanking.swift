@@ -29,6 +29,7 @@ nonisolated final class SpatialWordRanking {
     private static let priorWeight = 1.0
     private static let editPenalty = SpatialWordDecoder.editLogProbability
     private static let transliterationPenalty = log(0.5)
+    private static let swapEnglishFrequencyLimit = log(4.0)
     private static let boundSlack = 1e-10
     private static let corpusMemoLimit = 4_096
     private let lexicons: [Language: SpatialWordLexicon]
@@ -184,10 +185,11 @@ nonisolated final class SpatialWordRanking {
     /// prior, personal bonus and the sentence-context lift of `context`; the literal (also an OOV
     /// literal, at the floor prior) is scored the same way. `variants` are other spellings of the
     /// literal's own letters (apostrophes, umlaut digraphs) or its y/z swaps: same taps, one `log .5`
-    /// per transliteration step or swap, priced by the word lists or else the context packs (a swap
-    /// only by the German word list). An extra tap is, with even odds, a second touch on the next
-    /// letter's key (the last letter's after the word) or a stray uniform over the keyboard (iikb's
-    /// stray density), in key-pitch units.
+    /// per transliteration step or swap, priced by the word lists or else the context packs. A swap
+    /// counts only for a German word: in the German list and at least a quarter as frequent there as
+    /// in the English one. An extra tap is, with even odds, a second touch on the next letter's key
+    /// (the last letter's after the word) or a stray uniform over the keyboard (iikb's stray
+    /// density), in key-pitch units.
     func decodeDetailed(_ word: KeyboardTouchWord, languages: Set<Language>,
                         budget: Int = SpatialWordDecoder.searchBudget,
                         calibration: SpatialTouchCalibration? = nil,
@@ -282,7 +284,7 @@ nonisolated final class SpatialWordRanking {
             let lexical = sources.filter { swaps == 0 || $0.0 == .german }
                 .compactMap { language, source in source.logPrior(for: key).map { (language, $0) } }
                 .max { $0.1 < $1.1 }
-            if swaps > 0 && lexical == nil { continue }
+            if swaps > 0, !isGermanWord(key, prior: lexical?.1) { continue }
             let prior = lexical?.1 ?? context?.logUnigram(variant) ?? floorPrior
             retain(Candidate(word: variant, language: lexical?.0,
                              score: literalSpatial + Double(spelling.steps + swaps) * Self.transliterationPenalty
@@ -424,8 +426,12 @@ nonisolated final class SpatialWordRanking {
         return area.isFinite && area > 0 ? -log(area) : nil
     }
 
-    /// Positions where `letters` has y and `literal` z or the reverse (a QWERTZ habit on QWERTY);
-    /// `nil` when they differ otherwise.
+    private func isGermanWord(_ word: String, prior german: Double?) -> Bool {
+        guard let german else { return false }
+        let english = lexicon(.english)?.logPrior(for: word) ?? -.infinity
+        return german >= english - Self.swapEnglishFrequencyLimit
+    }
+
     private static func germanKeySwaps(_ letters: String, _ literal: String) -> Int? {
         guard letters.count == literal.count else { return nil }
         var swaps = 0

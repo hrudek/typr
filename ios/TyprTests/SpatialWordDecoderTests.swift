@@ -650,6 +650,8 @@ final class SpatialWordDecoderTests: XCTestCase {
         XCTAssertEqual(decode("ywei", [.german, .english])?.automaticCandidate?.word, "zwei")
         XCTAssertEqual(decode("jetyt", [.german])?.automaticCandidate?.word, "jetzt")
         XCTAssertFalse(try XCTUnwrap(decode("okaz", [.english])).candidates.contains(where: \.isVariant))
+        XCTAssertFalse(try XCTUnwrap(decode("zes", [.german, .english])).candidates.contains(where: \.isVariant),
+                       "yes is in the German list but far more frequent in English")
         XCTAssertNil(decode("zu", [.german, .english])?.automaticCandidate, "a valid word stays")
     }
 
