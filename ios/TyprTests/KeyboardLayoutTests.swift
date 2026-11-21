@@ -662,6 +662,40 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
+    func testSplitLeftSpaceEndsFlushWithTheLeftKeysAbove() throws {
+        let orders: [[BottomKey]] = [[.space, .period, .typr], [.typr, .space, .period], [.period, .space, .typr]]
+        for width: CGFloat in [801, 951, 1100] {
+            for layer in [KeyboardLayer.letters, .numbers, .symbols] {
+                for splitColumns in [false, true] {
+                    for numberRow in [false, true] {
+                        for field in [KeyboardFieldKind.text, .url, .email] {
+                            for globe in [GlobeKey.switches, .spacer, .hidden] {
+                                for order in orders {
+                                    let layout = KeyboardLayout(
+                                        width: width, orientation: .splitLandscape, layer: layer, field: field,
+                                        showsGlobe: true, globeKey: globe, bottomRow: BottomRow(order: order),
+                                        numberRow: numberRow, splitColumns: splitColumns
+                                    )
+                                    let name = describe(layout)
+                                    let row = layout.bottomRowIndex
+                                    let above = layout.keys.filter { $0.row < row && $0.frame.maxX < width / 2 }
+                                    let spaces = layout.keys.filter { $0.kind == .space }.sorted { $0.frame.minX < $1.frame.minX }
+                                    XCTAssertEqual(spaces.count, 2, name)
+                                    XCTAssertEqual(spaces[0].frame.maxX, above.map(\.frame.maxX).max()!, accuracy: 0.001, name)
+                                    let bottom = layout.keys.filter { $0.row == row }.sorted { $0.frame.minX < $1.frame.minX }
+                                    for (a, b) in zip(bottom, bottom.dropFirst()) {
+                                        XCTAssertLessThanOrEqual(a.frame.maxX, b.frame.minX, name)
+                                        XCTAssertLessThanOrEqual(a.hitFrame.maxX, b.hitFrame.minX + 0.001, name)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     func testBothCopiesOfASplitLetterTypeIt() throws {
         for splitColumns in [false, true] {
             let layout = KeyboardLayout(width: 951, orientation: .splitLandscape, splitColumns: splitColumns)
