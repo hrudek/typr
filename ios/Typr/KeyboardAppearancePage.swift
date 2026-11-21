@@ -307,6 +307,7 @@ struct KeyboardAppearancePreview: UIViewRepresentable {
                     "period \(bottomRow.periodKey ? "on" : "off")",
                     "number row \(numberRow ? "on" : "off")",
                     orientation == .splitLandscape ? "split" : nil,
+                    orientation == .splitLandscape && splitColumns ? "aligned columns" : nil,
                     "suggestions \(showsSuggestionBar ? "shown" : "hidden")"].compactMap { $0 }.joined(separator: ", ")
         }
     }
