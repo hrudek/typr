@@ -16,6 +16,7 @@ struct FullKeyboardSettings {
         static let periodKey = "settings.keyboardPeriodKey"
         static let numberRow = "settings.keyboardNumberRow"
         static let splitKeyboard = "settings.keyboardSplit"
+        static let splitColumns = "settings.keyboardSplitColumns"
         static let design = "settings.keyboardDesign"
     }
 
@@ -68,6 +69,12 @@ struct FullKeyboardSettings {
     var splitKeyboard: Bool {
         get { defaults?.object(forKey: Key.splitKeyboard) as? Bool ?? false }
         nonmutating set { defaults?.set(newValue, forKey: Key.splitKeyboard) }
+    }
+
+    /// The split keyboard's letters in straight columns instead of staggered rows. Off by default.
+    var splitColumns: Bool {
+        get { defaults?.object(forKey: Key.splitColumns) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.splitColumns) }
     }
 
     var design: KeyboardDesign {

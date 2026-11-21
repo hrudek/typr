@@ -195,6 +195,7 @@ final class FullKeyboardEngine {
     var globeKey = GlobeKey.switches { didSet { if globeKey != oldValue { rebuildLayout() } } }
     var bottomRow = BottomRow() { didSet { if bottomRow != oldValue { rebuildLayout() } } }
     var numberRow = false { didSet { if numberRow != oldValue { rebuildLayout() } } }
+    var splitColumns = false { didSet { if splitColumns != oldValue { rebuildLayout() } } }
     var horizontalInset: CGFloat = 0 { didSet { if horizontalInset != oldValue { rebuildLayout() } } }
     /// Typr: without the suggestion bar the keys move up and no suggestions are computed.
     var showsStrip = true {
@@ -1386,6 +1387,7 @@ final class FullKeyboardEngine {
             globeKey: globeKey,
             bottomRow: bottomRow,
             numberRow: numberRow,
+            splitColumns: splitColumns,
             horizontalInset: horizontalInset,
             showsStrip: showsStrip
         )

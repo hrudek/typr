@@ -540,6 +540,48 @@ final class KeyboardLayoutTests: XCTestCase {
         }
     }
 
+    func testAlignedColumnsStackTheSplitLettersWithZBesideShift() throws {
+        for width: CGFloat in [801, 951] {
+            for numberRow in [false, true] {
+                let layout = KeyboardLayout(width: width, orientation: .splitLandscape, numberRow: numberRow, splitColumns: true)
+                let name = describe(layout)
+                func frame(_ ch: String) throws -> CGRect { try XCTUnwrap(layout.key(.character(ch)), ch).frame }
+                for column in ["qaz", "wsx", "edc", "rfv", "tgb", "yhn", "ujm", "ik/", "ol", "p"] {
+                    let minXs = try column.map { try frame(String($0)).minX }
+                    for minX in minXs { XCTAssertEqual(minX, minXs[0], accuracy: 0.001, "\(column) \(name)") }
+                }
+
+                let shift = try XCTUnwrap(layout.key(.shift)).frame
+                let delete = try XCTUnwrap(layout.key(.delete)).frame
+                XCTAssertEqual(shift.width, layout.letterWidth * KeyboardLayout.modifierWidthRatio, accuracy: 0.001, name)
+                XCTAssertEqual(delete.width, shift.width, accuracy: 0.001, name)
+                XCTAssertEqual(try frame("z").minX - shift.maxX, layout.metrics.gap, accuracy: 0.001, name)
+                XCTAssertEqual(try frame("p").maxX, layout.width - layout.metrics.side, accuracy: 0.001, name)
+                XCTAssertGreaterThanOrEqual(try delete.minX - frame("/").maxX, layout.metrics.gap, name)
+                let keys = layout.keys.map(\.frame)
+                for (index, a) in keys.enumerated() {
+                    for b in keys[(index + 1)...] { XCTAssertFalse(a.insetBy(dx: 0.001, dy: 0.001).intersects(b), name) }
+                }
+            }
+        }
+    }
+
+    func testAlignedColumnsChangeOnlyTheSplitLettersPage() {
+        for (orientation, width) in [(KeyboardOrientation.portrait, 393), (.landscape, 932), (.widePortrait, 669),
+                                     (.wideLandscape, 951), (.splitLandscape, 951)] as [(KeyboardOrientation, CGFloat)] {
+            for layer in layers {
+                for numberRow in [false, true] {
+                    let staggered = KeyboardLayout(width: width, orientation: orientation, layer: layer, numberRow: numberRow)
+                    let aligned = KeyboardLayout(width: width, orientation: orientation, layer: layer, numberRow: numberRow,
+                                                 splitColumns: true)
+                    let changes = orientation == .splitLandscape && layer == .letters
+                    XCTAssertEqual(aligned.keys == staggered.keys, !changes, describe(aligned))
+                    XCTAssertEqual(aligned.splitColumns, orientation == .splitLandscape, describe(aligned))
+                }
+            }
+        }
+    }
+
     func testOnlyTheSplitLettersPageGainsASlashKey() {
         func slashes(_ layout: KeyboardLayout) -> Int {
             layout.keys.filter { $0.character == "/" && $0.row != layout.bottomRowIndex }.count
@@ -826,6 +868,7 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertTrue(settings.swipeTyping)
         XCTAssertFalse(settings.numberRow)
         XCTAssertFalse(settings.splitKeyboard)
+        XCTAssertFalse(settings.splitColumns)
         XCTAssertEqual(settings.design, .standard)
         XCTAssertEqual(settings.bottomRow, BottomRow(order: [.space, .period, .typr], periodKey: false))
 
@@ -833,6 +876,7 @@ final class FullKeyboardSettingsTests: XCTestCase {
         settings.swipeTyping = false
         settings.numberRow = true
         settings.splitKeyboard = true
+        settings.splitColumns = true
         settings.design = .mechanical
         let arranged = BottomRow(order: [.typr, .space, .period], periodKey: true)
         settings.bottomRow = arranged
@@ -840,12 +884,15 @@ final class FullKeyboardSettingsTests: XCTestCase {
         XCTAssertFalse(fresh().swipeTyping)
         XCTAssertTrue(fresh().numberRow)
         XCTAssertTrue(fresh().splitKeyboard)
+        XCTAssertTrue(fresh().splitColumns)
         XCTAssertEqual(fresh().design, .mechanical)
         XCTAssertEqual(fresh().bottomRow, arranged)
         settings.numberRow = false
         settings.splitKeyboard = false
+        settings.splitColumns = false
         XCTAssertFalse(fresh().numberRow)
         XCTAssertFalse(fresh().splitKeyboard)
+        XCTAssertFalse(fresh().splitColumns)
 
         defaults.set("neon", forKey: "settings.keyboardDesign")
         defaults.set(["typr", "emoji"], forKey: "settings.keyboardBottomRowOrder")

@@ -249,6 +249,7 @@ final class Replayer {
         engine.globeKey = layout.globeKey
         engine.bottomRow = layout.bottomRow
         engine.numberRow = layout.numberRow
+        engine.splitColumns = layout.splitColumns
         engine.horizontalInset = layout.horizontalInset
         engine.showsStrip = layout.showsStrip
         engine.configureForField()
