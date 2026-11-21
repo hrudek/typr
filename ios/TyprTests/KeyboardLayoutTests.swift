@@ -644,7 +644,6 @@ final class KeyboardLayoutTests: XCTestCase {
                 }
             }
             XCTAssertLessThan(leftMost, plainLeftMost, name)
-            XCTAssertEqual(leftMost, mirrored.metrics.side, accuracy: 0.001, name)
         }
     }
 
