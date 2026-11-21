@@ -1442,12 +1442,8 @@ final class AutocorrectEngine {
         return variants
     }
 
-    private func germanKeySwaps(of token: String) -> [String] {
-        german == nil ? [] : GermanAutocorrect.keySwaps(of: token.lowercased())
-    }
-
     private func decoderVariants(of token: String) -> [String] {
-        orthographicVariants(of: token) + germanKeySwaps(of: token)
+        orthographicVariants(of: token) + (german == nil ? [] : GermanAutocorrect.keySwaps(of: token.lowercased()))
     }
 
     private func spellingFallback(_ token: String, variantsOnly: Bool = false) -> String? {
@@ -1458,7 +1454,6 @@ final class AutocorrectEngine {
             costs[candidate] = min(costs[candidate] ?? .infinity, cost)
         }
         for spelling in orthographicVariants(of: token).compactMap(validSpelling) { offer(spelling, 0) }
-        for spelling in germanKeySwaps(of: token).compactMap(germanSpelling) { offer(spelling, 0.4) }
         func letters(_ guess: String) -> String? {
             let letters = guess.replacingOccurrences(of: "'", with: "").lowercased()
             return letters == lower ? nil : letters
@@ -1478,10 +1473,6 @@ final class AutocorrectEngine {
 
     private func validSpelling(_ variant: String) -> String? {
         if variant.contains("'") || (englishEnabled && checker.isWordValid(variant)) { return variant }
-        return germanSpelling(variant)
-    }
-
-    private func germanSpelling(_ variant: String) -> String? {
         guard let german else { return nil }
         let title = variant.prefix(1).uppercased() + variant.dropFirst()
         return german.isValid(variant) ? variant : german.isValid(title) ? title : nil
