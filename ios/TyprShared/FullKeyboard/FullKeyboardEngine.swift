@@ -1048,12 +1048,11 @@ final class FullKeyboardEngine {
         let hasCurrentWord = AutocorrectEngine.currentToken(in: target.documentContextBeforeInput) != nil
         autocorrect.discardFeedback(preservingTrustedContext: hasCurrentWord)
         let now = clock()
-        if DoubleSpacePeriod.shouldReplace(before: target.documentContextBeforeInput, lastSpaceAt: lastSpaceAt, now: now) {
+        if let spaces = DoubleSpacePeriod.trailingSpacesToReplace(before: target.documentContextBeforeInput, lastSpaceAt: lastSpaceAt, now: now) {
             statistics?.direct(" ")
             autocorrect.touchInput.clear()
             autocorrect.forgetSpaceTaps()
             autocorrect.clearPendingUndo()
-            let spaces = DoubleSpacePeriod.trailingSpaceCount(target.documentContextBeforeInput ?? "") ?? 1
             for _ in 0..<spaces {
                 target.deleteBackward()
             }
