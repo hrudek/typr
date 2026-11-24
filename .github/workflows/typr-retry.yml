@@ -1,0 +1,40 @@
+name: Runner retry
+run-name: "Runner retry · ${{ github.event.workflow_run.head_branch }} · attempt ${{ github.event.workflow_run.run_attempt }}"
+
+on:
+  workflow_run:
+    workflows: ["TestFlight", "Simulator tests"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typr-runner-retry-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure'
+      && github.event.workflow_run.repository.full_name == github.repository
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && (github.event.workflow_run.path == '.github/workflows/typr-ci.yml'
+          || github.event.workflow_run.path == '.github/workflows/typr-simulator.yml')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: write
+      checks: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: dev
+          sparse-checkout: .github/typr
+          persist-credentials: false
+      - name: Retry only an unallocated macOS job (5, 10, 20 minute backoff)
+        run: python3 -I .github/typr/retry-capacity.py
