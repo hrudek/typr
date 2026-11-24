@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Typr's mechanical keycap: a dark base ring with a raised, lighter face and a thin top
-/// highlight (from typr-deprecated's `MechanicalKeycap`).
 struct TyprMechanicalKeycap {
     let isDark: Bool
 
@@ -40,7 +38,6 @@ struct TyprMechanicalKeycap {
     private var highlight: UIColor { UIColor(white: 1, alpha: isDark ? 0.28 : 1) }
     private var shadow: UIColor { UIColor(white: 0, alpha: isDark ? 0.6 : 0.22) }
 
-    /// The raised face inside a keycap; labels sit on it.
     func faceRect(_ cap: CGRect) -> CGRect {
         let side = cap.height * 0.062
         let top = cap.height * 0.062
@@ -101,10 +98,6 @@ struct TyprMechanicalKeycap {
     }
 }
 
-/// Which keycaps the full keyboard draws. The key plane and the Hex key open a scope while
-/// they draw (`begin`/`end`); inside it, with Mechanical keyboard design on, the upstream
-/// `fillKeycap` and `textBase` hand over to Typr's keycap and ink. Off, or outside a scope,
-/// nothing changes.
 enum TyprKeycaps {
     private struct Scope {
         let keycap: TyprMechanicalKeycap
@@ -114,12 +107,10 @@ enum TyprKeycaps {
 
     nonisolated(unsafe) private static var scope: Scope?
 
-    /// Tests pick the design; nil reads Settings › Typr.
     nonisolated(unsafe) static var designOverride: Bool?
 
     static var isMechanical: Bool { designOverride ?? TyprSettings.shared.mechanicalKeyboard }
 
-    /// Starts drawing keycaps for `palette`; nil (a Hex key in the strip) draws upstream's.
     static func begin(_ palette: FullKeyboardPalette?) {
         guard let palette, isMechanical else {
             scope = nil
@@ -134,21 +125,16 @@ enum TyprKeycaps {
 
     static func end() { scope = nil }
 
-    /// The label colour inside a mechanical scope.
     static var ink: UIColor? { scope?.keycap.keyLabel }
 
-    /// Where a key's label sits: on the raised face inside a mechanical scope.
     static func inkFrame(_ cap: CGRect) -> CGRect { scope?.keycap.faceRect(cap) ?? cap }
 
-    /// Draws a mechanical keycap and says so, or leaves it to the caller.
     static func fillKeycap(_ context: CGContext, _ rect: CGRect, fill: UIColor, radius: CGFloat) -> Bool {
         guard let scope else { return false }
         scope.keycap.draw(in: context, rect: rect, face: face(for: fill, in: scope), radius: radius)
         return true
     }
 
-    /// The resting fill becomes Typr's face, every held grey its pressed face; any other fill
-    /// (the return key's blue) keeps its colour.
     private static func face(for fill: UIColor, in scope: Scope) -> UIColor {
         if fill.isEqual(scope.keyFill) { return scope.keycap.keyFill }
         if scope.heldFills.contains(where: { fill.isEqual($0) }) { return scope.keycap.keyPressedFill }
@@ -157,8 +143,6 @@ enum TyprKeycaps {
 }
 
 extension View {
-    /// The dictation bar's keys with Mechanical keyboard design on: a mechanical keycap over
-    /// the flat fill that follows. `face` overrides the face colour (the return key's blue).
     func typrMechanicalKeycap(isDark: Bool, pressed: Bool, face: Color? = nil) -> some View {
         modifier(TyprMechanicalKeycapBackground(isDark: isDark, pressed: pressed, face: face))
     }
@@ -169,7 +153,6 @@ private struct TyprMechanicalKeycapBackground: ViewModifier {
     let pressed: Bool
     let face: Color?
 
-    /// Room around the keycap for its shadow.
     private static let bleed: CGFloat = 6
 
     @ViewBuilder

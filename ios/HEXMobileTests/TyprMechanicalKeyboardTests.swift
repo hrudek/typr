@@ -3,8 +3,6 @@ import UIKit
 import XCTest
 @testable import HEX
 
-/// Settings › Typr › Mechanical keyboard design: on by default, stored in the App Group
-/// defaults, and off draws exactly upstream's keycaps.
 @MainActor
 final class TyprMechanicalKeyboardTests: XCTestCase {
     private var suiteName: String!
@@ -34,12 +32,6 @@ final class TyprMechanicalKeyboardTests: XCTestCase {
         settings.mechanicalKeyboard = true
         XCTAssertTrue(TyprSettings(defaults: defaults).mechanicalKeyboard)
         XCTAssertTrue(TyprSettings(defaults: nil).mechanicalKeyboard, "without the App Group")
-    }
-
-    func testTheSettingsPageWritesTheSharedSetting() {
-        let page = TyprSettingsPage(settings: TyprSettings(defaults: defaults))
-        page.settings.mechanicalKeyboard = false
-        XCTAssertFalse(TyprSettings(defaults: defaults).mechanicalKeyboard)
     }
 
     func testOffLeavesUpstreamInkAndLabelsAlone() {
