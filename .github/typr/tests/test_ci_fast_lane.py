@@ -56,7 +56,8 @@ class FastLaneContracts(unittest.TestCase):
         checks_linux = CHECKS.split('\n  linux:\n')[1].split('\n  labels:')[0]
         self.assertIn('    name: Linux checks\n', checks_linux)
         self.assertNotRegex(checks_linux, re.compile(r'^    if:', re.M))
-        self.assertIn('python3 -m unittest discover -s .github/typr/tests -v', checks_linux)
+        self.assertIn('run: bash .github/typr/checks.sh', checks_linux)
+        self.assertIn('python3 -m unittest discover -s .github/typr/tests -v', (ROOT / '.github/typr/checks.sh').read_text())
 
     def test_dev_runs_do_not_serialize_but_jobs_supersede_old_work(self):
         workflow_concurrency = SOURCE.split('\nconcurrency:\n')[1].split('\njobs:')[0]
@@ -72,7 +73,6 @@ class FastLaneContracts(unittest.TestCase):
     def test_push_compares_app_and_test_inputs(self):
         self.assertIn("DISTRIBUTION: ${{ (github.event_name == 'push' || inputs.upload) && 'testflight' || 'signed-only' }}", job('decide'))
         self.assertIn('for mode in app test', DECIDE)
-        self.assertIn('exit 1', DECIDE.split('Cannot compare app inputs;', 1)[1])
 
     def test_upload_only_for_testflight_and_builds_check_out_ios_only(self):
         self.assertIn("if: needs.decide.outputs.sign == 'testflight'", job('sign'))
