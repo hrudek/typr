@@ -1,0 +1,80 @@
+# Required PR checks stay Linux-only; no signing or simulator access.
+name: Checks
+run-name: "Checks · ${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.number) || github.ref_name }}"
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read   # Scope reads the PR's current labels
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Script tests
+        run: python3 -m unittest discover -s .github/typr/tests -v
+      - name: Shell syntax
+        run: for script in .github/typr/*.sh; do bash -n "$script"; done
+      - name: ShellCheck
+        run: shellcheck -x -P .github/typr .github/typr/*.sh
+      - name: Lint workflows
+        # SC2016/SC2129: Markdown backticks in single quotes and one-line-per-fact outputs are intended.
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color -ignore SC2016 -ignore SC2129 .github/workflows/typr-*.yml
+      - name: Whitespace
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: git diff --check "$BASE" HEAD
+      - name: Scope (what this change may touch)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # The PR's labels now, not the event's: a re-run after adding "infra"/"docs" must see it.
+          LABELS=$(gh api "repos/$GH_REPO/pulls/$PR" --jq '[.labels[].name] | join(",")')
+          export LABELS
+          bash .github/typr/scope.sh "$BASE" "$HEAD"
+
+  labels:
+    name: Label PR
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.number }}
+      HEAD_REF: ${{ github.head_ref }}
+    steps:
+      - name: Label by branch
+        run: |
+          case "$HEAD_REF" in
+            feature/*) gh pr edit "$PR" --add-label feature ;;
+          esac

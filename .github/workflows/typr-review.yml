@@ -1,0 +1,184 @@
+# pull_request_target: workflow and token come from dev, so a PR cannot change its own reviewer.
+# The PR head is checked out only to be read; nothing from it runs.
+name: Review
+run-name: "Review · PR #${{ github.event.pull_request.number }} · ${{ github.event.pull_request.head.sha }}"
+
+on:
+  pull_request_target:
+    branches: [dev]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: typr-agent
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      MARKER: "<!-- typr-review -->"
+    steps:
+      # Without the secret the review is skipped with a notice, never red.
+      - name: Claude token present?
+        id: token
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [[ -n "$TOKEN" ]]; then
+            echo ready=true >> "$GITHUB_OUTPUT"
+          else
+            echo '::notice::Review skipped: set CLAUDE_CODE_OAUTH_TOKEN in environment typr-agent.'
+            echo 'Review skipped: CLAUDE_CODE_OAUTH_TOKEN is not set in environment typr-agent.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Mark the review comment as in progress
+        if: steps.token.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          body=$(printf '%s\n## ⏳ Review: reviewing `%s` …\n\nThe verdict for this commit appears here when the review finishes ([run](%s)).\n' \
+            "$MARKER" "${HEAD_SHA:0:8}" "$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID")
+          id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | tail -1)
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "repos/$GH_REPO/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
+
+      # claude-code-action would download Bun from GitHub releases, which
+      # returned HTTP 504 for hours on 2026-11-08. Install the same pinned Bun
+      # (1.4.4, the action's version) from the npm registry instead, checked
+      # against npm's sha512 integrity. Inline and before the checkout: no
+      # code from the PR runs here.
+      - name: Install pinned Bun from npm
+        id: bun
+        if: steps.token.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/bun"
+          mkdir -p "$dir"
+          curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 5 \
+            https://registry.npmjs.org/@oven/bun-linux-x64/-/bun-linux-x64-1.4.4.tgz --output "$dir/bun.tgz"
+          expected='CHbbkmHVM28T1GFq+6GL4Ao4ujwwYwj1CxFFwEFzLanPfNsId9AhbIP0Q4reWuWBkGimUkoQygrK7Rgjtj3vog=='
+          actual=$(openssl dgst -sha512 -binary "$dir/bun.tgz" | base64 -w0)
+          [[ "$actual" == "$expected" ]] || { echo '::error::Bun package integrity mismatch'; exit 1; }
+          tar -xzf "$dir/bun.tgz" -C "$dir" package/bin/bun
+          "$dir/package/bin/bun" --version
+          echo "path=$dir/package/bin/bun" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: steps.token.outputs.ready == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+
+      - uses: anthropics/claude-code-action@c0949c50a78c1ec8ce2647db36629b870e715d0c # v1
+        id: claude
+        if: steps.token.outputs.ready == 'true'
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ github.token }}
+          display_report: "false"
+          path_to_bun_executable: ${{ steps.bun.outputs.path }}
+          prompt: |
+            You are the code REVIEWER for Typr pull request #${{ github.event.pull_request.number }}
+            in ${{ github.repository }}. This repository is a fork of anomalyco/hex that should
+            equal upstream plus a minimal Typr layer; read AGENTS.md first (the fork guide) and
+            .github/typr/README.md where it touches CI. For upstream code, upstream's own guide is
+            `git show upstream/dev:AGENTS.md` if that remote exists, else the parent repository.
+
+            Review exactly commit ${{ github.event.pull_request.head.sha }} (checked out) against
+            the PR base: `git diff origin/dev...HEAD` and `git log origin/dev..HEAD`.
+            Read the PR description with `gh pr view ${{ github.event.pull_request.number }}`.
+            Earlier reviews of this PR may be in `gh pr view ${{ github.event.pull_request.number }} --comments`:
+            check whether their findings were fixed, but judge the whole current diff afresh.
+            Read surrounding code as needed. You cannot change files; do not try.
+
+            Report as a finding only what must change before merging:
+            - bugs, crashes, races, data loss, wrong behaviour versus the PR description;
+            - security or privacy problems (secrets, signing, untrusted input, workflow injection);
+            - violations of AGENTS.md's rules (changes under .github/ without the infra label,
+              new Markdown files without the docs label, upstream files edited where a separate
+              Typr file would do, edits to upstream identity that belong in .github/typr/overlay.py,
+              missing simulator tests for new behaviour);
+            - conflict markers, broken builds you can see from the code, tests that were weakened.
+            Everything optional (style, naming, small refactors, ideas) goes into `notes`, never
+            into `findings`. Do not invent problems: an empty findings list is the right answer
+            for a good PR. Each finding names the file, the line where possible, the problem, and
+            a concrete fix.
+
+            Set `verdict` to "fix" if and only if `findings` is non-empty, otherwise "pass".
+            `summary`: two or three plain sentences for the owner on what the PR does and
+            whether it is ready.
+          claude_args: |
+            --model opus
+            --max-turns 60
+            --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Bash(git blame:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
+            --disallowedTools "Edit,MultiEdit,Write,NotebookEdit,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git reset:*)"
+            --json-schema '{"type":"object","additionalProperties":false,"required":["verdict","summary","findings","notes"],"properties":{"verdict":{"type":"string","enum":["pass","fix"]},"summary":{"type":"string"},"findings":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["file","problem","fix"],"properties":{"file":{"type":"string"},"line":{"type":"integer"},"problem":{"type":"string"},"fix":{"type":"string"}}}},"notes":{"type":"array","items":{"type":"string"}}}}'
+
+      - name: Publish the verdict
+        if: ${{ !cancelled() && steps.token.outputs.ready == 'true' }}
+        env:
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          set -euo pipefail
+          run_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID"
+          short=${HEAD_SHA:0:8}
+          # The verdict follows the findings, never the other way round.
+          if [[ -n "${RESULT:-}" ]] && jq -e '.findings | type == "array"' <<<"$RESULT" >/dev/null 2>&1; then
+            count=$(jq '.findings | length' <<<"$RESULT")
+            if (( count == 0 )); then
+              verdict=pass
+              head="## ✅ Review: PASS — nothing to fix (\`$short\`)"
+            else
+              verdict=fix
+              head="## ❌ Review: FIX — $count thing(s) to fix (\`$short\`)"
+            fi
+            details=$(jq -r '
+              (.summary // "") + "\n"
+              + (if (.findings | length) > 0 then
+                  "\n### To fix\n\n" + ([.findings | to_entries[] |
+                    "\(.key + 1). **`\(.value.file)\(if .value.line then ":\(.value.line)" else "" end)`** — \(.value.problem)\n   → \(.value.fix)"] | join("\n"))
+                else "" end)
+              + (if ((.notes // []) | length) > 0 then
+                  "\n\n<details><summary>Optional notes (do not affect the verdict)</summary>\n\n"
+                  + ([.notes[] | "- \(.)"] | join("\n")) + "\n\n</details>"
+                else "" end)' <<<"$RESULT")
+          else
+            verdict=error
+            head="## ⚠️ Review: NO RESULT for \`$short\`"
+            details="The review did not finish (usage limit, timeout or error). Re-run the failed job: $run_url"
+          fi
+          body=$(printf '%s\n%s\n\n%s\n\n<sub>Reviewed commit %s · [run](%s) · a new commit starts a new review.</sub>\n' \
+            "$MARKER" "$head" "$details" "$HEAD_SHA" "$run_url")
+          id=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" | tail -1)
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "repos/$GH_REPO/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
+          printf '%s\n\n%s\n' "$head" "$details" >> "$GITHUB_STEP_SUMMARY"
+          case "$verdict" in
+            pass) echo "PASS: nothing to fix." ;;
+            fix) echo "::error::Review: $count thing(s) to fix (see the PR comment)."; exit 1 ;;
+            *) echo "::error::Review produced no result."; exit 1 ;;
+          esac
