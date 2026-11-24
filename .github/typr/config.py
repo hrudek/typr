@@ -39,11 +39,15 @@ def load():
 
 
 def marketing_version(root):
-    versions = set(re.findall(r'^\s*MARKETING_VERSION: (\S+)\s*$',
-                              (Path(root) / 'ios/project.yml').read_text(), re.M))
+    tokens = re.findall(r'^\s*MARKETING_VERSION: *(.*?) *(?:#.*)?$',
+                        (Path(root) / 'ios/project.yml').read_text(), re.M)
+    versions = {re.sub(r'^(["\'])(.*)\1$', r'\2', token) for token in tokens}
     if len(versions) != 1:
         raise ValueError(f'Expected one marketing version, found {sorted(versions)}')
-    return versions.pop()
+    version = versions.pop()
+    if not re.fullmatch(r'\d+(?:\.\d+){1,2}', version):
+        raise ValueError(f'Unsupported marketing version {version!r}')
+    return version
 
 
 def build_number_offset(config, version):

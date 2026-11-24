@@ -45,6 +45,22 @@ class ConfigTests(unittest.TestCase):
     def test_marketing_version_comes_from_upstream_project(self):
         self.assertRegex(config_module.marketing_version(REPO), r'^\d+\.\d+\.\d+$')
 
+    def test_marketing_version_forms(self):
+        for text, expected in (('9.0.0', '9.0.0'), ('"9.0.0"', '9.0.0'), ("'9.0.0'", '9.0.0'),
+                               ('9.0.0  # upstream', '9.0.0')):
+            with tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / 'ios').mkdir()
+                (Path(tmp) / 'ios/project.yml').write_text(f'    MARKETING_VERSION: {text}\n')
+                self.assertEqual(config_module.marketing_version(tmp), expected, text)
+
+    def test_unsupported_marketing_version_fails_loudly(self):
+        for text in ('garbage', '"9.0.0', '$(OTHER)', '9.0.0.1', ''):
+            with tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / 'ios').mkdir()
+                (Path(tmp) / 'ios/project.yml').write_text(f'    MARKETING_VERSION: {text}\n')
+                with self.assertRaises(ValueError, msg=text):
+                    config_module.marketing_version(tmp)
+
     def test_entitlements_per_target(self):
         config = config_module.load()
         group = {'com.apple.security.application-groups': ['group.dev.rudek.typr']}
