@@ -76,6 +76,14 @@ class SignedOnlyTests(unittest.TestCase):
                        GITHUB_OUTPUT=str(Path(tmp) / 'out'), GITHUB_STEP_SUMMARY=str(Path(tmp) / 's'))
             return subprocess.run(['bash', '-c', DECIDE], env=env, capture_output=True, text=True)
 
+    def test_pushes_outside_dev_never_upload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, EVENT='push', REF='refs/heads/proof', BEFORE='0' * 40,
+                       AFTER='a' * 40, DISTRIBUTION='testflight', REPO='', RUNNER_TEMP=tmp,
+                       GITHUB_OUTPUT=str(Path(tmp) / 'out'), GITHUB_STEP_SUMMARY=str(Path(tmp) / 's'))
+            subprocess.run(['bash', '-c', DECIDE], env=env, check=True, capture_output=True)
+            self.assertIn('sign=signed-only', (Path(tmp) / 'out').read_text())
+
     def test_branches_sign_without_upload_but_only_dev_uploads(self):
         self.assertEqual(self.run_decide('refs/heads/feature/x', 'signed-only').returncode, 0)
         self.assertNotEqual(self.run_decide('refs/heads/feature/x', 'testflight').returncode, 0)

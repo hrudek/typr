@@ -6,7 +6,8 @@ base='' head=$AFTER sign=''
 case "$EVENT" in
   push)
     [[ "$BEFORE" != "$zero" ]] && base=$BEFORE
-    sign=testflight
+    sign=signed-only
+    [[ "$REF" == refs/heads/dev ]] && sign=testflight
     ;;   # Linux checks validate pipeline changes; only app changes ship
   workflow_dispatch)
     case "$DISTRIBUTION" in
