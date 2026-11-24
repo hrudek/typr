@@ -1,0 +1,205 @@
+name: TestFlight
+run-name: "TestFlight · ${{ github.ref_name }} · ${{ github.event_name }}"
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Upload to TestFlight (dev only). Off: archive and sign only, any branch."
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typr-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.run_id || '' }}
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    name: Decide
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      sign: ${{ steps.decide.outputs.sign }}
+      config: ${{ steps.config.outputs.config }}
+    steps:
+      - name: Require configuration
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          ARTIFACT_AGE_RECIPIENT: ${{ vars.ARTIFACT_AGE_RECIPIENT }}
+        run: |
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo 'Set repository variable APPLE_TEAM_ID'; exit 1; }
+          [[ "$ARTIFACT_AGE_RECIPIENT" =~ ^age1[0-9a-z]{58}$ ]] || { echo 'Set repository variable ARTIFACT_AGE_RECIPIENT'; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: .github/typr
+          persist-credentials: false
+      - name: Load identity
+        id: config
+        run: python3 .github/typr/config.py
+      - name: Which iOS lanes changed, and what gets signed?
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          DISTRIBUTION: ${{ (github.event_name == 'push' || inputs.upload) && 'testflight' || 'signed-only' }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+        run: bash .github/typr/decide-lanes.sh
+
+  build:
+    name: Unsigned archive
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
+    concurrency:
+      group: typr-ci-build-${{ github.event_name == 'push' && 'push' || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
+    runs-on: ${{ vars.MACOS_BUILD_RUNNER || 'xcode-27' }}
+    timeout-minutes: 90
+    env:
+      CI: "true"
+      APP_CONFIG: ${{ needs.decide.outputs.config }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      ARTIFACT_AGE_RECIPIENT: ${{ vars.ARTIFACT_AGE_RECIPIENT }}
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: |
+            ios
+            .github/typr
+            tests/fixtures/vocabulary
+          persist-credentials: false
+      - name: Install pinned artifact encryption tool
+        run: bash .github/typr/install-age.sh
+      - name: Select and verify Xcode
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH }}
+        run: bash .github/typr/select-xcode.sh
+      - name: Cache keys (Xcode, month)
+        id: cache-keys
+        run: |
+          xcode=$(xcodebuild -version | awk 'NR==1{v=$2} NR==2{b=$3} END{print v "-" b}')
+          echo "spm=typr-spm-$xcode-${{ hashFiles('ios/Package.resolved') }}" >> "$GITHUB_OUTPUT"
+          echo "cas=typr-cas-archive-${{ runner.arch }}-$xcode-$(date -u +%Y-%m)-" >> "$GITHUB_OUTPUT"
+      - name: Restore Swift package checkouts
+        id: spm-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: ${{ steps.cache-keys.outputs.spm }}
+      - name: Restore compilation cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/CompilationCache
+          key: ${{ steps.cache-keys.outputs.cas }}${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.cache-keys.outputs.cas }}
+      - name: Build unsigned device archive (app, keyboard and widgets)
+        id: archive
+        run: bash .github/typr/build.sh
+      - name: Save Swift package checkouts
+        if: ${{ !cancelled() && steps.archive.outcome != 'skipped' && steps.spm-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: ${{ steps.cache-keys.outputs.spm }}
+      - name: Save compilation cache
+        if: ${{ !cancelled() && steps.archive.outcome != 'skipped' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/CompilationCache
+          key: ${{ steps.cache-keys.outputs.cas }}${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Upload encrypted archive and public provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-unsigned-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/output/archive.zip.age
+            ${{ runner.temp }}/output/build.json
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    name: Sign (${{ needs.decide.outputs.sign }})
+    needs: [decide, build]
+    if: needs.decide.outputs.sign != '' && needs.build.result == 'success'
+    concurrency:
+      group: typr-ci-sign-${{ needs.decide.outputs.sign }}
+      cancel-in-progress: false
+    runs-on: ${{ vars.MACOS_BUILD_RUNNER || 'xcode-27' }}
+    timeout-minutes: 30
+    environment: typr-testflight
+    env:
+      APP_CONFIG: ${{ needs.decide.outputs.config }}
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      ARTIFACT_AGE_RECIPIENT: ${{ vars.ARTIFACT_AGE_RECIPIENT }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: .github/typr
+          persist-credentials: false
+      - name: Install pinned artifact encryption tool
+        run: bash .github/typr/install-age.sh
+      - name: Select and verify Xcode
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH }}
+        run: bash .github/typr/select-xcode.sh
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-unsigned-${{ github.run_id }}
+          path: ${{ runner.temp }}/input
+      - name: Decrypt archive with environment-protected identity
+        env:
+          ARTIFACT_AGE_IDENTITY: ${{ secrets.ARTIFACT_AGE_IDENTITY }}
+        run: bash .github/typr/decrypt-artifact.sh "$RUNNER_TEMP/input/archive.zip.age" "$RUNNER_TEMP/input/archive.zip"
+      - name: Sign and export IPA
+        env:
+          IOS_CERTIFICATE_P12_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_PROFILES_ZIP_BASE64: ${{ secrets.IOS_PROFILES_ZIP_BASE64 }}
+        run: |
+          if ! bash .github/typr/sign.sh > "$RUNNER_TEMP/signing.log" 2>&1; then
+            echo 'Signing failed. Download and decrypt the signing diagnostics.'
+            exit 1
+          fi
+      - name: Encrypt installable IPA
+        run: bash .github/typr/encrypt-ipa.sh
+      - name: Upload encrypted IPA and public provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-${{ needs.decide.outputs.sign }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/encrypted-deliverables/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload to App Store Connect for TestFlight processing
+        if: needs.decide.outputs.sign == 'testflight'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
+        run: |
+          if ! bash .github/typr/upload-testflight.sh > "$RUNNER_TEMP/testflight.log" 2>&1; then
+            echo 'Upload failed. Download and decrypt the signing diagnostics.'
+            exit 1
+          fi
+          echo "Uploaded the build to TestFlight (group Typr Internal)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Encrypt signing diagnostics
+        if: always()
+        run: bash .github/typr/encrypt-signing-logs.sh
+      - name: Upload encrypted signing diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-signing-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/signing-diagnostics.zip.age
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove signing material
+        if: always()
+        run: bash .github/typr/cleanup-signing.sh
