@@ -190,6 +190,10 @@ jobs:
   push:
     name: Push dev
     needs: [rebase, validate]
+    # resolve is usually skipped; without !cancelled() that skip would skip this job too.
+    if: >-
+      !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
+      && needs.validate.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: typr-sync

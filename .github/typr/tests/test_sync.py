@@ -77,6 +77,21 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.git('show', 'HEAD:app.swift'), 'a\nb upstream typr\nc')
 
 
+def job(name):
+    return re.search(rf'^  {name}:\n(.*?)(?=^  \S|\Z)', WORKFLOW, re.M | re.S).group(1)
+
+
+class WorkflowJobTests(unittest.TestCase):
+    def test_jobs_after_a_skipped_resolve_still_run(self):
+        for name, needs in (('validate', 'resolve'), ('push', 'validate')):
+            with self.subTest(job=name):
+                condition = re.search(r'^    if: >-\n((?:      .+\n)+)', job(name), re.M).group(1)
+                self.assertIn('!cancelled()', condition)
+                self.assertIn("needs.rebase.result == 'success'", condition)
+                self.assertIn("needs.rebase.outputs.noop == 'false'", condition)
+                self.assertIn(f"needs.{needs}.result == 'success'", condition)
+
+
 class WorkflowFilterTests(unittest.TestCase):
     def jq(self, name, document):
         expression = re.search(rf"^      {name}: '(.+)'$", WORKFLOW, re.M).group(1)
