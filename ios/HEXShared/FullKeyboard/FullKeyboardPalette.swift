@@ -43,7 +43,7 @@ struct FullKeyboardPalette: Equatable {
     /// snapshot scenes, or a theme's own opaque background.
     var backdrop: UIColor { colors?.background ?? (isDark ? Self.rgb(0x17181A) : Self.rgb(0xDFE1E6)) }
 
-    var textBase: UIColor { isDark ? .white : .black }
+    var textBase: UIColor { TyprKeycaps.ink ?? (isDark ? .white : .black) }
     var textMuted: UIColor { isDark ? UIColor(white: 1, alpha: 0.56) : Self.rgb(0x525763) }
 
     /// Unified iOS 26 Liquid Glass keycap fill across letters and modifiers:
@@ -151,6 +151,7 @@ enum HexMarkPath {
 extension CGContext {
     /// Draws a continuous-corner iOS 26 Liquid Glass keycap with no legacy under-shadow.
     func fillKeycap(_ rect: CGRect, fill: UIColor, shadow: UIColor = .clear, radius: CGFloat = FullKeyboardPalette.cornerRadius) {
+        if TyprKeycaps.fillKeycap(self, rect, fill: fill, radius: radius) { return }
         let path = UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath
         saveGState()
         if shadow != .clear {
