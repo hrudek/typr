@@ -163,6 +163,7 @@ private final class GlobeKeycapView: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
+        TyprKeycaps.begin(palette); defer { TyprKeycaps.end() }
         context.fillKeycap(bounds, fill: palette.keyFill, shadow: palette.keyShadow, radius: cornerRadius)
         let config = UIImage.SymbolConfiguration(pointSize: isLandscape ? 16 : 19, weight: .regular)
         guard let image = UIImage(systemName: "globe", withConfiguration: config)?
