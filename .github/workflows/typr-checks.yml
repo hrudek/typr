@@ -30,14 +30,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
-      - name: Script tests
-        run: python3 -m unittest discover -s .github/typr/tests -v
-      - name: Shell syntax
-        run: for script in .github/typr/*.sh; do bash -n "$script"; done
-      - name: ShellCheck
-        run: shellcheck -x -P .github/typr .github/typr/*.sh
-      - name: Lint workflows
-        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -color -ignore SC2016 -ignore SC2129 .github/workflows/typr-*.yml
+      - name: Script tests, ShellCheck, actionlint
+        run: bash .github/typr/checks.sh
       - name: Whitespace
         if: github.event_name == 'pull_request'
         env:

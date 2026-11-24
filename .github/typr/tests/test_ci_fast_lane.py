@@ -56,7 +56,8 @@ class FastLaneContracts(unittest.TestCase):
         checks_linux = CHECKS.split('\n  linux:\n')[1].split('\n  labels:')[0]
         self.assertIn('    name: Linux checks\n', checks_linux)
         self.assertNotRegex(checks_linux, re.compile(r'^    if:', re.M))
-        self.assertIn('python3 -m unittest discover -s .github/typr/tests -v', checks_linux)
+        self.assertIn('run: bash .github/typr/checks.sh', checks_linux)
+        self.assertIn('python3 -m unittest discover -s .github/typr/tests -v', (ROOT / '.github/typr/checks.sh').read_text())
 
     def test_dev_runs_do_not_serialize_but_jobs_supersede_old_work(self):
         workflow_concurrency = SOURCE.split('\nconcurrency:\n')[1].split('\njobs:')[0]
