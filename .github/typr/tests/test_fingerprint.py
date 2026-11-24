@@ -1,4 +1,3 @@
-"""Real Git-tree comparisons: only iOS build inputs request a macOS build."""
 from pathlib import Path
 import re
 import subprocess
@@ -8,7 +7,6 @@ import unittest
 SCRIPT = Path(__file__).resolve().parents[1] / 'fingerprint.sh'
 REPO = SCRIPT.parents[2]
 
-# Paths that must never start a macOS job: the rest of upstream Hex, docs, pipeline helpers.
 NO_BUILD = ('src/main.rs', 'Cargo.toml', 'Cargo.lock', 'android/app/build.gradle', 'site/index.html',
             'app/AppIcon.icon/icon.json', 'app/Info.plist', 'docs/cli.md', 'README.md', 'AGENTS.md',
             '.github/workflows/typr-ci.yml', '.github/workflows/release.yml', '.github/typr/build.sh',
@@ -99,14 +97,13 @@ class FingerprintTests(unittest.TestCase):
 
 class ProjectReferencesTests(unittest.TestCase):
     def test_every_file_project_yml_reads_outside_ios_is_an_input(self):
-        # Upstream adding a ../ source to ios/project.yml must reach the fingerprint.
         project = (REPO / 'ios/project.yml').read_text()
         outside = re.findall(r'^\s+(?:- )?(?:path: )?\.\./(\S+)$', project, re.MULTILINE)
         self.assertIn('app/AppIcon.icon', outside)
         listed = re.search(r'^test_only=\((.*)\)$', SCRIPT.read_text(), re.MULTILINE).group(1).split()
         for path in outside:
             with self.subTest(path=path):
-                if path == 'app/AppIcon.icon':   # overlay.py swaps in Typr's icon
+                if path == 'app/AppIcon.icon':
                     self.assertIn('UPSTREAM_ICON = \'../app/AppIcon.icon\'',
                                   (SCRIPT.parent / 'overlay.py').read_text())
                 else:

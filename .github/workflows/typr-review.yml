@@ -1,5 +1,3 @@
-# pull_request_target: workflow and token come from dev, so a PR cannot change its own reviewer.
-# The PR head is checked out only to be read; nothing from it runs.
 name: Review
 run-name: "Review · PR #${{ github.event.pull_request.number }} · ${{ github.event.pull_request.head.sha }}"
 
@@ -33,7 +31,6 @@ jobs:
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       MARKER: "<!-- typr-review -->"
     steps:
-      # Without the secret the review is skipped with a notice, never red.
       - name: Claude token present?
         id: token
         env:
@@ -142,7 +139,6 @@ jobs:
           set -euo pipefail
           run_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID"
           short=${HEAD_SHA:0:8}
-          # The verdict follows the findings, never the other way round.
           if [[ -n "${RESULT:-}" ]] && jq -e '.findings | type == "array"' <<<"$RESULT" >/dev/null 2>&1; then
             count=$(jq '.findings | length' <<<"$RESULT")
             if (( count == 0 )); then

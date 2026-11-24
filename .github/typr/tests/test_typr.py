@@ -1,4 +1,3 @@
-"""Linux-runnable checks for Typr's CI layer: python3 -m unittest discover -s .github/typr/tests"""
 import importlib.util
 from pathlib import Path
 import re
@@ -34,7 +33,6 @@ class ConfigTests(unittest.TestCase):
                          (TEAM, 'group.dev.rudek.typr', 'Typr'))
         self.assertEqual((config['asc_app_id'], config['asc_app_name'], config['testflight_group']),
                          ('6832515139', 'Typr Keyboard', 'Typr Internal'))
-        # The first build of this repository (run 1) must beat typr-deprecated's last, 519.1.
         self.assertGreater(1 + config['build_number_offset'], 519)
         self.assertTrue((HERE / 'AppIcon.icon/icon.json').is_file())
 
@@ -59,7 +57,6 @@ class ConfigTests(unittest.TestCase):
 
 
 class OverlayTests(unittest.TestCase):
-    """Apply the overlay to a copy of the real upstream ios/ sources."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -83,7 +80,7 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(re.findall(r'CFBundleDisplayName: (.+)', project), ['Typr'] * 3)
         self.assertIn('DEVELOPMENT_TEAM: 2ZNGF24932', project)
         self.assertIn('- path: ../.github/typr/AppIcon.icon', project)
-        self.assertIn('- hex-dictation', project)   # upstream's URL scheme stays
+        self.assertIn('- hex-dictation', project)
         bridge = (self.ios / 'HEXShared/KeyboardBridge.swift').read_text()
         self.assertIn('static let appGroup = "group.dev.rudek.typr"', bridge)
         setup = (self.ios / 'HEXMobile/KeyboardSetup.swift').read_text()
@@ -118,7 +115,6 @@ class OverlayTests(unittest.TestCase):
 
 
 class ScopeTests(unittest.TestCase):
-    """Every .github/ change needs infra; every new Markdown file needs docs."""
 
     def run_scope(self, files, labels='', existing=()):
         with tempfile.TemporaryDirectory() as tmp:

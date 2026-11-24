@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Use XCODE_PATH if set; otherwise keep the image's default Xcode when it is new
-# enough, else switch to the newest installed /Applications/Xcode*.app.
 set -euo pipefail
 minimum=26.0
 version_of() { /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$1/Contents/Info.plist"; }

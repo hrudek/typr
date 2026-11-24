@@ -1,4 +1,3 @@
-"""Execute the workflow's real Decide shell against committed local Git trees."""
 import os
 from pathlib import Path
 import subprocess
@@ -10,7 +9,6 @@ from test_ci_fast_lane import DECIDE, condition
 
 
 class RoutingTests(unittest.TestCase):
-    # Reuse only the temporary Git fixture, not its test methods.
     setUp = test_fingerprint.FingerprintTests.setUp
     git = test_fingerprint.FingerprintTests.git
     change = test_fingerprint.FingerprintTests.change

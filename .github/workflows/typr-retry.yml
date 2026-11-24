@@ -1,5 +1,3 @@
-# Recover only GitHub-hosted macOS allocation failures, not code/test failures.
-# Never subscribe to this workflow itself.
 name: Runner retry
 run-name: "Runner retry · ${{ github.event.workflow_run.head_branch }} · attempt ${{ github.event.workflow_run.run_attempt }}"
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Unit tests of upstream ios/ (with Typr's identity) on an iOS Simulator. No signing, no secrets.
 set -euo pipefail
 : "${APP_CONFIG:?}" "${RUNNER_TEMP:?}"
 ONLY_TESTING=${ONLY_TESTING:-}
@@ -12,7 +11,6 @@ bash "$here/prepare.sh"
 source "$here/cache-args.sh"
 cd "$root/ios"
 
-# Newest available iOS runtime, first iPhone on it.
 udid=$(xcrun simctl list devices available -j | python3 -c '
 import json, re, sys
 devices = json.load(sys.stdin)["devices"]
@@ -27,7 +25,7 @@ for runtime in runtimes:
 raise SystemExit("no available iPhone simulator")
 ')
 echo "Simulator: $udid"
-echo "$udid" > "$RUNNER_TEMP/simulator-udid"   # screenshots.sh reuses this simulator
+echo "$udid" > "$RUNNER_TEMP/simulator-udid"
 
 only=()
 if [[ -n "$ONLY_TESTING" ]]; then
@@ -38,7 +36,7 @@ if [[ -n "$ONLY_TESTING" ]]; then
 fi
 
 mkdir -p "$RUNNER_TEMP/test-output"
-rm -rf "$RUNNER_TEMP/test-output/Tests.xcresult"   # agents run this repeatedly
+rm -rf "$RUNNER_TEMP/test-output/Tests.xcresult"
 set +e
 xcodebuild test \
   -project "$project" -scheme "$scheme" \

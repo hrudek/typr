@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Load Typr's fixed iOS identity (app.json) and publish it as APP_CONFIG."""
 import json
 import os
 from pathlib import Path

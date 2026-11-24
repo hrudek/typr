@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Validate supplied profiles and generate manual Xcode export options."""
 import datetime
 import json
 import os
@@ -50,7 +49,6 @@ def main():
     for app in bundles(archive):
         info = plistlib.loads((app / 'Info.plist').read_bytes())
         bundle = info['CFBundleIdentifier']
-        # The app and keyboard share the App Group; the widget does not use it.
         if bundle != f'{config["bundle_id"]}.widgets':
             groups = profiles[bundle][0]['Entitlements'].get('com.apple.security.application-groups', [])
             if f'group.{config["bundle_id"]}' not in groups:

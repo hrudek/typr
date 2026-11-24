@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Shared by build.sh and test.sh: Typr identity, upstream's cleanup model, generated project.
-# Mirrors ios/ci_scripts/ci_post_clone.sh (Xcode Cloud) without its package resolve.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)

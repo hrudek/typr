@@ -1,11 +1,5 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034
-# Sourced by build.sh and test.sh: xcodebuild arguments that keep the Swift
-# package checkouts and Xcode's content-addressed compilation cache outside
-# DerivedData, where typr-ci.yml restores and saves them between runs.
-# The compilation cache is keyed by the content of each compile's inputs, not
-# file times, so a fresh checkout still reuses unchanged modules (FluidAudio).
-# TYPR_CACHE=off builds without them (the agents' local runs need neither).
 cache_args=()
 if [[ "${TYPR_CACHE:-on}" != off ]]; then
   cache_args=(
@@ -15,7 +9,6 @@ if [[ "${TYPR_CACHE:-on}" != off ]]; then
   )
 fi
 
-# One line per cache for the job summary: how big each one is after the build.
 cache_report() {
   [[ "${TYPR_CACHE:-on}" != off ]] || return 0
   local dir

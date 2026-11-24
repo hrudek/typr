@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Retry a single unallocated hosted macOS job, never a test/code failure.
-
-Runs from trusted dev only. GitHub run_attempt bounds retries, including
-manual reruns. No branch code, signing secret, or agent is used here.
-"""
 import json
 import os
 import re
@@ -16,7 +11,7 @@ WORKFLOWS = {
     '.github/workflows/typr-simulator.yml',
 }
 DELAYS = (300, 600, 1200)
-HOSTED_MACOS_LABELS = ('macos-', 'xcode-')  # e.g. macos-26, xcode-27
+HOSTED_MACOS_LABELS = ('macos-', 'xcode-')
 CAPACITY_ERROR = 'The job was not acquired by Runner of type hosted even after multiple attempts'
 
 
@@ -68,7 +63,7 @@ def current_source(repo, run):
     try:
         current = api(repo, f'branches/{branch}')
     except subprocess.CalledProcessError:
-        return False  # Deleted/inaccessible branch: never revive an obsolete run.
+        return False
     return current['commit']['sha'] == run['head_sha']
 
 
@@ -90,7 +85,6 @@ def retry(repo, run_id):
     jobs = pages(repo, f'actions/runs/{run_id}/jobs?filter=latest', 'jobs')
     candidate = None
     for job in jobs:
-        # Do not even fetch annotations for jobs which executed code.
         if job.get('runner_id', 0) or job.get('steps'):
             continue
         annotations = pages(repo, f'check-runs/{job["id"]}/annotations')
@@ -103,14 +97,11 @@ def retry(repo, run_id):
     delay = DELAYS[run['run_attempt'] - 1]
     report(f'Runner unavailable for {candidate["name"]}; retry {run["run_attempt"]}/3 in {delay // 60} minutes.')
     time.sleep(delay)
-    # Another retry, manual intervention, push or merge during the wait wins.
     current = api(repo, f'actions/runs/{run_id}')
     if (not eligible_run(current, repo) or current['run_attempt'] != run['run_attempt']
             or not current_source(repo, current)):
         report('Capacity retry abandoned: run or source changed while waiting.')
         return
-    # One job per attempt: never rerun successful builds/signing or real test failures.
-    # GitHub also reruns that job's dependent jobs when required.
     api(repo, f'actions/jobs/{candidate["id"]}/rerun', method='POST')
     report(f'Requested capacity retry: {run["html_url"]} (job {candidate["id"]}).')
 

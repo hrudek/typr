@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# All repository paths may change. Usage: scope.sh <base-sha> <head-sha>
-# Changes under .github/ need the "infra" label, so an agent cannot widen
-# automation permissions unnoticed. New Markdown files need the "docs" label:
-# feature notes, plans and reports belong in the PR description, not the tree.
-# Env: LABELS (comma-separated).
+# Usage: scope.sh <base-sha> <head-sha>
 set -euo pipefail
 : "${LABELS:=}"
 changed=$(git diff --name-only "$1" "$2")

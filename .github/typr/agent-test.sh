@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# For agents on a Mac: run the simulator tests exactly as CI does, on a copy of the
-# working tree, so Typr's identity overlay never rewrites the checkout.
 # Usage: bash .github/typr/agent-test.sh [Target/Class,...]
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)

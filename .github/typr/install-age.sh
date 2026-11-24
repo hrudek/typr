@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Pinned release + platform digests; no unverified brew/curl-pipe-shell install.
 # If GitHub's release downloads fail (they returned HTTP 504 for hours on
 # 2026-11-08 while everything else worked), build the same pinned version from
 # the Go module proxy instead: the module zip must match the pinned h1 hash
@@ -9,7 +8,6 @@ set -euo pipefail
 version=v1.3.2
 # h1 module hash of filippo.io/age@v1.3.2, as recorded by sum.golang.org.
 module_h1='h1:r6RSZLFSMm6rzKepZ7ZAYkKCu14f3/Me8c7uKYh7C8c='
-# Go for the fallback build when the runner has none (pinned, from dl.google.com).
 go_version=go1.27.3
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)
@@ -29,12 +27,12 @@ esac
 tools="$RUNNER_TEMP/age-tools"
 mkdir -p "$tools"
 
-fetch() { # url output
+fetch() {
   curl --fail --silent --show-error --location --retry 5 --retry-all-errors --retry-delay 5 \
     "$1" --output "$2"
 }
 
-verify_sha256() { # file expected-hex
+verify_sha256() {
   ACTUAL_FILE="$1" EXPECTED_DIGEST="$2" python3 -I -c '
 import hashlib, os
 from pathlib import Path
@@ -43,8 +41,6 @@ if hashlib.sha256(Path(os.environ["ACTUAL_FILE"]).read_bytes()).hexdigest() != o
 '
 }
 
-# Called in a condition, where errexit is off: every step checks its status.
-# Only a failed download falls back; a digest mismatch stops the script.
 install_release() {
   local archive="$tools/age.tar.gz"
   fetch "https://github.com/FiloSottile/age/releases/download/$version/age-$version-$platform.tar.gz" "$archive" || return 1
@@ -52,8 +48,6 @@ install_release() {
   tar -xzf "$archive" -C "$tools" age/age age/age-keygen || { echo '::error::age release archive did not extract' >&2; exit 1; }
 }
 
-# A Go new enough for age's go.mod (go 1.25): PATH, then the runner's tool
-# cache (macOS images keep Go there, off PATH), else the pinned download.
 find_go() {
   local candidate
   while IFS= read -r candidate; do
@@ -75,7 +69,6 @@ install_from_module_proxy() {
   go=$(find_go) || { echo '::error::no verified Go for the age fallback build' >&2; return 1; }
   echo "age fallback: building with $("$go" version)" >&2
   fetch "https://proxy.golang.org/filippo.io/age/@v/$version.zip" "$zip"
-  # Go's dirhash Hash1 over the module zip; a mismatch stops before any build.
   ACTUAL_ZIP="$zip" EXPECTED_H1="$module_h1" python3 -I -c '
 import base64, hashlib, os, zipfile
 with zipfile.ZipFile(os.environ["ACTUAL_ZIP"]) as z:
@@ -87,7 +80,6 @@ if actual != os.environ["EXPECTED_H1"]:
 '
   rm -rf "$src" && mkdir -p "$src" "$tools/age"
   (cd "$src" && unzip -q "$zip")
-  # -mod=readonly: dependencies only as the verified go.sum pins them.
   (cd "$src/filippo.io/age@$version" &&
     GOFLAGS=-mod=readonly GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org \
       GOTOOLCHAIN=local CGO_ENABLED=0 "$go" build -trimpath -o "$tools/age/" ./cmd/age ./cmd/age-keygen)
@@ -95,7 +87,6 @@ if actual != os.environ["EXPECTED_H1"]:
 
 if ! install_release; then
   echo "::warning::age $version release download failed; building the pinned module from proxy.golang.org" >&2
-  # Outside any condition, so errexit stops at the first failing step.
   install_from_module_proxy
 fi
 "$tools/age/age" --version >/dev/null

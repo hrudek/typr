@@ -1,4 +1,3 @@
-"""Capacity retries without GitHub calls, real waits, credentials or macOS."""
 from pathlib import Path
 import sys
 import unittest

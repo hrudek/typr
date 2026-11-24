@@ -1,4 +1,3 @@
-"""Scheduling contracts: parallel latest-dev work, protected signing."""
 from pathlib import Path
 import re
 import unittest
@@ -16,7 +15,6 @@ def job(name):
 
 
 def condition(name, changed='true', only_testing='', test_changed=None):
-    # Evaluate the actual single-line scheduling expression, not a copied policy.
     expression = re.search(r'^    if: (.+)$', job(name), re.M).group(1)
     values = {
         'needs.decide.outputs.build': changed,
@@ -34,7 +32,7 @@ class FastLaneContracts(unittest.TestCase):
     def test_three_distinct_workflow_results(self):
         for source, name in ((CHECKS, 'Checks'), (SIMULATOR, 'Simulator tests'),
                              (SOURCE, 'TestFlight')):
-            self.assertIn(f'\nname: {name}\n', source)
+            self.assertRegex(source, f'^name: {name}\\n')
             self.assertIn('branches: [dev]', source)
         self.assertNotIn('macos-', CHECKS)
         self.assertNotIn('secrets.', SIMULATOR)
@@ -43,7 +41,7 @@ class FastLaneContracts(unittest.TestCase):
 
     def test_nothing_is_scheduled_and_manual_preview_has_no_device_archive(self):
         for path in (ROOT / '.github/workflows').glob('typr-*.yml'):
-            if path.name == 'typr-sync.yml':   # the daily upstream rebase
+            if path.name == 'typr-sync.yml':
                 continue
             self.assertNotRegex(path.read_text(), re.compile(r'^  schedule:', re.M), path.name)
         self.assertFalse(condition('test', only_testing='none'))
@@ -89,7 +87,6 @@ class FastLaneContracts(unittest.TestCase):
         self.assertNotIn('contents: write', SOURCE)
 
     def test_tests_never_hold_up_testflight_and_no_repair_agent_runs(self):
-        # TestFlight follows the archive alone; red tests are fixed locally afterwards.
         self.assertIn("if: needs.decide.outputs.sign != '' && needs.build.result == 'success'", job('sign'))
         self.assertNotIn('\n  test:\n', SOURCE)
         self.assertNotIn('\n  build:\n', SIMULATOR)

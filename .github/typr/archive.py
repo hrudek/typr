@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Check that the archive contains exactly the configured app and extensions."""
 import json
 import os
 from pathlib import Path

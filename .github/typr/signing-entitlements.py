@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""Seed unsigned archives with reviewed entitlements; check exported IPA signatures.
-
-Xcode export of a CODE_SIGNING_ALLOWED=NO archive can otherwise produce valid
-signatures containing only identity entitlements, silently losing App Groups.
-Never copy every entitlement permitted by a profile into an application.
-"""
 import json
 import os
 from pathlib import Path
@@ -22,10 +16,8 @@ def required_entitlements(config, bundle_id):
         raise ValueError('Unexpected bundle ID')
     if config['app'] != 'typr':
         raise ValueError('Review signing entitlements before signing another app')
-    # The widget extension does not access shared storage; app + keyboard do.
     if bundle_id == f'{config["bundle_id"]}.widgets':
         return {}
-    # Upstream Hex's app and keyboard entitlements hold only the App Group.
     return {'com.apple.security.application-groups': [config['app_group']]}
 
 
@@ -54,7 +46,6 @@ def seed(archive, profile_dir, keychain, config, team):
     if set(profiles) != set(config['bundle_ids']):
         raise ValueError('Profile target set mismatch')
     targets = bundles(archive)
-    # Sign embedded code inside-out, then extensions, then the containing app.
     nested = [p for p in targets[0].rglob('*') if p.suffix == '.framework' and p.is_dir()
               or p.suffix == '.dylib' and p.is_file()]
     with tempfile.TemporaryDirectory() as tmp:
@@ -81,8 +72,6 @@ def seed(archive, profile_dir, keychain, config, team):
 
 
 def verify(ipa, config, team):
-    # Inspect the actual Mach-O signatures, not just embedded profiles. Read only
-    # exact bundle executables from the ZIP; do not extract arbitrary ZIP paths.
     actual_ids = set()
     with zipfile.ZipFile(ipa) as archive, tempfile.TemporaryDirectory() as tmp:
         for name in archive.namelist():

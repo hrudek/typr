@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Shared release/simulator routing; callers supply the event, ref and distribution.
 set -euo pipefail
 zero=0000000000000000000000000000000000000000
 base='' head=$AFTER sign=''
@@ -8,13 +7,13 @@ case "$EVENT" in
     [[ "$BEFORE" != "$zero" ]] && base=$BEFORE
     sign=signed-only
     [[ "$REF" == refs/heads/dev ]] && sign=testflight
-    ;;   # Linux checks validate pipeline changes; only app changes ship
+    ;;
   workflow_dispatch)
     case "$DISTRIBUTION" in
       simulator) ;;
       testflight) [[ "$REF" == refs/heads/dev ]] || { echo 'TestFlight only from dev'; exit 1; }
                   sign=testflight ;;
-      signed-only) sign=signed-only ;;   # archive + sign, no upload (proof before merging)
+      signed-only) sign=signed-only ;;
       *) echo "Unknown distribution: $DISTRIBUTION"; exit 1 ;;
     esac ;;
 esac

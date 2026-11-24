@@ -7,4 +7,3 @@ mkdir -p "$RUNNER_TEMP/encrypted-deliverables"
 age --encrypt --recipient "$ARTIFACT_AGE_RECIPIENT" \
   --output "$RUNNER_TEMP/encrypted-deliverables/$(basename "$ipa").age" "$ipa"
 cp "$RUNNER_TEMP/deliverables/build.json" "$RUNNER_TEMP/encrypted-deliverables/build.json"
-# Plain IPA remains only on this ephemeral runner for the optional TestFlight upload.

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Give an upstream Hex checkout Typr's identity, for CI builds only.
-
-Git keeps upstream's files untouched, so daily rebases never conflict on them.
-Every replacement expects an exact count and fails closed when upstream moves:
-fix this file then, never ship a half-renamed app.
-Usage: overlay.py <repo root>
-"""
+"""Usage: overlay.py <repo root>"""
 from pathlib import Path
 import re
 import sys
@@ -17,8 +11,6 @@ UPSTREAM_BUNDLE = 'anomaly.hex.mobile'
 UPSTREAM_GROUP = 'group.anomaly.hex.mobile'
 UPSTREAM_ICON = '../app/AppIcon.icon'
 TYPR_ICON = '../.github/typr/AppIcon.icon'
-# The Swift declarations that name the App Group and the keyboard's bundle; each must
-# exist once the literals are replaced, or upstream moved them.
 SWIFT_DECLARATIONS = ('static let appGroup = "{app_group}"',
                       'static let keyboardBundleID = "{bundle_id}.keyboard"')
 
@@ -73,7 +65,6 @@ def apply(root, config):
         declaration = declaration.format(**config)
         if corpus.count(declaration) != 1:
             raise ValueError(f'Expected one `{declaration}`; upstream moved it')
-    # Send feedback files into Hex's Bellhop workspace; a Typr build ships without it.
     (ios / 'HEXMobile/Feedback.local.xcconfig').write_text('BELLHOP_REPORT_KEY =\n')
     verify(root, config)
 

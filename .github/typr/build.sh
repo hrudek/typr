@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Unsigned device archive of upstream ios/ with Typr's identity. No signing secrets here.
 set -euo pipefail
 : "${APP_CONFIG:?}" "${SOURCE_SHA:?}" "${RUNNER_TEMP:?}" "${ARTIFACT_AGE_RECIPIENT:?}" "${GITHUB_RUN_NUMBER:?}"
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 field() { python3 -c 'import json,os,sys; print(json.loads(os.environ["APP_CONFIG"])[sys.argv[1]])' "$1"; }
 scheme=$(field scheme) project=$(field project)
-# Continues Typr's TestFlight numbering (last typr-deprecated build: 519.1).
 build_number="$((GITHUB_RUN_NUMBER + $(field build_number_offset))).${GITHUB_RUN_ATTEMPT:-1}"
 bash "$here/prepare.sh"
 source "$here/cache-args.sh"

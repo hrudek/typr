@@ -36,7 +36,6 @@ security import "$RUNNER_TEMP/signing/certificate.p12" -P "$IOS_CERTIFICATE_PASS
 security list-keychains -d user -s "$keychain" "$HOME/Library/Keychains/login.keychain-db"
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
 rm "$RUNNER_TEMP/signing/certificate.p12"
-# No source dependency hooks run in this job. Only trusted control scripts and Xcode.
 ditto -x -k "$RUNNER_TEMP/input/archive.zip" "$RUNNER_TEMP/signing"
 python3 "$here/export-options.py" \
   "$RUNNER_TEMP/signing/App.xcarchive" "$RUNNER_TEMP/signing/profiles" "$RUNNER_TEMP/signing/ExportOptions.plist"
@@ -47,11 +46,9 @@ python3 "$here/signing-entitlements.py" seed \
 xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/signing/App.xcarchive" \
   -exportOptionsPlist "$RUNNER_TEMP/signing/ExportOptions.plist" \
   -exportPath "$RUNNER_TEMP/signed" | tee "$RUNNER_TEMP/export.log"
-# Fail closed before publication/upload if export dropped any required capability.
 while IFS= read -r -d '' ipa; do
   python3 "$here/signing-entitlements.py" verify "$ipa"
 done < <(find "$RUNNER_TEMP/signed" -maxdepth 1 -name '*.ipa' -print0)
-# Publish only the IPA and public provenance, never profile ZIPs, keychains or archives.
 mkdir -p "$RUNNER_TEMP/deliverables"
 find "$RUNNER_TEMP/signed" -maxdepth 1 -name '*.ipa' -exec cp {} "$RUNNER_TEMP/deliverables/" \;
 test "$(find "$RUNNER_TEMP/deliverables" -name '*.ipa' | wc -l | tr -d ' ')" = 1

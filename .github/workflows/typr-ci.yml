@@ -1,4 +1,3 @@
-# Device archives and signing of upstream Hex iOS as Typr. Simulator tests run in typr-simulator.yml.
 name: TestFlight
 run-name: "TestFlight · ${{ github.ref_name }} · ${{ github.event_name }}"
 
@@ -16,8 +15,6 @@ permissions:
   contents: read
 
 concurrency:
-  # Dev runs must not wait for an older run's signing jobs.
-  # Cancellable work is grouped per job below; signing is never auto-cancelled.
   group: typr-ci-${{ github.event_name }}-${{ github.ref }}-${{ github.event_name == 'push' && github.run_id || '' }}
   cancel-in-progress: false
 
@@ -74,7 +71,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          # Only what the iOS build reads; the rest of upstream Hex stays on GitHub.
           sparse-checkout: |
             ios
             .github/typr
@@ -91,7 +87,6 @@ jobs:
         run: |
           xcode=$(xcodebuild -version | awk 'NR==1{v=$2} NR==2{b=$3} END{print v "-" b}')
           echo "spm=typr-spm-$xcode-${{ hashFiles('ios/Package.resolved') }}" >> "$GITHUB_OUTPUT"
-          # A new compilation cache each month, so it never grows without bound.
           echo "cas=typr-cas-archive-${{ runner.arch }}-$xcode-$(date -u +%Y-%m)-" >> "$GITHUB_OUTPUT"
       - name: Restore Swift package checkouts
         id: spm-cache
@@ -145,7 +140,6 @@ jobs:
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
       ARTIFACT_AGE_RECIPIENT: ${{ vars.ARTIFACT_AGE_RECIPIENT }}
     steps:
-      # Only Typr's own scripts; no source build runs on this runner.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           sparse-checkout: .github/typr

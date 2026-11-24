@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Screenshots of the app's fixed simulator scenes (--snap-state), taken after
-# test.sh with the simulator build and simulator it already made: no second build.
-# Env: SCENES (comma-separated, optional extra scenes), RUNNER_TEMP.
-# Writes $RUNNER_TEMP/screenshots/<scene>.png. Never fails the job for a scene.
 set -euo pipefail
 : "${RUNNER_TEMP:?}"
 DEFAULT_SCENES=ready,keyboard-warm,keyboard-recording,full-keyboard-idle,full-keyboard-idle-dark
@@ -21,7 +17,7 @@ scenes=$(printf '%s,%s' "$DEFAULT_SCENES" "${SCENES:-}" | tr ',' '\n' | sed 's/[
 for scene in $scenes; do
   xcrun simctl terminate "$udid" "$bundle" >/dev/null 2>&1 || true
   if xcrun simctl launch "$udid" "$bundle" --snap-state "$scene" >/dev/null; then
-    sleep "${SETTLE_SECONDS:-8}"   # let the scene, Metal views and animations settle
+    sleep "${SETTLE_SECONDS:-8}"
     xcrun simctl io "$udid" screenshot --type=png "$out/$scene.png" >/dev/null && echo "Captured $scene"
   else
     echo "::warning::Could not launch scene $scene"

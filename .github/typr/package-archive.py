@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Validate, encrypt and describe an unsigned native archive."""
 import json
 import os
 from pathlib import Path
