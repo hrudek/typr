@@ -91,6 +91,7 @@ final class KeyboardKeyPlaneView: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
+        TyprKeycaps.begin(palette); defer { TyprKeycaps.end() }
         let layout = engine.layout
         // An iPad's keys are as large turned as upright, so they keep the portrait labels.
         let isLandscape = layout.orientation == .landscape && layout.metrics.pad == nil
@@ -115,9 +116,9 @@ final class KeyboardKeyPlaneView: UIView {
             // Keycaps on whole device pixels, as Apple draws them: crisp edges, not half-covered ones.
             let frame = pixelAligned(key.frame)
             // Row 4's labels sit where they would on Apple's taller row 4 (`bottomRowTrim`).
-            let labelFrame = key.row == 3
+            let labelFrame = TyprKeycaps.inkFrame(key.row == 3
                 ? CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height + layout.metrics.bottomRowTrim)
-                : frame
+                : frame)
             if layout.isNumberPad, key.kind != .hex, key.kind != .globe {
                 drawNumberPadKey(key, in: frame, pressed: pressed.contains(key.kind), landscape: layout.orientation == .landscape, context: context, radius: radius, showGlyphs: showGlyphs)
                 continue
