@@ -29,8 +29,8 @@ Behaviour is upstream's; Typr adds only what this file lists.
 
 ## PRs and CI
 
-- Branch from `dev`, open a PR to `dev`, squash-merge. `dev` is rebased onto
-  upstream daily, so expect its history to be rewritten.
+- Branch from `dev`, open a PR to `dev`, squash-merge. `typr-sync.yml` rebases
+  `dev` onto upstream daily at 04:00 Berlin, so expect its history to be rewritten.
 - PRs run Linux checks (`typr-checks.yml`) and the Claude review. Changes under
   `.github/` need the `infra` label, new Markdown files the `docs` label.
 - A push to `dev` that changes iOS build inputs (`ios/`, the overlay) runs
