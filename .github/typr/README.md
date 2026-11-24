@@ -12,15 +12,18 @@ TestFlight (typr-ci.yml): push to dev with changed app inputs → unsigned archi
 Runner retry (typr-retry.yml): re-runs macOS jobs that never got a runner (5/10/20 min)
 Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CODE_OAUTH_TOKEN is unset
 Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commits onto upstream dev
-  → Linux checks + overlay check → push dev with lease → disable new upstream workflows
+  → Linux checks + overlay check → push dev [skip ci] → disable upstream workflows → start TestFlight /
+  Simulator tests when their inputs changed
 ```
 
 - **Sync** (`sync.sh`): Typr commits = `dev` since its merge-base with upstream `dev`. Nothing
   new upstream: no push. `AGENTS.md` conflicts keep Typr's file; other conflicts go to Claude
   (`sync-resolve.sh`, file tools on copies of the conflicted files only) or fail red without a
-  push when `CLAUDE_CODE_OAUTH_TOKEN` is unset. It pushes with the write deploy key
-  `TYPR_SYNC_DEPLOY_KEY` (environment `typr-sync`): GITHUB_TOKEN may not push workflow files.
-  That push starts Checks, Simulator tests and TestFlight like any push to `dev`.
+  push when `CLAUDE_CODE_OAUTH_TOKEN` is unset. Checks run in a job without secrets; the push job
+  runs no repository code and pushes with the write deploy key `TYPR_SYNC_DEPLOY_KEY`
+  (GITHUB_TOKEN may not push workflow files). An empty `[skip ci]` commit on top keeps the push
+  from starting any workflow, so new upstream workflows are disabled before they run; the next
+  sync drops it. A push whose old `dev` is gone builds and tests everything.
 
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
   scripts, plus `app.json`, `overlay.py`, `prepare.sh` and `AppIcon.icon`. Tests and

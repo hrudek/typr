@@ -55,7 +55,7 @@ case "${1:-}" in
     base=$(git merge-base "$START" "$UPSTREAM")
     git switch -q -C typr-sync "$START"
     git config merge.conflictStyle zdiff3
-    git rebase -q --onto "$UPSTREAM" "$base" || in_rebase || exit 1
+    git rebase -q --no-keep-empty --onto "$UPSTREAM" "$base" || in_rebase || exit 1
     drive
     ;;
   resume)

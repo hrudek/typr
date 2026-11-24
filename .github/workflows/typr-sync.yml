@@ -134,18 +134,18 @@ jobs:
           echo "::error::Rebase conflicts in: $CONFLICTS. Claude could not resolve them; nothing was pushed."
           echo "Conflicts in \`$CONFLICTS\` rebasing \`${START:0:8}\` onto upstream \`${UPSTREAM:0:8}\`; nothing pushed." >> "$GITHUB_STEP_SUMMARY"
 
-  publish:
-    name: Check and push dev
+  validate:
+    name: Check the rebased dev
     needs: [rebase, resolve]
     if: >-
       !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
       && (needs.rebase.outputs.conflicts == '' || needs.resolve.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment: typr-sync
-    permissions:
-      contents: read
-      actions: write
+    outputs:
+      head: ${{ steps.load.outputs.head }}
+      app: ${{ steps.lanes.outputs.app }}
+      test: ${{ steps.lanes.outputs.test }}
     env:
       START: ${{ needs.rebase.outputs.start }}
       UPSTREAM: ${{ needs.rebase.outputs.upstream }}
@@ -161,18 +161,67 @@ jobs:
           name: typr-sync
           path: ${{ runner.temp }}
       - name: Load the rebased dev
+        id: load
         run: |
           git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" "$UPSTREAM"
           git fetch -q "$RUNNER_TEMP/sync.bundle" refs/heads/typr-sync:refs/heads/synced
           git merge-base --is-ancestor "$UPSTREAM" synced
           git switch -q --detach synced
-          echo "HEAD_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Linux checks
         run: bash .github/typr/checks.sh
       - name: Identity overlay still applies
         run: |
           git worktree add -q --detach "$RUNNER_TEMP/drift" HEAD
           python3 .github/typr/overlay.py "$RUNNER_TEMP/drift"
+      - name: Which iOS lanes changed?
+        id: lanes
+        run: |
+          for mode in app test; do
+            changed=true
+            [[ "$(bash .github/typr/fingerprint.sh . "$START" "$mode")" != "$(bash .github/typr/fingerprint.sh . HEAD "$mode")" ]] || changed=false
+            echo "$mode=$changed" | tee -a "$GITHUB_OUTPUT"
+          done
+
+  # Runs no repository code: it holds the deploy key. The [skip ci] marker commit on top keeps
+  # the push from starting any workflow, so new upstream workflows are disabled before they can
+  # run; Typr's own workflows are dispatched by the lanes that changed. The next sync drops the
+  # empty marker (sync.sh rebases with --no-keep-empty).
+  push:
+    name: Push dev
+    needs: [rebase, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: typr-sync
+    permissions:
+      contents: read
+      actions: write
+    env:
+      START: ${{ needs.rebase.outputs.start }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+      HEAD_SHA: ${{ needs.validate.outputs.head }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      UPSTREAM_WORKFLOWS: '.workflows[] | select(.state == "active" and (.path | startswith(".github/workflows/")) and (.path | startswith(".github/workflows/typr-") | not)) | "\(.id) \(.path)"'
+      UPSTREAM_RUNS: '.workflow_runs[] | select(.status != "completed" and (.path | startswith(".github/workflows/typr-") | not)) | .id'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.rebase.outputs.start }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}
+      - name: Load the checked head and mark it [skip ci]
+        run: |
+          git fetch -q --no-tags "$UPSTREAM_URL" "$UPSTREAM"
+          git fetch -q "$RUNNER_TEMP/sync.bundle" refs/heads/typr-sync:refs/heads/synced
+          [[ "$(git rev-parse synced)" == "$HEAD_SHA" ]]
+          git switch -q --detach synced
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q --allow-empty -m "chore(typr): upstream sync to ${UPSTREAM:0:8} [skip ci]"
       - name: Push dev
         env:
           KEY: ${{ secrets.TYPR_SYNC_DEPLOY_KEY }}
@@ -183,21 +232,34 @@ jobs:
           echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$RUNNER_TEMP/known_hosts"
           export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes"
           status=0
-          git push --force-with-lease="refs/heads/dev:$START" "git@github.com:$GITHUB_REPOSITORY.git" "$HEAD_SHA:refs/heads/dev" || status=$?
+          git push --force-with-lease="refs/heads/dev:$START" "git@github.com:$GH_REPO.git" HEAD:refs/heads/dev || status=$?
           rm -f "$RUNNER_TEMP/key"
           exit "$status"
       - name: Keep upstream workflows off
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/typr/disable-upstream-workflows.sh "$HEAD_SHA"
-      - name: Summary
         run: |
+          gh api "repos/$GH_REPO/actions/workflows" --paginate --jq "$UPSTREAM_WORKFLOWS" \
+            | while read -r id path; do
+                echo "::warning::Disabling upstream workflow $path"
+                gh api -X PUT "repos/$GH_REPO/actions/workflows/$id/disable"
+              done
+          gh api "repos/$GH_REPO/actions/runs?head_sha=$(git rev-parse HEAD)&per_page=100" --jq "$UPSTREAM_RUNS" \
+            | while read -r id; do
+                echo "::warning::Cancelling upstream run $id"
+                gh api -X POST "repos/$GH_REPO/actions/runs/$id/cancel" >/dev/null || true
+              done
+      - name: Start Typr's iOS lanes
+        env:
+          APP: ${{ needs.validate.outputs.app }}
+          TEST: ${{ needs.validate.outputs.test }}
+        run: |
+          [[ "$APP" != true ]] || gh workflow run typr-ci.yml --ref dev -f upload=true
+          [[ "$TEST" != true ]] || gh workflow run typr-simulator.yml --ref dev
           {
             echo '### Upstream sync'
             echo "| | |"; echo "|---|---|"
             echo "| Old dev | \`${START:0:8}\` |"
             echo "| Upstream dev | \`${UPSTREAM:0:8}\` ($(git rev-list --count "$(git merge-base "$START" "$UPSTREAM")..$UPSTREAM") new commits) |"
-            echo "| New dev | \`${HEAD_SHA:0:8}\` ($(git rev-list --count "$UPSTREAM..HEAD") Typr commits) |"
-            echo
-            echo 'The push starts Checks, Simulator tests and TestFlight; they build only if iOS inputs changed.'
+            echo "| New dev | \`$(git rev-parse --short=8 HEAD)\` ($(git rev-list --count "$UPSTREAM..$HEAD_SHA") Typr commits + [skip ci] marker) |"
+            echo "| TestFlight started | $APP |"
+            echo "| Simulator tests started | $TEST |"
           } >> "$GITHUB_STEP_SUMMARY"

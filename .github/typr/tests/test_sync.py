@@ -1,10 +1,13 @@
 from pathlib import Path
+import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'sync.sh'
+WORKFLOW = (SCRIPT.parents[2] / '.github/workflows/typr-sync.yml').read_text()
 
 
 class SyncTests(unittest.TestCase):
@@ -56,6 +59,14 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.git('rev-list', '--count', 'upstream..HEAD'), '2')
         self.assertEqual(self.git('show', 'HEAD:other.rs'), 'x')
 
+    def test_the_skip_ci_marker_of_the_last_sync_is_dropped(self):
+        self.git('switch', '-q', 'dev')
+        self.git('commit', '-q', '--allow-empty', '-m', 'chore(typr): upstream sync [skip ci]')
+        self.git('switch', '-q', 'upstream')
+        self.commit('upstream news', {'other.rs': 'x\n'})
+        self.assertEqual(self.sync('rebase')[0], 0)
+        self.assertEqual(self.git('log', '--format=%s', 'upstream..HEAD'), 'typr hook\ntypr guide')
+
     def test_other_conflicts_stop_with_their_files(self):
         self.commit('upstream edit', {'app.swift': 'a\nb upstream\nc\n'})
         status, outputs = self.sync('rebase')
@@ -64,6 +75,31 @@ class SyncTests(unittest.TestCase):
         status, outputs = self.sync('resume')
         self.assertEqual(status, 0)
         self.assertEqual(self.git('show', 'HEAD:app.swift'), 'a\nb upstream typr\nc')
+
+
+class WorkflowFilterTests(unittest.TestCase):
+    def jq(self, name, document):
+        expression = re.search(rf"^      {name}: '(.+)'$", WORKFLOW, re.M).group(1)
+        run = subprocess.run(['jq', '-r', expression], input=json.dumps(document),
+                             capture_output=True, text=True, check=True)
+        return run.stdout.split()
+
+    def test_only_active_upstream_workflows_are_disabled(self):
+        workflows = [(1, 'active', '.github/workflows/release.yml'),
+                     (2, 'disabled_manually', '.github/workflows/deploy.yml'),
+                     (3, 'active', '.github/workflows/typr-ci.yml'),
+                     (4, 'active', 'dynamic/pages/pages-build-deployment'),
+                     (5, 'active', '.github/workflows/new-macos.yaml')]
+        document = {'workflows': [{'id': i, 'state': state, 'path': path} for i, state, path in workflows]}
+        self.assertEqual(self.jq('UPSTREAM_WORKFLOWS', document),
+                         ['1', '.github/workflows/release.yml', '5', '.github/workflows/new-macos.yaml'])
+
+    def test_only_unfinished_upstream_runs_are_cancelled(self):
+        runs = [(1, 'queued', '.github/workflows/new-macos.yml'),
+                (2, 'completed', '.github/workflows/release.yml'),
+                (3, 'in_progress', '.github/workflows/typr-ci.yml')]
+        document = {'workflow_runs': [{'id': i, 'status': status, 'path': path} for i, status, path in runs]}
+        self.assertEqual(self.jq('UPSTREAM_RUNS', document), ['1'])
 
 
 if __name__ == '__main__':
