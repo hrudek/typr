@@ -55,6 +55,12 @@ class RoutingTests(unittest.TestCase):
                                            test_changed=outputs['test']), tests)
                 self.assertEqual(condition('build', changed=outputs['build']), build)
 
+    def test_unfetchable_baseline_builds_and_tests_everything(self):
+        self.change('README.md', 'docs only')
+        self.commit()
+        outputs = self.decide('0123456789abcdef0123456789abcdef01234567')
+        self.assertEqual(outputs, {'test': 'true', 'build': 'true', 'sign': 'testflight'})
+
     def test_explicit_distributions_ignore_unchanged_baseline(self):
         base = self.git('rev-parse', 'HEAD')
         for distribution, sign in (('simulator', ''), ('testflight', 'testflight'),

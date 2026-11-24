@@ -11,7 +11,19 @@ TestFlight (typr-ci.yml): push to dev with changed app inputs → unsigned archi
   manual: upload=true (dev only) or upload=false (archive + sign, any branch*)
 Runner retry (typr-retry.yml): re-runs macOS jobs that never got a runner (5/10/20 min)
 Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CODE_OAUTH_TOKEN is unset
+Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commits onto upstream dev
+  → Linux checks + overlay check → push dev [skip ci] → disable upstream workflows → start TestFlight /
+  Simulator tests when their inputs changed
 ```
+
+- **Sync** (`sync.sh`): Typr commits = `dev` since its merge-base with upstream `dev`. Nothing
+  new upstream: no push. `AGENTS.md` conflicts keep Typr's file; other conflicts go to Claude
+  (`sync-resolve.sh`, file tools on copies of the conflicted files only) or fail red without a
+  push when `CLAUDE_CODE_OAUTH_TOKEN` is unset. Checks run in a job without secrets; the push job
+  runs no repository code and pushes with the write deploy key `TYPR_SYNC_DEPLOY_KEY`
+  (GITHUB_TOKEN may not push workflow files). An empty `[skip ci]` commit on top keeps the push
+  from starting any workflow, so new upstream workflows are disabled before they run; the next
+  sync drops it. A push whose old `dev` is gone builds and tests everything.
 
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
   scripts, plus `app.json`, `overlay.py`, `prepare.sh` and `AppIcon.icon`. Tests and
@@ -22,14 +34,15 @@ Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CO
   "Typr Keyboard" (`6832515139`), group "Typr Internal". Upstream's URL scheme stays.
   Build number = run number + 1000 (typr-deprecated ended at 519); marketing version
   is upstream's.
-- **Environments**: `typr-testflight` (signing + ASC secrets) and `typr-agent`
-  (`CLAUDE_CODE_OAUTH_TOKEN`), both deployable from `dev` only. *A branch proof
-  needs that branch added to `typr-testflight`'s policy for the run.
+- **Environments**: `typr-testflight` (signing + ASC secrets), `typr-agent`
+  (`CLAUDE_CODE_OAUTH_TOKEN`) and `typr-sync` (deploy key), all deployable from `dev`
+  only. *A branch proof needs that branch added to `typr-testflight`'s policy for the run.
 - **Runners**: `xcode-27` by default; variables `MACOS_BUILD_RUNNER`, `MACOS_RUNNER`,
   `XCODE_PATH` override.
 
 ```sh
 gh workflow run typr-ci.yml -R hrudek/typr                        # TestFlight from dev
+gh workflow run typr-sync.yml -R hrudek/typr                      # upstream sync now
 gh workflow run typr-ci.yml -R hrudek/typr --ref BRANCH -f upload=false
 gh workflow run typr-simulator.yml -R hrudek/typr --ref BRANCH -f scenes=keyboard-warm
 bash .github/typr/agent-test.sh [Target/Class]                    # on a Mac

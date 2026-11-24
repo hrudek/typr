@@ -29,8 +29,8 @@ if [[ "$EVENT" == push && "$base" =~ ^[0-9a-f]{40}$ ]]; then
       case "$mode" in app) build=$changed ;; test) test=$changed ;; esac
     done
   else
-    echo 'Cannot compare app inputs; refusing a push build without a baseline.' >&2
-    exit 1
+    echo "::warning::Baseline ${base:0:8} is gone (history rewritten); building and testing everything."
+    base=''
   fi
 fi
 [[ "$build" == true ]] || sign=''
