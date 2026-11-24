@@ -23,8 +23,8 @@ Typr commit $commit stopped with conflicts:
 
 $(git log -1 --format='%s%n%n%b' REBASE_HEAD | head -n 40)
 
-This folder holds copies of the conflicted files (zdiff3 markers: ours = new upstream,
-||||||| = old base, theirs = Typr):
+This folder holds copies of the conflicted files with zdiff3 markers (ours = new upstream, the
+seven-pipe section = old base, theirs = Typr):
 $(printf -- '- %s\n' "${files[@]}")
 TYPR-COMMIT.diff is the Typr commit's change to these files; UPSTREAM-AGENTS.md is upstream's guide.
 
