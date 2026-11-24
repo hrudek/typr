@@ -33,8 +33,17 @@ class ConfigTests(unittest.TestCase):
                          (TEAM, 'group.dev.rudek.typr', 'Typr'))
         self.assertEqual((config['asc_app_id'], config['asc_app_name'], config['testflight_group']),
                          ('6832515139', 'Typr Keyboard', 'Typr Internal'))
-        self.assertGreater(1 + config['build_number_offset'], 519)
+        self.assertGreater(1 + config_module.build_number_offset(config, '9.0.0'), 519)
         self.assertTrue((HERE / 'AppIcon.icon/icon.json').is_file())
+
+    def test_build_number_offset_only_for_listed_marketing_versions(self):
+        config = config_module.load()
+        self.assertEqual(config_module.build_number_offset(config, '9.0.0'), 1000)
+        self.assertEqual(config_module.build_number_offset(config, '9.0.1'), 0)
+        self.assertEqual(config_module.build_number_offset(config, '10.0.0'), 0)
+
+    def test_marketing_version_comes_from_upstream_project(self):
+        self.assertRegex(config_module.marketing_version(REPO), r'^\d+\.\d+\.\d+$')
 
     def test_entitlements_per_target(self):
         config = config_module.load()
