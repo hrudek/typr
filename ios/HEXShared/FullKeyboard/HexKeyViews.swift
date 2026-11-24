@@ -135,6 +135,7 @@ final class HexKeyControl: UIControl {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
+        TyprKeycaps.begin(inStrip ? nil : palette); defer { TyprKeycaps.end() }
         let cap = keycapFrame == .zero ? bounds : keycapFrame
         // In the strip the mark sits on the suggestions' line, as tall as fits evenly around it
         // there (19 pt, or less where the line leaves less room), and so does its pressed chip.
