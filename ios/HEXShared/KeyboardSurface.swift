@@ -138,6 +138,7 @@ private struct KeyboardKeyButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
+            .typrMechanicalKeycap(isDark: palette.isDark, pressed: configuration.isPressed, face: configuration.isPressed ? fill?.pressed : fill?.idle)
             .background(
                 configuration.isPressed ? fill?.pressed ?? palette.keyPressedFill : fill?.idle ?? palette.keyFill,
                 in: RoundedRectangle(cornerRadius: HexTheme.controlRadius, style: .continuous)
@@ -223,6 +224,7 @@ private struct RepeatDeleteKey: View {
             .foregroundStyle(palette.textBase)
             .opacity(glyphOpacity)
             .frame(width: 44, height: 42)
+            .typrMechanicalKeycap(isDark: palette.isDark, pressed: isPressing)
             .background(
                 isPressing ? palette.keyPressedFill : palette.keyFill,
                 in: RoundedRectangle(cornerRadius: HexTheme.controlRadius, style: .continuous)
@@ -282,6 +284,7 @@ private struct TrackpadSpaceKey: View {
             .opacity(isTrackpad ? 0 : 1)
             .frame(minWidth: minWidth, maxWidth: .infinity)
             .frame(height: 42)
+            .typrMechanicalKeycap(isDark: palette.isDark, pressed: isPressing)
             .background(
                 isPressing ? palette.keyPressedFill : palette.keyFill,
                 in: RoundedRectangle(cornerRadius: HexTheme.controlRadius, style: .continuous)
@@ -1412,6 +1415,7 @@ struct KeyboardSurfaceView: View {
                 GlobeKeyRepresentable(controller: model.inputViewController, isDark: p.isDark)
                     .opacity(glyphOpacity)
                     .frame(width: 38, height: 42)
+                    .typrMechanicalKeycap(isDark: p.isDark, pressed: false)
                     .background(
                         p.keyFill,
                         in: RoundedRectangle(cornerRadius: HexTheme.controlRadius, style: .continuous)
@@ -1487,12 +1491,12 @@ struct KeyboardSurfaceView: View {
     private func returnFill(_ p: KeyboardChromePalette) -> (idle: Color, pressed: Color)? {
         guard model.returnKey.isAction, !isTrackpadActive else { return nil }
         return model.returnKeyEnabled
-            ? (p.actionFill, p.actionPressedFill)
+            ? TyprReturnKeyAccent.fills(p.actionFill, p.actionPressedFill, isDark: p.isDark)
             : (p.actionDisabledFill, p.actionDisabledFill)
     }
 
     private func returnInk(_ p: KeyboardChromePalette) -> Color {
         if !model.returnKeyEnabled { return p.returnDisabledInk }
-        return model.returnKey.isAction ? .white : p.textBase
+        return model.returnKey.isAction ? Color(TyprReturnKeyAccent.glyph(isDark: p.isDark)) : p.textBase
     }
 }

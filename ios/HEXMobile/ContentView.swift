@@ -81,6 +81,7 @@ struct ContentView: View {
                     .transition(.opacity)
             } else {
                 standaloneView
+                    .typrWhatsNew()
                     .transition(.opacity)
             }
         }
@@ -310,6 +311,7 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    TyprSettingsLink()
                 }
                 .padding(.top, 8)
 
