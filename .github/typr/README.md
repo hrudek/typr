@@ -12,18 +12,26 @@ TestFlight (typr-ci.yml): push to dev with changed app inputs → unsigned archi
 Runner retry (typr-retry.yml): re-runs macOS jobs that never got a runner (5/10/20 min)
 Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CODE_OAUTH_TOKEN is unset
 Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commits onto upstream dev
-  → Linux checks + overlay check → push dev [skip ci] → disable upstream workflows → start TestFlight /
+  → squash them by feature → Linux checks + overlay check → push dev [skip ci] → disable upstream workflows → start TestFlight /
   Simulator tests when their inputs changed
 ```
 
 - **Sync** (`sync.sh`): Typr commits = `dev` since its merge-base with upstream `dev`. Nothing
-  new upstream: no push. `AGENTS.md` conflicts keep Typr's file; other conflicts go to Claude
+  new upstream and no new Typr commits: no push. `AGENTS.md` conflicts keep Typr's file; other conflicts go to Claude
   (`sync-resolve.sh`, file tools on copies of the conflicted files only) or fail red without a
   push when `CLAUDE_CODE_OAUTH_TOKEN` is unset. Checks run in a job without secrets; the push job
   runs no repository code and pushes with the write deploy key `TYPR_SYNC_DEPLOY_KEY`
   (GITHUB_TOKEN may not push workflow files). An empty `[skip ci]` commit on top keeps the push
   from starting any workflow, so new upstream workflows are disabled before they run; the next
   sync drops it. A push whose old `dev` is gone builds and tests everything.
+
+- **Feature commits** (`sync-group.py`): after the rebase, Typr commits without a
+  `Typr-Feature: <slug>` trailer are new. Claude (Haiku, JSON only) sorts them into existing
+  feature commits or new ones; existing ones are only extended, never regrouped. Each file lives
+  in one commit: `.github/**` and `AGENTS.md` in `ci`, features sharing a file are merged. The
+  body lists the folded subjects and `PRs: #a, #b`. Bad AI output, a timeout or no token group by
+  area (`ci` vs `typr`); a tree that differs from the plain rebase keeps the plain rebase. The
+  step summary shows what went where.
 
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
   scripts, plus `app.json`, `overlay.py`, `rebrand.py`, `wordmark.py`, `wordmark/`,

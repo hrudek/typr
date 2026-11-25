@@ -45,9 +45,23 @@ class SyncTests(unittest.TestCase):
         outputs = dict(line.split('=', 1) for line in self.out.read_text().splitlines())
         return run.returncode, outputs
 
-    def test_nothing_new_upstream_is_a_noop(self):
+    def test_nothing_new_upstream_or_typr_is_a_noop(self):
+        self.git('switch', '-q', 'dev')
+        self.git('reset', '-q', '--hard', 'upstream')
+        self.commit('feat(typr): hook\n\nTypr-Feature: hook', {'Typr.swift': 'typr\n'})
+        self.git('commit', '-q', '--allow-empty', '-m', 'chore(typr): upstream sync [skip ci]')
         status, outputs = self.sync('plan', 'dev', 'upstream')
-        self.assertEqual((status, outputs['noop']), (0, 'true'))
+        self.assertEqual((status, outputs['new'], outputs['noop']), (0, '0', 'true'))
+        self.commit('fix(typr): hook (#3)', {'Typr.swift': 'typr fixed\n'})
+        status, outputs = self.sync('plan', 'dev', 'upstream')
+        self.assertEqual((status, outputs['new'], outputs['noop']), (0, '1', 'false'))
+
+    def test_new_typr_commits_alone_rebase_and_drop_the_marker(self):
+        self.git('switch', '-q', 'dev')
+        self.git('commit', '-q', '--allow-empty', '-m', 'chore(typr): upstream sync [skip ci]')
+        status, outputs = self.sync('rebase')
+        self.assertEqual(status, 0)
+        self.assertEqual(self.git('log', '--format=%s', 'upstream..HEAD'), 'typr hook\ntypr guide')
 
     def test_rebase_keeps_the_typr_agents_md(self):
         self.commit('upstream news', {'AGENTS.md': 'new upstream guide\n', 'other.rs': 'x\n'})
@@ -83,13 +97,19 @@ def job(name):
 
 class WorkflowJobTests(unittest.TestCase):
     def test_jobs_after_a_skipped_resolve_still_run(self):
-        for name, needs in (('validate', 'resolve'), ('push', 'validate')):
+        for name, needs in (('group', 'resolve'), ('validate', 'group'), ('push', 'validate')):
             with self.subTest(job=name):
                 condition = re.search(r'^    if: >-\n((?:      .+\n)+)', job(name), re.M).group(1)
                 self.assertIn('!cancelled()', condition)
                 self.assertIn("needs.rebase.result == 'success'", condition)
                 self.assertIn("needs.rebase.outputs.noop == 'false'", condition)
                 self.assertIn(f"needs.{needs}.result == 'success'", condition)
+
+    def test_regrouping_keeps_the_tree_so_lanes_follow_the_inputs_only(self):
+        self.assertIn('git diff --quiet rebased "$head"', job('group'))
+        self.assertIn('fingerprint.sh . "$START" "$mode"', job('validate'))
+        self.assertIn('fingerprint.sh . HEAD "$mode"', job('validate'))
+        self.assertIn('[skip ci]', job('push'))
 
 
 class WorkflowFilterTests(unittest.TestCase):

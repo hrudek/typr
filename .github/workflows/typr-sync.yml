@@ -134,12 +134,68 @@ jobs:
           echo "::error::Rebase conflicts in: $CONFLICTS. Claude could not resolve them; nothing was pushed."
           echo "Conflicts in \`$CONFLICTS\` rebasing \`${START:0:8}\` onto upstream \`${UPSTREAM:0:8}\`; nothing pushed." >> "$GITHUB_STEP_SUMMARY"
 
-  validate:
-    name: Check the rebased dev
+  # sync-group.py keeps the plain rebase's tree, so squashing alone changes no iOS lane below.
+  group:
+    name: Squash Typr commits by feature
     needs: [rebase, resolve]
     if: >-
       !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
       && (needs.rebase.outputs.conflicts == '' || needs.resolve.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: typr-agent
+    env:
+      START: ${{ needs.rebase.outputs.start }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.rebase.outputs.start }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}
+      - name: Load the rebased dev
+        id: load
+        run: |
+          cp -R .github/typr "$RUNNER_TEMP/typr"
+          git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" "$UPSTREAM"
+          git fetch -q "$RUNNER_TEMP/sync.bundle" refs/heads/typr-sync:refs/heads/rebased
+          echo "new=$(python3 "$RUNNER_TEMP/typr/sync-group.py" new "$UPSTREAM" rebased)" | tee -a "$GITHUB_OUTPUT"
+      - name: Install Claude Code
+        if: steps.load.outputs.new != '0'
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [[ -n "$TOKEN" ]] || { echo '::warning::CLAUDE_CODE_OAUTH_TOKEN is unset; grouping by area'; exit 0; }
+          npm install --no-fund --no-audit --prefix "$RUNNER_TEMP/claude" @anthropic-ai/claude-code@2.1.309
+          echo "CLAUDE_BIN=$RUNNER_TEMP/claude/node_modules/.bin/claude" >> "$GITHUB_ENV"
+      - name: Squash by feature
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          head=$(CLAUDE_BIN="${CLAUDE_BIN:-}" python3 "$RUNNER_TEMP/typr/sync-group.py" group "$UPSTREAM" rebased)
+          git diff --quiet rebased "$head"
+          git branch -f typr-sync "$head"
+          git bundle create "$RUNNER_TEMP/sync.bundle" "$UPSTREAM..typr-sync"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}/sync.bundle
+          retention-days: 7
+          overwrite: true
+
+  validate:
+    name: Check the rebased dev
+    needs: [rebase, group]
+    if: >-
+      !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
+      && needs.group.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
