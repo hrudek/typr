@@ -33,8 +33,8 @@ Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commi
   App Group `group.dev.rudek.typr`; team `2ZNGF24932`; App Store Connect
   "Typr Keyboard" (`6832515139`), group "Typr Internal". Upstream's URL scheme stays.
   Build number = run number + `build_number_offsets[marketing version]`, 0 if unlisted,
-  always a plain integer. A re-run reuses the archived number, so it only differs when
-  the whole workflow re-runs, which nobody does after a successful upload.
+  always a plain integer. Re-runs keep the run number, so Apple rejects a rebuild after a
+  successful upload; push a new commit or use workflow_dispatch for a new number.
   Only 9.0.0 has an offset (1000, since typr-deprecated ended at 519 and 9.0.0 reached
   1002); the next upstream version resets to the bare run number. Marketing version
   is upstream's (`ios/project.yml`).

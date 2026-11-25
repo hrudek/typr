@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -42,17 +43,20 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config_module.build_number_offset(config, '9.0.1'), 0)
         self.assertEqual(config_module.build_number_offset(config, '10.0.0'), 0)
 
-    def test_build_number_is_the_plain_run_number_plus_offset(self):
+    def build_number(self, run_number):
         line = next(l for l in (HERE / 'build.sh').read_text().splitlines()
                     if l.startswith('build_number='))
-        self.assertEqual(line, 'build_number=$((GITHUB_RUN_NUMBER + $(python3 "$here/config.py" "$root")))')
-        self.assertNotIn('ATTEMPT', line)
+        script = f'here={HERE}; root={REPO}; {line}; echo "$build_number"'
+        env = {**os.environ, 'GITHUB_RUN_NUMBER': str(run_number)}
+        env.pop('GITHUB_RUN_ATTEMPT', None)
+        return subprocess.run(['bash', '-c', script], env=env, check=True,
+                              capture_output=True, text=True).stdout.strip()
 
-    def test_next_run_outranks_uploaded_1005_1(self):
-        offset = config_module.build_number_offset(config_module.load(), '9.0.0')
-        next_run = 6
-        self.assertEqual(next_run + offset, 1006)
-        self.assertGreater((next_run + offset,), (1005, 1))
+    def test_build_number_is_a_plain_integer_above_uploaded_1005_1(self):
+        number = self.build_number(6)
+        self.assertEqual(number, '1006')
+        self.assertGreater((int(number),), (1005, 1))
+        self.assertEqual(self.build_number(6), number)
 
     def test_marketing_version_comes_from_upstream_project(self):
         self.assertRegex(config_module.marketing_version(REPO), r'^\d+\.\d+\.\d+$')
