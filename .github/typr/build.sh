@@ -6,7 +6,7 @@ root=$(cd "$here/../.." && pwd)
 field() { python3 -c 'import json,os,sys; print(json.loads(os.environ["APP_CONFIG"])[sys.argv[1]])' "$1"; }
 scheme=$(field scheme) project=$(field project)
 bash "$here/prepare.sh"
-build_number="$((GITHUB_RUN_NUMBER + $(python3 "$here/config.py" "$root"))).${GITHUB_RUN_ATTEMPT:-1}"
+build_number=$((GITHUB_RUN_NUMBER + $(python3 "$here/config.py" "$root")))
 source "$here/cache-args.sh"
 cd "$root/ios"
 mkdir -p "$RUNNER_TEMP/output"
