@@ -2,7 +2,7 @@
 
 Builds upstream Hex's `ios/` as Typr. Nothing here changes upstream files in Git:
 `prepare.sh` runs `overlay.py` (identity, icon, no Bellhop feedback key, `wordmark.py`,
-`rebrand.py`), upstream's cleanup model fetch and `xcodegen` on the CI checkout.
+`mark.py`, `rebrand.py`), upstream's cleanup model fetch and `xcodegen` on the CI checkout.
 
 ```text
 Checks (typr-checks.yml): script tests, ShellCheck, actionlint; scope + labels on PRs
@@ -27,7 +27,7 @@ Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commi
 
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
   scripts, plus `app.json`, `overlay.py`, `rebrand.py`, `wordmark.py`, `wordmark/`,
-  `prepare.sh` and `AppIcon.icon`. Tests,
+  `mark.py`, `mark/`, `prepare.sh` and `AppIcon.icon`. Tests,
   `tests/fixtures/vocabulary/audio` and `tests/fixtures/hex-words` only start simulator
   tests. Rust, Android, site, docs and other pipeline edits start no macOS job.
 - **Identity** (`app.json`): `dev.rudek.typr`, `.keyboard`, `.widgets`, `.tests`;

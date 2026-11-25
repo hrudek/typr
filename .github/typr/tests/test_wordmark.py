@@ -63,6 +63,7 @@ class WordmarkOverlayTests(unittest.TestCase):
         view = self.view.read_text()
         self.assertEqual(view.count('Image("TyprWordmark")\n'), wordmark.HEADERS)
         self.assertEqual(view.count('.accessibilityLabel("Typr")'), wordmark.HEADERS)
+        self.assertNotIn('HexMarkView(', view)
         self.assertNotIn('Text("Typr")', view)
         self.assertIn('.navigationTitle("Typr")', view)
         self.assertIn('Text("Typr")', (self.ios / 'HEXWidgets/HexDictationControl.swift').read_text())
@@ -74,7 +75,7 @@ class WordmarkOverlayTests(unittest.TestCase):
     def test_changed_upstream_header_fails_loudly(self):
         text = self.view.read_text()
         self.view.write_text(text.replace('.tracking(-0.2)', '.tracking(-0.3)', 1))
-        with self.assertRaisesRegex(ValueError, 'expected 2 header name'):
+        with self.assertRaisesRegex(ValueError, 'expected 2 header lockup'):
             overlay.apply(self.root, self.config)
 
 
