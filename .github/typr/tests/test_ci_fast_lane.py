@@ -66,7 +66,7 @@ class FastLaneContracts(unittest.TestCase):
             self.assertIn('concurrency:', job(name))
             self.assertIn("&& 'push'", job(name))
             self.assertIn("cancel-in-progress: ${{ github.event_name == 'push' }}", job(name))
-            self.assertIn('needs: decide', job(name))
+            self.assertRegex(job(name), r'needs: (decide|\[decide, changelog\])\n')
         self.assertIn('group: typr-ci-sign-${{ needs.decide.outputs.sign }}', job('sign'))
         self.assertIn('cancel-in-progress: false', job('sign'))
 

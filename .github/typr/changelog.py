@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Write TyprChangelog.json for one TestFlight build and the record of what it contains.
 
-Usage: changelog.py <head> <upstream> <build> <out-dir>
+Usage: changelog.py <head> <upstream> <build> <previous-record> <out-dir>
 
 <upstream> is upstream Hex's dev; the build's upstream base is merge-base(<head>, <upstream>).
-The previous build is the newest annotated tag under refs/tags/typr-build/ whose message is
-a record ({"upstream": sha, "prs": [...]}); the TestFlight workflow creates it after an upload.
+<previous-record> is the record.json of the last uploaded build ({"upstream": sha, "prs": [...]});
+a missing or invalid file, or one whose upstream base is not an ancestor, counts as none.
 Section "typr": Typr PRs (GH_BIN, repo GH_REPO, merged into dev) named in the Typr commits
 and not in the previous record, without ci/test/docs/chore/build/style titles or PRs whose
 commits change only CI files (.github/**, AGENTS.md). Section "hex": upstream commits since
@@ -27,11 +27,10 @@ spec = importlib.util.spec_from_file_location('sync_group', Path(__file__).with_
 sync_group = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sync_group)
 
-TAGS = 'refs/tags/typr-build/'
 WINDOW_DAYS = 7
 MAX_ITEMS = 30
 SHA = re.compile(r'^[0-9a-f]{40}$')
-TYPE = re.compile(r'^(\w+)(\([^)]*\))?!?: ')
+TYPE = re.compile(r'^(feat|fix|perf|refactor|revert|ci|test|docs|chore|build|style)(\([^)]*\))?!?: ')
 HIDDEN_TYPES = {'ci', 'test', 'docs', 'chore', 'build', 'style'}
 TRAILING_PRS = re.compile(r'(\s*\(#\d+\))+$')
 UPSTREAM_PR = re.compile(r'\(#(\d{1,6})\)')
@@ -57,26 +56,19 @@ def is_app_input(path):
                                 'ios/ExportOptions.plist'))
 
 
-def previous_record(base):
-    """The newest build record whose upstream base is an ancestor of this one, or None."""
-    out = git('for-each-ref', '--sort=-creatordate', '--format=%(objecttype)%00%(contents)%01',
-              TAGS)
-    for entry in out.split('\x01'):
-        kind, _, message = entry.strip('\n').partition('\0')
-        if kind != 'tag':
-            continue
-        try:
-            record = json.loads(message)
-            upstream, prs = record['upstream'], record['prs']
-        except (ValueError, KeyError, TypeError):
-            continue
-        if not (isinstance(upstream, str) and SHA.match(upstream)
-                and isinstance(prs, list) and all(isinstance(n, int) for n in prs)):
-            continue
-        if subprocess.run(['git', 'merge-base', '--is-ancestor', upstream, base],
-                          capture_output=True).returncode == 0:
-            return record
-    return None
+def previous_record(path, base):
+    """The record at path when it is valid and its upstream base is an ancestor of base."""
+    try:
+        record = json.loads(Path(path).read_text())
+        upstream, prs = record['upstream'], record['prs']
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not (isinstance(upstream, str) and SHA.match(upstream)
+            and isinstance(prs, list) and all(isinstance(n, int) for n in prs)):
+        return None
+    ancestor = subprocess.run(['git', 'merge-base', '--is-ancestor', upstream, base],
+                              capture_output=True).returncode == 0
+    return record if ancestor else None
 
 
 def plain_title(subject, limit=120):
@@ -182,15 +174,15 @@ def build_changelog(build, sections, now):
 
 
 def main(argv):
-    if len(argv) != 5:
+    if len(argv) != 6:
         print(__doc__, file=sys.stderr)
         return 2
-    head, upstream, build, out_dir = argv[1:]
+    head, upstream, build, record_path, out_dir = argv[1:]
     now = datetime.now(timezone.utc).replace(microsecond=0)
     since = now - timedelta(days=WINDOW_DAYS)
     base = git('merge-base', head, upstream).strip()
     prs = typr_prs(base, head)
-    previous = previous_record(base)
+    previous = previous_record(record_path, base)
     sections = [('typr', typr_items(prs, previous, since)),
                 ('hex', hex_items(base, previous, since))]
     changelog = build_changelog(build, sections, now)

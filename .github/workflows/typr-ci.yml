@@ -53,9 +53,59 @@ jobs:
           REPO: ${{ github.server_url }}/${{ github.repository }}
         run: bash .github/typr/decide-lanes.sh
 
+  changelog:
+    name: Changelog
+    needs: decide
+    if: needs.decide.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    environment: ${{ github.ref == 'refs/heads/dev' && 'typr-agent' || '' }}
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Install Claude Code
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [[ -n "$TOKEN" ]] || { echo '::notice::CLAUDE_CODE_OAUTH_TOKEN is unset; plain titles'; exit 0; }
+          if npm install --no-fund --no-audit --prefix "$RUNNER_TEMP/claude" @anthropic-ai/claude-code@2.1.309; then
+            echo "CLAUDE_BIN=$RUNNER_TEMP/claude/node_modules/.bin/claude" >> "$GITHUB_ENV"
+          else
+            echo '::warning::Installing Claude Code failed; plain titles'
+          fi
+      - name: Changes since the last uploaded build
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          git fetch -q --no-tags --filter=blob:none https://github.com/anomalyco/hex.git +refs/heads/dev:refs/remotes/upstream/dev
+          run=$(gh api "repos/$GH_REPO/actions/artifacts?name=typr-build-record&per_page=1" --jq '.artifacts[] | select(.expired | not) | .workflow_run.id')
+          if [[ -n "$run" ]]; then
+            gh run download "$run" -n typr-build-record -D "$RUNNER_TEMP/previous"
+          fi
+          build=$((GITHUB_RUN_NUMBER + $(python3 .github/typr/config.py .)))
+          CLAUDE_BIN="${CLAUDE_BIN:-}" python3 .github/typr/changelog.py HEAD upstream/dev "$build" \
+            "$RUNNER_TEMP/previous/record.json" "$RUNNER_TEMP/changelog" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-changelog-${{ github.run_id }}
+          path: ${{ runner.temp }}/changelog/
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: Unsigned archive
-    needs: decide
+    needs: [decide, changelog]
     if: needs.decide.outputs.build == 'true'
     concurrency:
       group: typr-ci-build-${{ github.event_name == 'push' && 'push' || github.ref }}
@@ -77,6 +127,20 @@ jobs:
             tests/fixtures/vocabulary
             tests/fixtures/hex-words
           persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        continue-on-error: true
+        with:
+          name: typr-changelog-${{ github.run_id }}
+          path: ${{ runner.temp }}/changelog
+      - name: Bundle the changelog into the app
+        run: |
+          if [[ -f "$RUNNER_TEMP/changelog/TyprChangelog.json" ]]; then
+            mkdir -p ios/HEXMobile/Typr
+            cp "$RUNNER_TEMP/changelog/TyprChangelog.json" ios/HEXMobile/Typr/
+            echo 'Bundled TyprChangelog.json' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No changelog bundled' >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Install pinned artifact encryption tool
         run: bash .github/typr/install-age.sh
       - name: Select and verify Xcode
@@ -204,3 +268,22 @@ jobs:
       - name: Remove signing material
         if: always()
         run: bash .github/typr/cleanup-signing.sh
+
+  record:
+    name: Record build for the next changelog
+    needs: [decide, changelog, sign]
+    if: needs.decide.outputs.sign == 'testflight' && needs.sign.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-changelog-${{ github.run_id }}
+          path: ${{ runner.temp }}/changelog
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-build-record
+          path: ${{ runner.temp }}/changelog/record.json
+          if-no-files-found: error
+          retention-days: 90
