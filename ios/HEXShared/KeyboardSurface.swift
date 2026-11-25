@@ -1491,12 +1491,12 @@ struct KeyboardSurfaceView: View {
     private func returnFill(_ p: KeyboardChromePalette) -> (idle: Color, pressed: Color)? {
         guard model.returnKey.isAction, !isTrackpadActive else { return nil }
         return model.returnKeyEnabled
-            ? (p.actionFill, p.actionPressedFill)
+            ? TyprReturnKeyAccent.fills(p.actionFill, p.actionPressedFill, isDark: p.isDark)
             : (p.actionDisabledFill, p.actionDisabledFill)
     }
 
     private func returnInk(_ p: KeyboardChromePalette) -> Color {
         if !model.returnKeyEnabled { return p.returnDisabledInk }
-        return model.returnKey.isAction ? .white : p.textBase
+        return model.returnKey.isAction ? Color(TyprReturnKeyAccent.glyph(isDark: p.isDark)) : p.textBase
     }
 }

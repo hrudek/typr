@@ -175,7 +175,7 @@ final class KeyboardKeyPlaneView: UIView {
                 let isAction = returnStyle.isAction && !hideGlyphs
                 let activeAction = isAction && returnIsEnabled
                 let fill: UIColor = if activeAction {
-                    isPressed ? palette.actionPressedFill : palette.actionFill
+                    TyprReturnKeyAccent.fill(palette.actionFill, palette.actionPressedFill, isDark: palette.isDark, pressed: isPressed)
                 } else if isAction {
                     palette.actionDisabledFill
                 } else {
@@ -184,7 +184,7 @@ final class KeyboardKeyPlaneView: UIView {
                 let ink: UIColor = if !returnIsEnabled {
                     palette.returnDisabledInk
                 } else if activeAction {
-                    .white
+                    TyprReturnKeyAccent.glyph(isDark: palette.isDark)
                 } else {
                     palette.keyText
                 }
