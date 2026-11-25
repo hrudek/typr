@@ -5,6 +5,7 @@ import re
 import sys
 
 from config import keyboard_display_name, load
+import mark
 import rebrand
 import wordmark
 
@@ -71,6 +72,7 @@ def apply(root, config):
             raise ValueError(f'Expected one `{declaration}`; upstream moved it')
     (ios / 'HEXMobile/Feedback.local.xcconfig').write_text('BELLHOP_REPORT_KEY =\n')
     wordmark.apply(ios)
+    mark.apply(ios)
     rebrand.apply(ios)
     verify(root, config)
 
