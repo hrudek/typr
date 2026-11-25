@@ -6,6 +6,7 @@ import sys
 
 from config import keyboard_display_name, load
 import rebrand
+import wordmark
 
 UPSTREAM_TEAM = '5NZ4Q7NXJ4'
 UPSTREAM_BUNDLE = 'anomaly.hex.mobile'
@@ -69,6 +70,7 @@ def apply(root, config):
         if corpus.count(declaration) != 1:
             raise ValueError(f'Expected one `{declaration}`; upstream moved it')
     (ios / 'HEXMobile/Feedback.local.xcconfig').write_text('BELLHOP_REPORT_KEY =\n')
+    wordmark.apply(ios)
     rebrand.apply(ios)
     verify(root, config)
 
