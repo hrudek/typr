@@ -1,0 +1,333 @@
+name: Upstream sync
+run-name: "Upstream sync · ${{ github.event_name }}"
+
+# Daily at 04:00 Europe/Berlin: 02:00 UTC in summer (CEST), 03:00 UTC in winter (CET).
+on:
+  schedule:
+    - cron: "0 2 * * *"
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typr-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/anomalyco/hex.git
+
+jobs:
+  rebase:
+    name: Rebase onto upstream
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      noop: ${{ steps.plan.outputs.noop }}
+      start: ${{ steps.plan.outputs.start }}
+      upstream: ${{ steps.plan.outputs.upstream }}
+      conflicts: ${{ steps.rebase.outputs.conflicts }}
+    steps:
+      - name: Is it 04:00 in Berlin?
+        id: when
+        env:
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+        run: |
+          want=+0100
+          [[ "$CRON" != '0 2 * * *' ]] || want=+0200
+          if [[ "$EVENT" == schedule && "$(TZ=Europe/Berlin date +%z)" != "$want" ]]; then
+            echo "Not 04:00 in Berlin for cron '$CRON'; the other schedule runs today."
+          else
+            echo run=true >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: steps.when.outputs.run == 'true'
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Plan
+        id: plan
+        if: steps.when.outputs.run == 'true'
+        run: |
+          cp -R .github/typr "$RUNNER_TEMP/typr"
+          git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" +refs/heads/dev:refs/remotes/upstream/dev
+          bash "$RUNNER_TEMP/typr/sync.sh" plan HEAD upstream/dev
+      - name: Rebase the Typr commits
+        id: rebase
+        if: steps.plan.outputs.noop == 'false'
+        env:
+          START: ${{ steps.plan.outputs.start }}
+          UPSTREAM: ${{ steps.plan.outputs.upstream }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          status=0
+          bash "$RUNNER_TEMP/typr/sync.sh" rebase || status=$?
+          case "$status" in
+            0) git bundle create "$RUNNER_TEMP/sync.bundle" "$UPSTREAM..typr-sync" ;;
+            3) echo '::notice::Conflicts left for the resolve job' ;;
+            *) exit "$status" ;;
+          esac
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: steps.rebase.outcome == 'success' && steps.rebase.outputs.conflicts == ''
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}/sync.bundle
+          retention-days: 7
+
+  resolve:
+    name: Resolve conflicts with Claude
+    needs: rebase
+    if: needs.rebase.outputs.conflicts != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: typr-agent
+    env:
+      START: ${{ needs.rebase.outputs.start }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+      CONFLICTS: ${{ needs.rebase.outputs.conflicts }}
+    steps:
+      - name: Claude token present?
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [[ -n "$TOKEN" ]] && exit 0
+          echo "::error::Rebase conflicts in: $CONFLICTS. Nothing was pushed. Set CLAUDE_CODE_OAUTH_TOKEN in environment typr-agent or rebase by hand."
+          exit 1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.rebase.outputs.start }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Repeat the rebase up to the conflict
+        run: |
+          cp -R .github/typr "$RUNNER_TEMP/typr"
+          git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" "$UPSTREAM"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          status=0
+          bash "$RUNNER_TEMP/typr/sync.sh" rebase || status=$?
+          [[ "$status" == 3 ]] || { echo "::error::Expected the conflict again, got exit $status"; exit 1; }
+      - name: Install Claude Code
+        run: |
+          npm install --no-fund --no-audit --prefix "$RUNNER_TEMP/claude" @anthropic-ai/claude-code@2.1.309
+          "$RUNNER_TEMP/claude/node_modules/.bin/claude" --version
+      - name: Resolve and finish the rebase
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: CLAUDE_BIN="$RUNNER_TEMP/claude/node_modules/.bin/claude" bash "$RUNNER_TEMP/typr/sync-resolve.sh"
+      - name: Bundle
+        run: git bundle create "$RUNNER_TEMP/sync.bundle" "$UPSTREAM..typr-sync"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}/sync.bundle
+          retention-days: 7
+      - name: Report
+        if: failure()
+        run: |
+          echo "::error::Rebase conflicts in: $CONFLICTS. Claude could not resolve them; nothing was pushed."
+          echo "Conflicts in \`$CONFLICTS\` rebasing \`${START:0:8}\` onto upstream \`${UPSTREAM:0:8}\`; nothing pushed." >> "$GITHUB_STEP_SUMMARY"
+
+  group:
+    name: Squash Typr commits by feature
+    needs: [rebase, resolve]
+    if: >-
+      !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
+      && (needs.rebase.outputs.conflicts == '' || needs.resolve.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: typr-agent
+    env:
+      START: ${{ needs.rebase.outputs.start }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.rebase.outputs.start }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}
+      - name: Load the rebased dev
+        id: load
+        run: |
+          cp -R .github/typr "$RUNNER_TEMP/typr"
+          git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" "$UPSTREAM"
+          git fetch -q "$RUNNER_TEMP/sync.bundle" refs/heads/typr-sync:refs/heads/rebased
+          echo "new=$(python3 "$RUNNER_TEMP/typr/sync-group.py" new "$UPSTREAM" rebased)" | tee -a "$GITHUB_OUTPUT"
+      - name: Install Claude Code
+        if: steps.load.outputs.new != '0'
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [[ -n "$TOKEN" ]] || { echo '::warning::CLAUDE_CODE_OAUTH_TOKEN is unset; grouping by area'; exit 0; }
+          if npm install --no-fund --no-audit --prefix "$RUNNER_TEMP/claude" @anthropic-ai/claude-code@2.1.309; then
+            echo "CLAUDE_BIN=$RUNNER_TEMP/claude/node_modules/.bin/claude" >> "$GITHUB_ENV"
+          else
+            echo '::warning::Installing Claude Code failed; grouping by area'
+          fi
+      - name: Squash by feature
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          head=$(CLAUDE_BIN="${CLAUDE_BIN:-}" python3 "$RUNNER_TEMP/typr/sync-group.py" group "$UPSTREAM" rebased)
+          git diff --quiet rebased "$head"
+          git branch -f typr-sync "$head"
+          git bundle create "$RUNNER_TEMP/sync.bundle" "$UPSTREAM..typr-sync"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}/sync.bundle
+          retention-days: 7
+          overwrite: true
+      - name: Report
+        if: failure()
+        run: |
+          echo '::warning::Squashing by feature failed; pushing the plain rebase'
+          echo 'Squashing by feature failed; the plain rebase is pushed.' >> "$GITHUB_STEP_SUMMARY"
+
+  validate:
+    name: Check the rebased dev
+    needs: [rebase, resolve, group]
+    if: >-
+      !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
+      && (needs.rebase.outputs.conflicts == '' || needs.resolve.result == 'success')
+      && (needs.group.result == 'success' || needs.group.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      head: ${{ steps.load.outputs.head }}
+      app: ${{ steps.lanes.outputs.app }}
+      test: ${{ steps.lanes.outputs.test }}
+    env:
+      START: ${{ needs.rebase.outputs.start }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.rebase.outputs.start }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}
+      - name: Load the rebased dev
+        id: load
+        run: |
+          git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" "$UPSTREAM"
+          git fetch -q "$RUNNER_TEMP/sync.bundle" refs/heads/typr-sync:refs/heads/synced
+          git merge-base --is-ancestor "$UPSTREAM" synced
+          git switch -q --detach synced
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Linux checks
+        run: bash .github/typr/checks.sh
+      - name: Identity overlay still applies
+        run: |
+          git worktree add -q --detach "$RUNNER_TEMP/drift" HEAD
+          python3 .github/typr/overlay.py "$RUNNER_TEMP/drift"
+      - name: Which iOS lanes changed?
+        id: lanes
+        run: |
+          for mode in app test; do
+            changed=true
+            [[ "$(bash .github/typr/fingerprint.sh . "$START" "$mode")" != "$(bash .github/typr/fingerprint.sh . HEAD "$mode")" ]] || changed=false
+            echo "$mode=$changed" | tee -a "$GITHUB_OUTPUT"
+          done
+
+  # Runs no repository code: it holds the deploy key. The [skip ci] marker commit on top keeps
+  # the push from starting any workflow, so new upstream workflows are disabled before they can
+  # run; Typr's own workflows are dispatched by the lanes that changed. The next sync drops the
+  # empty marker (sync.sh rebases with --no-keep-empty).
+  push:
+    name: Push dev
+    needs: [rebase, validate]
+    # resolve is usually skipped; without !cancelled() that skip would skip this job too.
+    if: >-
+      !cancelled() && needs.rebase.result == 'success' && needs.rebase.outputs.noop == 'false'
+      && needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: typr-sync
+    permissions:
+      contents: read
+      actions: write
+    env:
+      START: ${{ needs.rebase.outputs.start }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+      HEAD_SHA: ${{ needs.validate.outputs.head }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      UPSTREAM_WORKFLOWS: '.workflows[] | select(.state == "active" and (.path | startswith(".github/workflows/")) and (.path | startswith(".github/workflows/typr-") | not)) | "\(.id) \(.path)"'
+      UPSTREAM_RUNS: '.workflow_runs[] | select(.status != "completed" and (.path | startswith(".github/workflows/typr-") | not)) | .id'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.rebase.outputs.start }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: typr-sync
+          path: ${{ runner.temp }}
+      - name: Load the checked head and mark it [skip ci]
+        run: |
+          git fetch -q --no-tags "$UPSTREAM_URL" "$UPSTREAM"
+          git fetch -q "$RUNNER_TEMP/sync.bundle" refs/heads/typr-sync:refs/heads/synced
+          [[ "$(git rev-parse synced)" == "$HEAD_SHA" ]]
+          git switch -q --detach synced
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -q --allow-empty -m "chore(typr): upstream sync to ${UPSTREAM:0:8} [skip ci]"
+      - name: Push dev
+        env:
+          KEY: ${{ secrets.TYPR_SYNC_DEPLOY_KEY }}
+        run: |
+          [[ -n "$KEY" ]] || { echo '::error::Set TYPR_SYNC_DEPLOY_KEY in environment typr-sync'; exit 1; }
+          install -m 600 /dev/null "$RUNNER_TEMP/key"
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/key"
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$RUNNER_TEMP/known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes"
+          status=0
+          git push --force-with-lease="refs/heads/dev:$START" "git@github.com:$GH_REPO.git" HEAD:refs/heads/dev || status=$?
+          rm -f "$RUNNER_TEMP/key"
+          exit "$status"
+      - name: Keep upstream workflows off
+        run: |
+          gh api "repos/$GH_REPO/actions/workflows" --paginate --jq "$UPSTREAM_WORKFLOWS" \
+            | while read -r id path; do
+                echo "::warning::Disabling upstream workflow $path"
+                gh api -X PUT "repos/$GH_REPO/actions/workflows/$id/disable"
+              done
+          gh api "repos/$GH_REPO/actions/runs?head_sha=$(git rev-parse HEAD)&per_page=100" --jq "$UPSTREAM_RUNS" \
+            | while read -r id; do
+                echo "::warning::Cancelling upstream run $id"
+                gh api -X POST "repos/$GH_REPO/actions/runs/$id/cancel" >/dev/null || true
+              done
+      - name: Start Typr's iOS lanes
+        env:
+          APP: ${{ needs.validate.outputs.app }}
+          TEST: ${{ needs.validate.outputs.test }}
+        run: |
+          [[ "$APP" != true ]] || gh workflow run typr-ci.yml --ref dev -f upload=true
+          [[ "$TEST" != true ]] || gh workflow run typr-simulator.yml --ref dev
+          {
+            echo '### Upstream sync'
+            echo "| | |"; echo "|---|---|"
+            echo "| Old dev | \`${START:0:8}\` |"
+            echo "| Upstream dev | \`${UPSTREAM:0:8}\` ($(git rev-list --count "$(git merge-base "$START" "$UPSTREAM")..$UPSTREAM") new commits) |"
+            echo "| New dev | \`$(git rev-parse --short=8 HEAD)\` ($(git rev-list --count "$UPSTREAM..$HEAD_SHA") Typr commits + [skip ci] marker) |"
+            echo "| TestFlight started | $APP |"
+            echo "| Simulator tests started | $TEST |"
+          } >> "$GITHUB_STEP_SUMMARY"

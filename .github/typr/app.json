@@ -1,0 +1,16 @@
+{
+  "app": "typr",
+  "directory": "ios",
+  "scheme": "HEXMobile",
+  "project": "HEXMobile.xcodeproj",
+  "product": "HEX",
+  "team_id": "2ZNGF24932",
+  "bundle_id": "dev.rudek.typr",
+  "app_group": "group.dev.rudek.typr",
+  "display_name": "Typr",
+  "extension_suffixes": ["keyboard", "widgets"],
+  "build_number_offsets": {"9.0.0": 1000},
+  "asc_app_id": "6832515139",
+  "asc_app_name": "Typr Keyboard",
+  "testflight_group": "Typr Internal"
+}
