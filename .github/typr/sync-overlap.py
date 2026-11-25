@@ -39,7 +39,8 @@ def plain(text, limit=200):
     """Untrusted text as inert one-line Markdown: no formatting, links, mentions or HTML."""
     text = ' '.join(str(text).split())[:limit]
     text = re.sub(r'([\\`*_{}\[\]()<>#+!|~])', r'\\\1', text)
-    return text.replace('@', '@​').replace('#', '#​')
+    text = re.sub(r'(?i)(://|www\.)', lambda m: m.group(1)[:-1] + '\u200b' + m.group(1)[-1], text)
+    return text.replace('@', '@\u200b').replace('#', '#\u200b')
 
 
 def features(upstream, dev):
@@ -132,7 +133,7 @@ def issue(slug, key, found, feats, repo):
              'still needs its own version.', '',
              f'**Typr feature:** {plain(g.title)} (`{slug}`)', '',
              *(f'- {plain(n, 160)}' for n in notes[:8]), '',
-             f'Commit: https://github.com/{repo}/commit/{g.commits[-1].sha}', '',
+             f'Commit: the one with trailer `Typr-Feature: {slug}` on `dev`', '',
              f'PRs: {prs}', '', '**Upstream:**', '']
     if key.isdigit():
         lines.append(f'- PR: https://github.com/{UPSTREAM_REPO}/pull/{key}')
@@ -213,8 +214,11 @@ def main(argv):
         refs = [sync_group.git('rev-parse', f'{r}^{{commit}}').strip() for r in args]
         run(*refs, '--dry-run' in argv)
     except Exception as error:
-        detail = getattr(error, 'stderr', None) or error
-        message = f'Upstream overlap check failed ({type(error).__name__}: {str(detail)[:300]})'
+        detail = ' '.join(str(getattr(error, 'stderr', None) or error).split())[:300]
+        message = f'Upstream overlap check failed ({type(error).__name__}: {detail})'
+        if 'disabled issues' in detail:
+            message = (f'Issues are disabled on {os.environ.get("GH_REPO", "the repository")}; '
+                       'no overlap issue opened. Enable them in Settings › General › Features')
         print(f'::warning::{message}', file=sys.stderr)
         report([message + '; the sync is not affected.'])
     return 0

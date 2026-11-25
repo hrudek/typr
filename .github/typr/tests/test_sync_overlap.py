@@ -17,7 +17,7 @@ cat "$FAKE_REPLY"
 '''
 FAKE_GH = '''#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$FAKE_GH_LOG"
-[[ -z "${FAKE_GH_FAIL:-}" ]] || { echo 'gh broke' >&2; exit 1; }
+[[ -z "${FAKE_GH_FAIL:-}" ]] || { printf '%s\n' "$FAKE_GH_FAIL" >&2; exit 1; }
 case "$1 $2" in
   'issue list') cat "$FAKE_ISSUES" ;;
   'issue create') cat > "$FAKE_BODY"; echo https://github.com/hrudek/typr/issues/99 ;;
@@ -98,7 +98,8 @@ class Overlap(unittest.TestCase):
         self.assertIn('--label upstream-overlap', create)
         body = (self.tmp / 'body.md').read_text()
         self.assertTrue(body.startswith('<!-- typr-overlap: mechanical-keyboard 2850 -->'))
-        for text in ('https://github.com/anomalyco/hex/pull/2850',
+        self.assertNotIn('/commit/' + self.git('rev-parse', 'dev'), body)
+        for text in ('https://github.com/anomalyco/hex/pull/2850', 'Typr-Feature: mechanical-keyboard',
                      f'https://github.com/anomalyco/hex/commit/{self.mech_up}',
                      '[#1](https://github.com/hrudek/typr/pull/1)', 'Same key style', '0.90',
                      '- [ ] compare behaviour', '- [ ] remove Typr feature', '- [ ] keep Typr feature'):
@@ -150,8 +151,15 @@ class Overlap(unittest.TestCase):
     def test_ai_or_gh_failure_exits_zero_without_issues(self):
         run = self.run_overlap(raw='{}', CLAUDE_BIN='/nonexistent/claude')
         self.assertIn('the sync is not affected', run.stderr)
-        run = self.run_overlap([('mechanical-keyboard', self.mech_up, 0.9, 'x')], FAKE_GH_FAIL='1')
+        run = self.run_overlap([('mechanical-keyboard', self.mech_up, 0.9, 'x')], FAKE_GH_FAIL='gh broke')
         self.assertIn('gh broke', run.stderr)
+        self.assertEqual(self.created(), [])
+        self.assertIn('(CalledProcessError: gh broke); the sync is not affected.', self.summary())
+
+    def test_disabled_issues_are_named_in_the_summary(self):
+        self.run_overlap([('mechanical-keyboard', self.mech_up, 0.9, 'x')],
+                         FAKE_GH_FAIL="the 'hrudek/typr' repository has disabled issues")
+        self.assertIn('Issues are disabled on hrudek/typr; no overlap issue opened.', self.summary())
         self.assertEqual(self.created(), [])
 
     def test_dry_run_prints_issues_without_gh(self):
@@ -167,13 +175,14 @@ class Overlap(unittest.TestCase):
         self.assertIn('Would open: Upstream overlap: build', self.summary())
 
     def test_untrusted_text_cannot_ping_link_or_forge_a_marker(self):
-        reason = '@octocat [x](https://evil) <!-- typr-overlap: ci 1 --> `code` #12'
+        reason = ('@octocat [x](https://evil) <!-- typr-overlap: ci 1 --> `code` #12 '
+                  'https://evil.example/a WWW.evil.example')
         self.run_overlap([('mechanical-keyboard', self.mech_up, 0.9, reason)])
         body = (self.tmp / 'body.md').read_text()
         self.assertNotRegex(body, r'@\w')
-        self.assertNotIn('](https://evil)', body)
-        self.assertEqual(re.findall(r'<!-- typr-overlap', body), ['<!-- typr-overlap'])
         why = next(line for line in body.splitlines() if 'Why (Claude' in line)
+        self.assertNotRegex(why, r'(?i)://|www\.')
+        self.assertEqual(re.findall(r'<!-- typr-overlap', body), ['<!-- typr-overlap'])
         self.assertNotRegex(why, r'#\d')
 
 
