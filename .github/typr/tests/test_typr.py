@@ -1,6 +1,9 @@
 import importlib.util
+import json
+import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +44,43 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config_module.build_number_offset(config, '9.0.0'), 1000)
         self.assertEqual(config_module.build_number_offset(config, '9.0.1'), 0)
         self.assertEqual(config_module.build_number_offset(config, '10.0.0'), 0)
+
+    def run_build_sh(self, run_number, attempt):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            typr = root / '.github/typr'
+            typr.mkdir(parents=True)
+            for name in ('build.sh', 'config.py', 'app.json', 'cache-args.sh'):
+                shutil.copy(HERE / name, typr / name)
+            (typr / 'prepare.sh').write_text('')
+            (typr / 'package-archive.py').write_text('')
+            (root / 'ios').mkdir()
+            (root / 'ios/project.yml').write_text('MARKETING_VERSION: 9.0.0\n')
+            bin_dir = root / 'bin'
+            bin_dir.mkdir()
+            xcodebuild = bin_dir / 'xcodebuild'
+            xcodebuild.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$RUNNER_TEMP/xcodebuild.args"\n')
+            xcodebuild.chmod(0o755)
+            runner_temp = root / 'runner'
+            runner_temp.mkdir()
+            summary = root / 'summary.md'
+            env = {**os.environ, 'PATH': f'{bin_dir}:{os.environ["PATH"]}',
+                   'APP_CONFIG': json.dumps({'scheme': 'Typr', 'project': 'Typr.xcodeproj'}),
+                   'SOURCE_SHA': 'abc', 'RUNNER_TEMP': str(runner_temp),
+                   'ARTIFACT_AGE_RECIPIENT': 'age1x', 'GITHUB_RUN_NUMBER': str(run_number),
+                   'GITHUB_RUN_ATTEMPT': str(attempt), 'GITHUB_STEP_SUMMARY': str(summary)}
+            subprocess.run(['bash', str(typr / 'build.sh')], env=env, check=True,
+                           capture_output=True, text=True)
+            args = (runner_temp / 'xcodebuild.args').read_text().splitlines()
+            return args, summary.read_text()
+
+    def test_build_sh_passes_a_plain_integer_build_number_to_xcodebuild(self):
+        args, summary = self.run_build_sh(6, 1)
+        self.assertIn('CURRENT_PROJECT_VERSION=1006', args)
+        self.assertIn('Build number 1006', summary)
+        self.assertGreater((1006,), (1005, 1))
+        self.assertIn('CURRENT_PROJECT_VERSION=1006', self.run_build_sh(6, 2)[0])
+        self.assertIn('CURRENT_PROJECT_VERSION=1007', self.run_build_sh(7, 1)[0])
 
     def test_marketing_version_comes_from_upstream_project(self):
         self.assertRegex(config_module.marketing_version(REPO), r'^\d+\.\d+\.\d+$')
