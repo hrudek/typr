@@ -1,6 +1,8 @@
 import importlib.util
 import json
 from pathlib import Path
+import plistlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +23,7 @@ def module(name, filename):
 config_module = module('typr_config', 'config.py')
 overlay = module('typr_overlay', 'overlay.py')
 rebrand = module('typr_rebrand', 'rebrand.py')
+archive = module('typr_archive', 'archive.py')
 
 
 def literals(source):
@@ -140,6 +143,28 @@ class RebrandOverlayTests(unittest.TestCase):
     def test_new_identifier_literal_passes(self):
         self.edit('HEXMobile/ContentView.swift', lambda t: t + '\nlet cache = "HexBoostCache"\n')
         overlay.apply(self.root, self.config)
+
+    def test_keyboard_display_name_matches_the_onboarding_text(self):
+        overlay.apply(self.root, self.config)
+        project = (self.ios / 'project.yml').read_text()
+        names = re.findall(r'^\s+CFBundleDisplayName: (.+)$', project, re.MULTILINE)
+        self.assertEqual(sorted(names), ['Typr', 'Typr', 'Typr Keyboard'])
+        onboarding = (self.ios / 'HEXMobile/Onboarding.swift').read_text()
+        self.assertIn(f'Keyboards  ›  {names[1]}  ›  Allow Full Access', onboarding)
+        self.assertIn(f'title: "{names[1]}"', onboarding)
+
+    def test_archive_expects_the_keyboard_display_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = Path(tmp) / 'Products/Applications/Typr.app'
+            for path, identifier, name in ((app, 'dev.rudek.typr', 'Typr'),
+                                           (app / 'PlugIns/K.appex', 'dev.rudek.typr.keyboard', 'Typr Keyboard')):
+                path.mkdir(parents=True)
+                (path / 'Info.plist').write_bytes(plistlib.dumps(
+                    {'CFBundleIdentifier': identifier, 'CFBundleDisplayName': name}))
+            ids = ['dev.rudek.typr', 'dev.rudek.typr.keyboard']
+            archive.validate(tmp, ids, 'Typr')
+            with self.assertRaisesRegex(ValueError, 'Unexpected display name'):
+                archive.validate(tmp, ids, 'Other')
 
     def test_fails_loudly_when_upstream_moves(self):
         for name, old, new in (

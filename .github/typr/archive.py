@@ -5,6 +5,8 @@ from pathlib import Path
 import plistlib
 import sys
 
+from config import keyboard_display_name
+
 
 def bundles(archive):
     apps = list((Path(archive) / 'Products/Applications').glob('*.app'))
@@ -26,8 +28,10 @@ def validate(archive, expected, display_name=None):
         raise ValueError(f'Unexpected archive bundle IDs: {actual}; expected {set(expected)}')
     if display_name is not None:
         for bundle in bundles(archive):
-            name = plistlib.loads((bundle / 'Info.plist').read_bytes()).get('CFBundleDisplayName')
-            if name != display_name:
+            info = plistlib.loads((bundle / 'Info.plist').read_bytes())
+            name = info.get('CFBundleDisplayName')
+            wanted = keyboard_display_name(display_name) if info['CFBundleIdentifier'].endswith('.keyboard') else display_name
+            if name != wanted:
                 raise ValueError(f'Unexpected display name {name!r} in {bundle.name}')
 
 
