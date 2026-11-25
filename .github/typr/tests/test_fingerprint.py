@@ -21,7 +21,8 @@ BUILD = ('ios/HEXMobile/App.swift', 'ios/project.yml', 'ios/Package.resolved',
          'ios/scripts/fetch-cleanup-model.sh', 'ios/unknown.xcconfig',
          '.github/typr/app.json', '.github/typr/overlay.py', '.github/typr/prepare.sh',
          '.github/typr/AppIcon.icon/icon.json')
-TEST_ONLY = ('ios/HEXMobileTests/T.swift', 'tests/fixtures/vocabulary/audio/term-hex-1.wav')
+TEST_ONLY = ('ios/HEXMobileTests/T.swift', 'tests/fixtures/vocabulary/audio/term-hex-1.wav',
+             'tests/fixtures/hex-words/a.hexwords')
 
 
 class FingerprintTests(unittest.TestCase):
@@ -112,3 +113,14 @@ class ProjectReferencesTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SparseCheckoutTests(unittest.TestCase):
+    def test_build_jobs_check_out_every_fingerprint_input_outside_github(self):
+        listed = re.search(r'^test_only=\((.*)\)$', SCRIPT.read_text(), re.MULTILINE).group(1).split()
+        for name in ('typr-simulator.yml', 'typr-ci.yml'):
+            text = (REPO / '.github/workflows' / name).read_text()
+            block = re.search(r'sparse-checkout: \|\n((?:\s+\S+\n)+)', text).group(1).split()
+            for path in ['ios'] + listed:
+                with self.subTest(workflow=name, path=path):
+                    self.assertTrue(any(path == c or path.startswith(c + '/') for c in block), path)

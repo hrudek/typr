@@ -75,6 +75,7 @@ jobs:
             ios
             .github/typr
             tests/fixtures/vocabulary
+            tests/fixtures/hex-words
           persist-credentials: false
       - name: Install pinned artifact encryption tool
         run: bash .github/typr/install-age.sh
