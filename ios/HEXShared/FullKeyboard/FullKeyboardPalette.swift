@@ -41,14 +41,14 @@ struct FullKeyboardPalette: Equatable {
     var backdrop: UIColor { isDark ? Self.rgb(0x17181A) : Self.rgb(0xDFE1E6) }
 
     /// Text and marks on the glass: the strip, the emoji panel, menus.
-    var textBase: UIColor { isDark ? .white : .black }
+    var textBase: UIColor { TyprKeycaps.ink ?? (isDark ? .white : .black) }
     var textMuted: UIColor { isDark ? UIColor(white: 1, alpha: 0.56) : Self.rgb(0x525763) }
 
     /// Whether the keys are dark under light labels: Automatic's in Dark Mode, and every theme
     /// but White. Decides the labels and the emoji key's face.
     var keysAreDark: Bool { colors.map { !$0.hasDarkLabels } ?? isDark }
     /// A label or symbol on a key, its pop-up or the accent callout.
-    var keyText: UIColor { keysAreDark ? .white : .black }
+    var keyText: UIColor { TyprKeycaps.ink ?? (keysAreDark ? .white : .black) }
     /// The space bar's language name. On a tinted key, white at 0.7 keeps 5:1 or more where
     /// Automatic's 0.56 over grey keys would drop under 4.5:1.
     var keyTextMuted: UIColor {
@@ -168,6 +168,7 @@ enum HexMarkPath {
 extension CGContext {
     /// Draws a continuous-corner iOS 26 Liquid Glass keycap with no legacy under-shadow.
     func fillKeycap(_ rect: CGRect, fill: UIColor, shadow: UIColor = .clear, radius: CGFloat = FullKeyboardPalette.cornerRadius) {
+        if TyprKeycaps.fillKeycap(self, rect, fill: fill, radius: radius) { return }
         let path = UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath
         saveGState()
         if shadow != .clear {
