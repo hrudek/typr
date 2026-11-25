@@ -14,6 +14,9 @@ INFO_PLIST_STRINGS = 'HEXMobile/zh-Hans.lproj/InfoPlist.strings'
 PROJECT_STRINGS = (r'^(\s+(?:- )?(?:CFBundleDisplayName|NS\w+UsageDescription|CFBundleTypeName|UTTypeDescription): )'
                    r'(.*)$')
 TESTS = 'HEXMobileTests'
+# Settings lists the keyboard under the extension's display name, which is the app name
+# (overlay.py), so text telling users which keyboard to pick says that name.
+KEYBOARD_NAME = re.compile(r'(?<!Warm )Hex Keyboard')
 ANCHORS = ('Hex key', 'Open Hex', 'Dictate with Hex', 'Hex Keyboard', "Hex couldn't start the microphone. Try again.")
 
 
@@ -22,7 +25,9 @@ def names_other_app(text):
 
 
 def brand(text):
-    return text if names_other_app(text) else BRAND.sub('Typr', text)
+    if names_other_app(text):
+        return text
+    return BRAND.sub('Typr', KEYBOARD_NAME.sub('Typr', text))
 
 
 def brand_test_literal(text):
@@ -145,6 +150,9 @@ def rebrand_catalog(path):
     strings = {}
     for key, entry in catalog['strings'].items():
         new_key = brand(key)
+        if new_key != key and (new_key in strings or new_key in catalog['strings']) and not names_other_app(key) \
+                and set(catalog_strings(entry, brand)) <= {new_key}:
+            continue  # identity translation of a key that already exists, e.g. "Hex Keyboard" -> "Typr"
         if new_key in strings or (new_key != key and new_key in catalog['strings']):
             raise ValueError(f'{path.name}: "{key}" would replace the existing key "{new_key}"')
         if not names_other_app(key):

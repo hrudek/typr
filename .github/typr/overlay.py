@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import sys
 
-from config import keyboard_display_name, load
+from config import load
 import mark
 import rebrand
 import wordmark
@@ -31,9 +31,7 @@ def patch_project(text, config):
     text = sub(text, rf'^(\s+DEVELOPMENT_TEAM: ){UPSTREAM_TEAM}$', rf'\g<1>{config["team_id"]}', 1, 'team')
     text = sub(text, rf'^(\s+PRODUCT_BUNDLE_IDENTIFIER: ){re.escape(UPSTREAM_BUNDLE)}((?:\.(?:keyboard|widgets|tests))?)$',
                rf'\g<1>{ids}\g<2>', 4, 'bundle IDs')
-    text = sub(text, r'^(\s+CFBundleDisplayName: )Hex Keyboard$',
-               rf'\g<1>{keyboard_display_name(config["display_name"])}', 1, 'keyboard display name')
-    text = sub(text, r'^(\s+CFBundleDisplayName: )Hex$', rf'\g<1>{config["display_name"]}', 2, 'display names')
+    text = sub(text, r'^(\s+CFBundleDisplayName: )Hex(?: Keyboard)?$', rf'\g<1>{config["display_name"]}', 3, 'display names')
     text = sub(text, rf'^(\s+- path: ){re.escape(UPSTREAM_ICON)}$', rf'\g<1>{TYPR_ICON}', 1, 'app icon')
     return text
 

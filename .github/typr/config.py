@@ -8,10 +8,6 @@ import sys
 HERE = Path(__file__).resolve().parent
 
 
-def keyboard_display_name(display_name):
-    return f'{display_name} Keyboard'
-
-
 def load():
     config = json.loads((HERE / 'app.json').read_text())
     if config['app'] != 'typr' or config['directory'] != 'ios':

@@ -142,7 +142,7 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(sorted(re.findall(r'PRODUCT_BUNDLE_IDENTIFIER: (\S+)', project)),
                          ['dev.rudek.typr', 'dev.rudek.typr.keyboard', 'dev.rudek.typr.tests',
                           'dev.rudek.typr.widgets'])
-        self.assertEqual(re.findall(r'CFBundleDisplayName: (.+)', project), ['Typr', 'Typr Keyboard', 'Typr'])
+        self.assertEqual(re.findall(r'CFBundleDisplayName: (.+)', project), ['Typr', 'Typr', 'Typr'])
         self.assertIn('DEVELOPMENT_TEAM: 2ZNGF24932', project)
         self.assertIn('- path: ../.github/typr/AppIcon.icon', project)
         self.assertIn('- hex-dictation', project)
