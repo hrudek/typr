@@ -42,6 +42,18 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config_module.build_number_offset(config, '9.0.1'), 0)
         self.assertEqual(config_module.build_number_offset(config, '10.0.0'), 0)
 
+    def test_build_number_is_the_plain_run_number_plus_offset(self):
+        line = next(l for l in (HERE / 'build.sh').read_text().splitlines()
+                    if l.startswith('build_number='))
+        self.assertEqual(line, 'build_number=$((GITHUB_RUN_NUMBER + $(python3 "$here/config.py" "$root")))')
+        self.assertNotIn('ATTEMPT', line)
+
+    def test_next_run_outranks_uploaded_1005_1(self):
+        offset = config_module.build_number_offset(config_module.load(), '9.0.0')
+        next_run = 6
+        self.assertEqual(next_run + offset, 1006)
+        self.assertGreater((next_run + offset,), (1005, 1))
+
     def test_marketing_version_comes_from_upstream_project(self):
         self.assertRegex(config_module.marketing_version(REPO), r'^\d+\.\d+\.\d+$')
 
