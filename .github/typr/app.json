@@ -9,7 +9,7 @@
   "app_group": "group.dev.rudek.typr",
   "display_name": "Typr",
   "extension_suffixes": ["keyboard", "widgets"],
-  "build_number_offset": 1000,
+  "build_number_offsets": {"9.0.0": 1000},
   "asc_app_id": "6832515139",
   "asc_app_name": "Typr Keyboard",
   "testflight_group": "Typr Internal"
