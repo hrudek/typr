@@ -41,10 +41,6 @@ SCHEMA = {
         'properties': {'id': {'type': 'string'}, 'text': {'type': 'string'}}}}}}
 
 
-def git(*args):
-    return sync_group.git(*args)
-
-
 def is_app_input(path):
     """fingerprint.sh's app mode, for paths under ios/."""
     if not path.startswith('ios/') or path.endswith('.md'):
@@ -80,7 +76,7 @@ def hex_items(base, previous, since):
     args = ['log', '--no-merges', '--format=%x1e%s', '--name-only', base]
     args += [f'^{previous["upstream"]}'] if previous else [f'--since={since.isoformat()}']
     items = []
-    for entry in git(*args).split('\x1e')[1:]:
+    for entry in sync_group.git(*args).split('\x1e')[1:]:
         subject, *paths = [line for line in entry.split('\n') if line]
         if not any(is_app_input(p) for p in paths):
             continue
@@ -180,7 +176,7 @@ def main(argv):
     head, upstream, build, record_path, out_dir = argv[1:]
     now = datetime.now(timezone.utc).replace(microsecond=0)
     since = now - timedelta(days=WINDOW_DAYS)
-    base = git('merge-base', head, upstream).strip()
+    base = sync_group.git('merge-base', head, upstream).strip()
     prs = typr_prs(base, head)
     previous = previous_record(record_path, base)
     sections = [('typr', typr_items(prs, previous, since)),
@@ -194,7 +190,7 @@ def main(argv):
         (out / 'TyprChangelog.json').write_text(json.dumps(changelog, ensure_ascii=False,
                                                            indent=1) + '\n')
     counts = ', '.join(f'{s["id"]}: {len(s["items"])}' for s in changelog['sections'])
-    print(f'Previous build: {previous["build"] if previous else "none"}; {counts or "no changes"}')
+    print(f'Previous build: {previous.get("build", "?") if previous else "none"}; {counts or "no changes"}')
     return 0
 
 
