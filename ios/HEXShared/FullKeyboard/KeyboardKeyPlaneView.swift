@@ -259,7 +259,7 @@ final class KeyboardKeyPlaneView: UIView {
     /// on the backdrop without a keycap; a press greys the keycap and raises no pop-up.
     private func drawNumberPadKey(
         _ key: KeyboardKey,
-        in frame: CGRect,
+        in cap: CGRect,
         pressed: Bool,
         landscape: Bool,
         context: CGContext,
@@ -270,10 +270,11 @@ final class KeyboardKeyPlaneView: UIView {
         // The digits are keys and take a theme; delete and the separator stand on iOS's glass,
         // so they keep the system's grey and ink even pressed.
         if digit {
-            context.fillKeycap(frame, fill: pressed ? palette.keyHeldFill : palette.keyFill, shadow: palette.keyShadow, radius: radius)
+            context.fillKeycap(cap, fill: pressed ? palette.keyHeldFill : palette.keyFill, shadow: palette.keyShadow, radius: radius)
         } else if pressed {
-            context.fillKeycap(frame, fill: palette.systemHeldFill, shadow: .clear, radius: radius)
+            context.fillKeycap(cap, fill: palette.systemHeldFill, shadow: .clear, radius: radius)
         }
+        let frame = TyprKeycaps.inkFrame(cap)
         let ink = digit ? palette.keyText : palette.textBase
         guard showGlyphs() else { return }
         if key.kind == .delete {

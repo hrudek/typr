@@ -105,6 +105,98 @@ final class TyprMechanicalKeyboardTests: XCTestCase {
         XCTAssertEqual(render(view.plane), off)
     }
 
+    func testKeyTextTakesTheKeycapInkOnlyWhenOn() {
+        for theme in KeyboardTheme.allCases {
+            for isDark in [false, true] {
+                let palette = FullKeyboardPalette(isDark: isDark, theme: theme)
+                let upstream: UIColor = palette.keysAreDark ? .white : .black
+                TyprKeycaps.designOverride = false
+                TyprKeycaps.begin(palette)
+                XCTAssertTrue(palette.keyText.isEqual(upstream), "\(theme)")
+                TyprKeycaps.end()
+
+                TyprKeycaps.designOverride = true
+                TyprKeycaps.begin(palette)
+                XCTAssertTrue(palette.keyText.isEqual(TyprMechanicalKeycap(isDark: isDark).keyLabel), "\(theme)")
+                TyprKeycaps.end()
+                XCTAssertTrue(palette.keyText.isEqual(upstream), "\(theme)")
+            }
+        }
+    }
+
+    func testPressedNumberPadKeysTakeThePressedKeycap() {
+        TyprKeycaps.designOverride = true
+        let rect = CGRect(x: 8, y: 8, width: 33, height: 45)
+        for theme in [KeyboardTheme.automatic, .navy] {
+            for isDark in [false, true] {
+                let palette = FullKeyboardPalette(isDark: isDark, theme: theme)
+                let keycap = TyprMechanicalKeycap(isDark: isDark)
+                let pressed = render { keycap.draw(in: $0, rect: rect, face: keycap.keyPressedFill, radius: 8) }
+                for fill in [palette.keyHeldFill, palette.systemHeldFill] {
+                    let drawn = render { context in
+                        TyprKeycaps.begin(palette)
+                        context.fillKeycap(rect, fill: fill, radius: 8)
+                        TyprKeycaps.end()
+                    }
+                    XCTAssertEqual(drawn, pressed, "\(theme), dark: \(isDark), \(fill)")
+                }
+            }
+        }
+    }
+
+    func testNumberPadLabelsSitOnTheKeycapFace() throws {
+        let target = FixtureTextTarget()
+        target.keyboardType = .numberPad
+        let view = FullKeyboardView(model: KeyboardViewModel(), target: target)
+        view.appearanceOverride = true
+        view.engine.configureForField()
+        view.frame = CGRect(x: 0, y: 0, width: 393, height: view.preferredHeight)
+        view.layoutIfNeeded()
+        XCTAssertTrue(view.engine.layout.isNumberPad)
+        let five = try XCTUnwrap(view.engine.layout.key(.character("5")))
+
+        TyprKeycaps.designOverride = false
+        let off = render(view.plane)
+        let offInk = try inkBounds(view.plane, in: five.frame)
+        TyprKeycaps.designOverride = true
+        let onInk = try inkBounds(view.plane, in: five.frame)
+        let face = TyprMechanicalKeycap(isDark: true).faceRect(five.frame)
+        XCTAssertTrue(face.insetBy(dx: -1, dy: -1).contains(onInk), "\(onInk) on \(face)")
+        XCTAssertLessThan(onInk.maxY, offInk.maxY - 1, "the letters rise onto the face")
+        TyprKeycaps.designOverride = false
+        XCTAssertEqual(render(view.plane), off)
+    }
+
+    private func inkBounds(_ view: UIView, in rect: CGRect) throws -> CGRect {
+        let scale: CGFloat = 2
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.preferredRange = .standard
+        let image = try XCTUnwrap(
+            UIGraphicsImageRenderer(bounds: view.bounds, format: format).image { _ in view.draw(view.bounds) }.cgImage
+        )
+        let width = image.width
+        let height = image.height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB), let context = CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        XCTAssertTrue(drawn)
+        var ink = CGRect.null
+        for y in max(0, Int(rect.minY * scale))..<min(height, Int(rect.maxY * scale)) {
+            for x in max(0, Int(rect.minX * scale))..<min(width, Int(rect.maxX * scale)) where bytes[(y * width + x) * 4] >= 128 {
+                ink = ink.union(CGRect(x: CGFloat(x) / scale, y: CGFloat(y) / scale, width: 1 / scale, height: 1 / scale))
+            }
+        }
+        XCTAssertFalse(ink.isNull, "no ink in \(rect)")
+        return ink
+    }
+
     private func render(_ draw: (CGContext) -> Void) -> Data? {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 2
