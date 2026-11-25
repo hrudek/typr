@@ -1,0 +1,31 @@
+{
+  "fill": {
+    "solid": "srgb:0.015686,0.000000,0.000000,1.000000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "Image.png",
+          "name": "Typr wordmark",
+          "position": {
+            "scale": 0.5,
+            "translation-in-points": [0, 0]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": ["watchOS"],
+    "squares": "shared"
+  }
+}
