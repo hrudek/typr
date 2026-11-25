@@ -25,6 +25,7 @@ struct WhatsNewSheet: View {
                     .padding(.top, 36)
                     .padding(.bottom, 28)
 
+                TyprWhatsNewBuildSection(release: release)
                 VStack(alignment: .leading, spacing: 36) {
                     ForEach(release.items) { item in
                         WhatsNewItemView(item: item, pictureHeight: pictureHeight)
