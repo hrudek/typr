@@ -111,10 +111,6 @@ class ProjectReferencesTests(unittest.TestCase):
                     self.assertTrue(any(path.startswith(p + '/') or path == p for p in listed), path)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
-
 class SparseCheckoutTests(unittest.TestCase):
     def test_build_jobs_check_out_every_fingerprint_input_outside_github(self):
         listed = re.search(r'^test_only=\((.*)\)$', SCRIPT.read_text(), re.MULTILINE).group(1).split()
@@ -124,3 +120,7 @@ class SparseCheckoutTests(unittest.TestCase):
             for path in ['ios'] + listed:
                 with self.subTest(workflow=name, path=path):
                     self.assertTrue(any(path == c or path.startswith(c + '/') for c in block), path)
+
+
+if __name__ == '__main__':
+    unittest.main()
