@@ -37,12 +37,14 @@ struct TyprWhatsNew {
 
     let defaults: UserDefaults
 
-    /// The changelog to show at launch until `markSeen` records its build. A build with nothing
-    /// to show is recorded right away: a first launch records it silently, unless onboarding was
-    /// already done before it, which means an update from a build that predates the record.
-    func changelogToShow(build: Int, changelog: TyprChangelog?, onboardedBeforeLaunch: Bool) -> TyprChangelog? {
-        let lastSeen = defaults.object(forKey: Self.lastSeenBuildKey) as? Int
-        if let lastSeen, build <= lastSeen { return nil }
+    /// The changelog to show at launch until `markSeen` records its build. Any build other than
+    /// the recorded one is new: build numbers restart with each marketing version. A build with
+    /// nothing to show is recorded right away: a first launch records it silently, unless
+    /// onboarding was already done before it, which means an update from a build that predates
+    /// the record.
+    func changelogToShow(build: String, changelog: TyprChangelog?, onboardedBeforeLaunch: Bool) -> TyprChangelog? {
+        let lastSeen = defaults.string(forKey: Self.lastSeenBuildKey)
+        if build == lastSeen { return nil }
         guard let changelog, lastSeen != nil || onboardedBeforeLaunch else {
             markSeen(build: build)
             return nil
@@ -50,17 +52,23 @@ struct TyprWhatsNew {
         return changelog
     }
 
-    func markSeen(build: Int) {
+    func markSeen(build: String) {
         defaults.set(build, forKey: Self.lastSeenBuildKey)
     }
 
     static var currentBuild: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
     }
+
+    /// Marketing version and build, e.g. "9.0.0 (1042)".
+    static var installedBuild: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        return "\(version) (\(currentBuild))"
+    }
 }
 
 extension TyprChangelog: Identifiable {
-    var id: String { sections.map(\.id).joined() }
+    var id: String { "changelog" }
 }
 
 struct TyprWhatsNewSheet: View {
@@ -107,13 +115,13 @@ private struct TyprWhatsNewAtLaunch: ViewModifier {
     @State private var changelog: TyprChangelog?
     @State private var isOnScreen = false
     private let whatsNew = TyprWhatsNew(defaults: .standard)
-    private let build = Int(TyprWhatsNew.currentBuild)
+    private let build = TyprWhatsNew.installedBuild
 
     func body(content: Content) -> some View {
         content
             .onAppear {
                 isOnScreen = true
-                guard !OnboardingFixture.isSnapshot, let build else { return }
+                guard !OnboardingFixture.isSnapshot else { return }
                 changelog = whatsNew.changelogToShow(
                     build: build,
                     changelog: .bundled(),
@@ -124,7 +132,7 @@ private struct TyprWhatsNewAtLaunch: ViewModifier {
             .sheet(item: $changelog, onDismiss: {
                 // Home going away (a keyboard opening Typr) also dismisses the sheet; only a
                 // dismissal while Home stays counts as seen.
-                if isOnScreen, let build { whatsNew.markSeen(build: build) }
+                if isOnScreen { whatsNew.markSeen(build: build) }
             }) { TyprWhatsNewSheet(changelog: $0) }
     }
 }

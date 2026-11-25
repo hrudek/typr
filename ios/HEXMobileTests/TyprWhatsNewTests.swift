@@ -18,9 +18,11 @@ final class TyprWhatsNewTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
-    private func show(build: Int, changelog: TyprChangelog?, onboarded: Bool = true) -> TyprChangelog? {
+    private func show(build: String, changelog: TyprChangelog?, onboarded: Bool = true) -> TyprChangelog? {
         TyprWhatsNew(defaults: defaults).changelogToShow(build: build, changelog: changelog, onboardedBeforeLaunch: onboarded)
     }
+
+    private var recorded: String? { defaults.string(forKey: TyprWhatsNew.lastSeenBuildKey) }
 
     func testDecodesContractAndIgnoresUnknownKeys() throws {
         let json = """
@@ -50,32 +52,36 @@ final class TyprWhatsNewTests: XCTestCase {
     }
 
     func testFirstInstallRecordsBuildSilently() {
-        XCTAssertNil(show(build: 10, changelog: changelog, onboarded: false))
-        XCTAssertEqual(defaults.integer(forKey: TyprWhatsNew.lastSeenBuildKey), 10)
-        XCTAssertNil(show(build: 10, changelog: changelog))
-        XCTAssertEqual(show(build: 11, changelog: changelog), changelog)
+        XCTAssertNil(show(build: "9.0.0 (1010)", changelog: changelog, onboarded: false))
+        XCTAssertEqual(recorded, "9.0.0 (1010)")
+        XCTAssertNil(show(build: "9.0.0 (1010)", changelog: changelog))
+        XCTAssertEqual(show(build: "9.0.0 (1011)", changelog: changelog), changelog)
     }
 
     func testUpdateFromBuildBeforeTheRecordShowsUntilSeen() {
-        XCTAssertEqual(show(build: 10, changelog: changelog), changelog)
-        TyprWhatsNew(defaults: defaults).markSeen(build: 10)
-        XCTAssertNil(show(build: 10, changelog: changelog))
+        XCTAssertEqual(show(build: "9.0.0 (1010)", changelog: changelog), changelog)
+        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1010)")
+        XCTAssertNil(show(build: "9.0.0 (1010)", changelog: changelog))
     }
 
-    func testShowsUntilSeenOncePerNewerBuild() {
-        defaults.set(10, forKey: TyprWhatsNew.lastSeenBuildKey)
-        XCTAssertNil(show(build: 9, changelog: changelog))
-        XCTAssertNil(show(build: 10, changelog: changelog))
-        XCTAssertEqual(show(build: 12, changelog: changelog), changelog)
-        XCTAssertEqual(show(build: 12, changelog: changelog), changelog, "not dismissed yet")
-        TyprWhatsNew(defaults: defaults).markSeen(build: 12)
-        XCTAssertNil(show(build: 12, changelog: changelog))
-        XCTAssertEqual(defaults.integer(forKey: TyprWhatsNew.lastSeenBuildKey), 12)
+    func testShowsEachNewBuildUntilSeen() {
+        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1050)")
+        XCTAssertNil(show(build: "9.0.0 (1050)", changelog: changelog))
+        XCTAssertEqual(show(build: "9.0.0 (1051)", changelog: changelog), changelog)
+        XCTAssertEqual(show(build: "9.0.0 (1051)", changelog: changelog), changelog, "not dismissed yet")
+        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1051)")
+        XCTAssertNil(show(build: "9.0.0 (1051)", changelog: changelog))
+        XCTAssertEqual(recorded, "9.0.0 (1051)")
+    }
+
+    func testBuildNumberRestartingWithNextVersionShows() {
+        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1050)")
+        XCTAssertEqual(show(build: "9.1.0 (60)", changelog: changelog), changelog)
     }
 
     func testNoChangelogShowsNothingButRecordsBuild() {
-        defaults.set(10, forKey: TyprWhatsNew.lastSeenBuildKey)
-        XCTAssertNil(show(build: 11, changelog: nil))
-        XCTAssertEqual(defaults.integer(forKey: TyprWhatsNew.lastSeenBuildKey), 11)
+        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1010)")
+        XCTAssertNil(show(build: "9.0.0 (1011)", changelog: nil))
+        XCTAssertEqual(recorded, "9.0.0 (1011)")
     }
 }
