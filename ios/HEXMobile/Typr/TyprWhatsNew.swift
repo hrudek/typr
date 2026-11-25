@@ -37,14 +37,21 @@ struct TyprWhatsNew {
 
     let defaults: UserDefaults
 
-    /// The changelog to show at launch, at most once per build. The first launch records the
-    /// build without showing anything, unless onboarding was already done before it: then
-    /// this is an update from a build that predates the record.
+    /// The changelog to show at launch until `markSeen` records its build. A build with nothing
+    /// to show is recorded right away: a first launch records it silently, unless onboarding was
+    /// already done before it, which means an update from a build that predates the record.
     func changelogToShow(build: Int, changelog: TyprChangelog?, onboardedBeforeLaunch: Bool) -> TyprChangelog? {
         let lastSeen = defaults.object(forKey: Self.lastSeenBuildKey) as? Int
         if let lastSeen, build <= lastSeen { return nil }
+        guard let changelog, lastSeen != nil || onboardedBeforeLaunch else {
+            markSeen(build: build)
+            return nil
+        }
+        return changelog
+    }
+
+    func markSeen(build: Int) {
         defaults.set(build, forKey: Self.lastSeenBuildKey)
-        return lastSeen == nil && !onboardedBeforeLaunch ? nil : changelog
     }
 
     static var currentBuild: String {
@@ -98,18 +105,27 @@ struct TyprWhatsNewSheet: View {
 
 private struct TyprWhatsNewAtLaunch: ViewModifier {
     @State private var changelog: TyprChangelog?
+    @State private var isOnScreen = false
+    private let whatsNew = TyprWhatsNew(defaults: .standard)
+    private let build = Int(TyprWhatsNew.currentBuild)
 
     func body(content: Content) -> some View {
         content
             .onAppear {
-                guard !OnboardingFixture.isSnapshot, let build = Int(TyprWhatsNew.currentBuild) else { return }
-                changelog = TyprWhatsNew(defaults: .standard).changelogToShow(
+                isOnScreen = true
+                guard !OnboardingFixture.isSnapshot, let build else { return }
+                changelog = whatsNew.changelogToShow(
                     build: build,
                     changelog: .bundled(),
                     onboardedBeforeLaunch: OnboardingProgress.launchPage == nil
                 )
             }
-            .sheet(item: $changelog) { TyprWhatsNewSheet(changelog: $0) }
+            .onDisappear { isOnScreen = false }
+            .sheet(item: $changelog, onDismiss: {
+                // Home going away (a keyboard opening Typr) also dismisses the sheet; only a
+                // dismissal while Home stays counts as seen.
+                if isOnScreen, let build { whatsNew.markSeen(build: build) }
+            }) { TyprWhatsNewSheet(changelog: $0) }
     }
 }
 

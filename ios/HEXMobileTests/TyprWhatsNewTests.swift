@@ -56,16 +56,19 @@ final class TyprWhatsNewTests: XCTestCase {
         XCTAssertEqual(show(build: 11, changelog: changelog), changelog)
     }
 
-    func testUpdateFromBuildBeforeTheRecordShowsOnce() {
+    func testUpdateFromBuildBeforeTheRecordShowsUntilSeen() {
         XCTAssertEqual(show(build: 10, changelog: changelog), changelog)
+        TyprWhatsNew(defaults: defaults).markSeen(build: 10)
         XCTAssertNil(show(build: 10, changelog: changelog))
     }
 
-    func testShowsOncePerNewerBuild() {
+    func testShowsUntilSeenOncePerNewerBuild() {
         defaults.set(10, forKey: TyprWhatsNew.lastSeenBuildKey)
         XCTAssertNil(show(build: 9, changelog: changelog))
         XCTAssertNil(show(build: 10, changelog: changelog))
         XCTAssertEqual(show(build: 12, changelog: changelog), changelog)
+        XCTAssertEqual(show(build: 12, changelog: changelog), changelog, "not dismissed yet")
+        TyprWhatsNew(defaults: defaults).markSeen(build: 12)
         XCTAssertNil(show(build: 12, changelog: changelog))
         XCTAssertEqual(defaults.integer(forKey: TyprWhatsNew.lastSeenBuildKey), 12)
     }
