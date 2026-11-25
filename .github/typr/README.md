@@ -7,7 +7,8 @@ Builds upstream Hex's `ios/` as Typr. Nothing here changes upstream files in Git
 ```text
 Checks (typr-checks.yml): script tests, ShellCheck, actionlint; scope + labels on PRs
 Simulator tests (typr-simulator.yml): push to dev with changed test inputs; manual + screenshots
-TestFlight (typr-ci.yml): push to dev with changed app inputs → unsigned archive → sign → upload
+TestFlight (typr-ci.yml): push to dev with changed app inputs → changelog → unsigned archive → sign
+  → upload → build record
   manual: upload=true (dev only) or upload=false (archive + sign, any branch*)
 Runner retry (typr-retry.yml): re-runs macOS jobs that never got a runner (5/10/20 min)
 Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CODE_OAUTH_TOKEN is unset
@@ -39,6 +40,15 @@ Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commi
   and hex PR, deduped by a hidden marker across open and closed issues. The job alone has
   `issues: write`, holds no deploy key and cannot fail the sync.
 
+- **Changelog** (`changelog.py`): a Linux job writes `TyprChangelog.json` (German bullets
+  by Claude Haiku in `typr-agent`; plain titles without token, on a timeout or bad output) and
+  the archive job copies it to `ios/HEXMobile/Typr/`, so it is bundled but never committed.
+  "Typr": dev PRs named in the Typr commits and not in the last record, without CI-only PRs or
+  ci/test/docs/chore titles. "Von Hex": upstream commits since the last record's upstream
+  base that change app inputs. The record (upstream base + PR numbers) is the artifact
+  `typr-build-record`, uploaded only after a TestFlight upload and kept 90 days; without one
+  both sections look back 7 days. Any changelog failure leaves the app without the file and
+  the build goes on. A branch run has no `typr-agent` and gets plain titles.
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
   scripts, plus `app.json`, `overlay.py`, `rebrand.py`, `wordmark.py`, `wordmark/`,
   `mark.py`, `mark/`, `prepare.sh` and `AppIcon.icon`. Tests,
