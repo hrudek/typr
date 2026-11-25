@@ -91,6 +91,7 @@ final class KeyboardKeyPlaneView: UIView {
 
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
+        TyprKeycaps.begin(palette); defer { TyprKeycaps.end() }
         let layout = engine.layout
         // An iPad's keys are as large turned as upright, so they keep the portrait labels.
         let isLandscape = layout.orientation == .landscape && layout.metrics.pad == nil
@@ -115,9 +116,9 @@ final class KeyboardKeyPlaneView: UIView {
             // Keycaps on whole device pixels, as Apple draws them: crisp edges, not half-covered ones.
             let frame = pixelAligned(key.frame)
             // Row 4's labels sit where they would on Apple's taller row 4 (`bottomRowTrim`).
-            let labelFrame = key.row == 3
+            let labelFrame = TyprKeycaps.inkFrame(key.row == 3
                 ? CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height + layout.metrics.bottomRowTrim)
-                : frame
+                : frame)
             if layout.isNumberPad, key.kind != .hex, key.kind != .globe {
                 drawNumberPadKey(key, in: frame, pressed: pressed.contains(key.kind), landscape: layout.orientation == .landscape, context: context, radius: radius, showGlyphs: showGlyphs)
                 continue
@@ -174,7 +175,7 @@ final class KeyboardKeyPlaneView: UIView {
                 let isAction = returnStyle.isAction && !hideGlyphs
                 let activeAction = isAction && returnIsEnabled
                 let fill: UIColor = if activeAction {
-                    isPressed ? palette.actionPressedFill : palette.actionFill
+                    TyprReturnKeyAccent.fill(palette.actionFill, palette.actionPressedFill, isDark: palette.isDark, pressed: isPressed)
                 } else if isAction {
                     palette.actionDisabledFill
                 } else {
@@ -183,7 +184,7 @@ final class KeyboardKeyPlaneView: UIView {
                 let ink: UIColor = if !returnIsEnabled {
                     palette.returnDisabledInk
                 } else if activeAction {
-                    .white
+                    TyprReturnKeyAccent.glyph(isDark: palette.isDark)
                 } else {
                     palette.keyText
                 }
@@ -258,7 +259,7 @@ final class KeyboardKeyPlaneView: UIView {
     /// on the backdrop without a keycap; a press greys the keycap and raises no pop-up.
     private func drawNumberPadKey(
         _ key: KeyboardKey,
-        in frame: CGRect,
+        in cap: CGRect,
         pressed: Bool,
         landscape: Bool,
         context: CGContext,
@@ -269,10 +270,11 @@ final class KeyboardKeyPlaneView: UIView {
         // The digits are keys and take a theme; delete and the separator stand on iOS's glass,
         // so they keep the system's grey and ink even pressed.
         if digit {
-            context.fillKeycap(frame, fill: pressed ? palette.keyHeldFill : palette.keyFill, shadow: palette.keyShadow, radius: radius)
+            context.fillKeycap(cap, fill: pressed ? palette.keyHeldFill : palette.keyFill, shadow: palette.keyShadow, radius: radius)
         } else if pressed {
-            context.fillKeycap(frame, fill: palette.systemHeldFill, shadow: .clear, radius: radius)
+            context.fillKeycap(cap, fill: palette.systemHeldFill, shadow: .clear, radius: radius)
         }
+        let frame = TyprKeycaps.inkFrame(cap)
         let ink = digit ? palette.keyText : palette.textBase
         guard showGlyphs() else { return }
         if key.kind == .delete {
