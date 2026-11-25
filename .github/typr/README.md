@@ -13,7 +13,7 @@ Runner retry (typr-retry.yml): re-runs macOS jobs that never got a runner (5/10/
 Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CODE_OAUTH_TOKEN is unset
 Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commits onto upstream dev
   → squash them by feature → Linux checks + overlay check → push dev [skip ci] → disable upstream workflows → start TestFlight /
-  Simulator tests when their inputs changed
+  Simulator tests when their inputs changed → open upstream-overlap issues
 ```
 
 - **Sync** (`sync.sh`): Typr commits = `dev` since its merge-base with upstream `dev`. Nothing
@@ -32,6 +32,12 @@ Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commi
   body lists the folded subjects and `PRs: #a, #b`. Bad AI output, a timeout or no token group by
   area (`ci` vs `typr`); a tree that differs from the plain rebase keeps the plain rebase. The
   step summary shows what went where.
+
+- **Upstream overlap** (`sync-overlap.py`): after the push, Claude compares the upstream commits
+  the sync pulled in with the Typr features (`ci` only by its feat/fix bullets: branding, build
+  identity). Matches at confidence 0.7 or above open one `upstream-overlap` issue per feature
+  and hex PR, deduped by a hidden marker across open and closed issues. The job alone has
+  `issues: write`, holds no deploy key and cannot fail the sync.
 
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
   scripts, plus `app.json`, `overlay.py`, `rebrand.py`, `wordmark.py`, `wordmark/`,

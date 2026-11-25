@@ -27,6 +27,7 @@ jobs:
     outputs:
       noop: ${{ steps.plan.outputs.noop }}
       start: ${{ steps.plan.outputs.start }}
+      base: ${{ steps.plan.outputs.base }}
       upstream: ${{ steps.plan.outputs.upstream }}
       conflicts: ${{ steps.rebase.outputs.conflicts }}
     steps:
@@ -331,3 +332,46 @@ jobs:
             echo "| TestFlight started | $APP |"
             echo "| Simulator tests started | $TEST |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  overlap:
+    name: Upstream overlap with Typr features
+    needs: [rebase, validate, push]
+    if: >-
+      !cancelled() && needs.push.result == 'success'
+      && needs.rebase.outputs.base != needs.rebase.outputs.upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: typr-agent
+    permissions:
+      contents: read
+      issues: write
+    env:
+      BASE: ${{ needs.rebase.outputs.base }}
+      UPSTREAM: ${{ needs.rebase.outputs.upstream }}
+      HEAD_SHA: ${{ needs.validate.outputs.head }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.validate.outputs.head }}
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Install Claude Code
+        env:
+          TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          [[ -n "$TOKEN" ]] || { echo '::warning::CLAUDE_CODE_OAUTH_TOKEN is unset; no overlap check'; exit 0; }
+          if npm install --no-fund --no-audit --prefix "$RUNNER_TEMP/claude" @anthropic-ai/claude-code@2.1.309; then
+            echo "CLAUDE_BIN=$RUNNER_TEMP/claude/node_modules/.bin/claude" >> "$GITHUB_ENV"
+          else
+            echo '::warning::Installing Claude Code failed; no overlap check'
+          fi
+      - name: Open issues for overlaps
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" "$UPSTREAM"
+          CLAUDE_BIN="${CLAUDE_BIN:-}" python3 .github/typr/sync-overlap.py "$BASE" "$UPSTREAM" "$HEAD_SHA"
