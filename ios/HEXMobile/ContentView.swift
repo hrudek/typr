@@ -272,6 +272,7 @@ struct ContentView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    TyprSettingsLink()
                 }
                 .padding(.top, 8)
 
