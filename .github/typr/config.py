@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 
 HERE = Path(__file__).resolve().parent
 
@@ -25,7 +26,8 @@ def load():
         raise ValueError('App Group must be group.<bundle ID>')
     if not re.fullmatch(r'[A-Za-z0-9+ ._-]{1,30}', config['display_name']):
         raise ValueError('Invalid display name')
-    if not (isinstance(config['build_number_offset'], int) and config['build_number_offset'] >= 0):
+    offsets = config['build_number_offsets']
+    if not all(isinstance(v, int) and v > 0 for v in offsets.values()):
         raise ValueError('Invalid build number offset')
     for suffix in config['extension_suffixes']:
         if not re.fullmatch(r'[A-Za-z0-9-]+', suffix):
@@ -36,7 +38,26 @@ def load():
     return config
 
 
+def marketing_version(root):
+    tokens = re.findall(r'^\s*MARKETING_VERSION: *(.*?) *(?:#.*)?$',
+                        (Path(root) / 'ios/project.yml').read_text(), re.M)
+    versions = {re.sub(r'^(["\'])(.*)\1$', r'\2', token) for token in tokens}
+    if len(versions) != 1:
+        raise ValueError(f'Expected one marketing version, found {sorted(versions)}')
+    version = versions.pop()
+    if not re.fullmatch(r'\d+(?:\.\d+){1,2}', version):
+        raise ValueError(f'Unsupported marketing version {version!r}')
+    return version
+
+
+def build_number_offset(config, version):
+    return config['build_number_offsets'].get(version, 0)
+
+
 if __name__ == '__main__':
+    if len(sys.argv) == 2:
+        print(build_number_offset(load(), marketing_version(sys.argv[1])))
+        raise SystemExit
     serialized = json.dumps(load(), separators=(',', ':'))
     print(serialized)
     if os.getenv('GITHUB_OUTPUT'):

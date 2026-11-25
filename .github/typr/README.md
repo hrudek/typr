@@ -32,8 +32,10 @@ Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commi
 - **Identity** (`app.json`): `dev.rudek.typr`, `.keyboard`, `.widgets`, `.tests`;
   App Group `group.dev.rudek.typr`; team `2ZNGF24932`; App Store Connect
   "Typr Keyboard" (`6832515139`), group "Typr Internal". Upstream's URL scheme stays.
-  Build number = run number + 1000 (typr-deprecated ended at 519); marketing version
-  is upstream's.
+  Build number = run number + `build_number_offsets[marketing version]`, 0 if unlisted.
+  Only 9.0.0 has an offset (1000, since typr-deprecated ended at 519 and 9.0.0 reached
+  1002); the next upstream version resets to the bare run number. Marketing version
+  is upstream's (`ios/project.yml`).
 - **Environments**: `typr-testflight` (signing + ASC secrets), `typr-agent`
   (`CLAUDE_CODE_OAUTH_TOKEN`) and `typr-sync` (deploy key), all deployable from `dev`
   only. *A branch proof needs that branch added to `typr-testflight`'s policy for the run.
