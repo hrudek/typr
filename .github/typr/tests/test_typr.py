@@ -129,7 +129,7 @@ class OverlayTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         files = subprocess.check_output(
             ['git', '-C', str(REPO), 'ls-files', '-z', 'ios/*.swift', 'ios/*.yml',
-             'ios/*.entitlements', 'ios/*.plist'])
+             'ios/*.entitlements', 'ios/*.plist', 'ios/*.xcstrings', 'ios/*.strings'])
         packed = subprocess.run(['tar', '-C', str(REPO), '--null', '-T', '-', '-cf', '-'],
                                 input=files, capture_output=True, check=True).stdout
         subprocess.run(['tar', '-C', str(self.root), '-xf', '-'], input=packed, check=True)

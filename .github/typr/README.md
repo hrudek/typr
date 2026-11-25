@@ -1,7 +1,7 @@
 # Typr CI
 
 Builds upstream Hex's `ios/` as Typr. Nothing here changes upstream files in Git:
-`prepare.sh` runs `overlay.py` (identity, icon, no Bellhop feedback key), upstream's
+`prepare.sh` runs `overlay.py` (identity, icon, no Bellhop feedback key, `rebrand.py`), upstream's
 cleanup model fetch and `xcodegen` on the CI checkout.
 
 ```text

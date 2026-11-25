@@ -19,8 +19,8 @@ BUILD = ('ios/HEXMobile/App.swift', 'ios/project.yml', 'ios/Package.resolved',
          'ios/HEXKeyboard/Info.plist', 'ios/HEXShared/Words.bin', 'ios/HEXWidgets/W.swift',
          'ios/HEXActivity/A.swift', 'ios/HEXMobile/Typr/TyprSettings.swift',
          'ios/scripts/fetch-cleanup-model.sh', 'ios/unknown.xcconfig',
-         '.github/typr/app.json', '.github/typr/overlay.py', '.github/typr/prepare.sh',
-         '.github/typr/AppIcon.icon/icon.json')
+         '.github/typr/app.json', '.github/typr/overlay.py', '.github/typr/rebrand.py',
+         '.github/typr/prepare.sh', '.github/typr/AppIcon.icon/icon.json')
 TEST_ONLY = ('ios/HEXMobileTests/T.swift', 'tests/fixtures/vocabulary/audio/term-hex-1.wav',
              'tests/fixtures/hex-words/a.hexwords')
 
