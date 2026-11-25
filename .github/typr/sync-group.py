@@ -240,9 +240,10 @@ def plan(upstream, head, feature_commits, new, assignment, titles):
         slug = find(owner[p]) if p in owner else group(CI if is_ci(p) else FALLBACK)
         groups[slug].paths.append(p)
     roots = [g for s, g in groups.items() if find(s) == s and g.paths]
-    # A new ci commit goes to the bottom; everything else keeps its place.
-    return sorted(roots, key=lambda g: (not (g.slug == CI and not g.existing),
-                                        not g.existing, g.order))
+    def position(g):
+        new_ci_first = not (g.slug == CI and not g.existing)
+        return new_ci_first, not g.existing, g.order
+    return sorted(roots, key=position)
 
 
 def build(upstream, head, groups, workdir):
@@ -306,7 +307,7 @@ def group_head(upstream, head):
     attempts, reason = [], ''
     try:
         attempts.append(('grouped by Claude', *ask_ai(new, existing_groups(feature_commits))))
-    except Exception as error:  # any AI problem: fall back
+    except Exception as error:
         reason = f'AI grouping unusable ({type(error).__name__}: {str(error)[:200]}).'
         print(f'::warning::{reason} Grouping by area.', file=sys.stderr)
     fallback = {c.sha: (CI if all(is_ci(p) for p in c.paths) else FALLBACK) for c in new}

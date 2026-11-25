@@ -32,7 +32,6 @@ drive() {
       GIT_EDITOR=true git rebase --continue || true
     fi
   done
-  # Without upstream news the head may stay (new Typr commits only); sync-group.py squashes them.
   [[ "$(git rev-parse HEAD)" != "$START" || "$(git merge-base "$START" "$UPSTREAM")" == "$UPSTREAM" ]] \
     || { echo 'Rebase produced no new head' >&2; exit 1; }
   mapfile -t typr < <(git diff --name-only "$UPSTREAM" HEAD)

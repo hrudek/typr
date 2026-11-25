@@ -96,14 +96,26 @@ def job(name):
 
 
 class WorkflowJobTests(unittest.TestCase):
+    def condition(self, name):
+        return re.search(r'^    if: >-\n((?:      .+\n)+)', job(name), re.M).group(1)
+
     def test_jobs_after_a_skipped_resolve_still_run(self):
-        for name, needs in (('group', 'resolve'), ('validate', 'group'), ('push', 'validate')):
+        for name, needs in (('group', 'resolve'), ('validate', 'resolve'), ('push', 'validate')):
             with self.subTest(job=name):
-                condition = re.search(r'^    if: >-\n((?:      .+\n)+)', job(name), re.M).group(1)
+                condition = self.condition(name)
                 self.assertIn('!cancelled()', condition)
                 self.assertIn("needs.rebase.result == 'success'", condition)
                 self.assertIn("needs.rebase.outputs.noop == 'false'", condition)
                 self.assertIn(f"needs.{needs}.result == 'success'", condition)
+
+    def test_a_failed_group_job_still_pushes_the_plain_rebase(self):
+        self.assertIn("needs.group.result == 'failure'", self.condition('validate'))
+        group = job('group')
+        self.assertLess(group.index('upload-artifact'), group.index('Report'))
+        self.assertNotIn('upload-artifact', group[group.index('upload-artifact') + 1:])
+        install = group[group.index('Install Claude Code'):group.index('Squash by feature')]
+        self.assertIn('if npm install', install)
+        self.assertIn('::warning::Installing Claude Code failed', install)
 
     def test_regrouping_keeps_the_tree_so_lanes_follow_the_inputs_only(self):
         self.assertIn('git diff --quiet rebased "$head"', job('group'))
