@@ -38,7 +38,8 @@ SCHEMA = {
 def plain(text, limit=200):
     """Untrusted text as inert one-line Markdown: no formatting, links, mentions or HTML."""
     text = ' '.join(str(text).split())[:limit]
-    text = re.sub(r'([\\`*_{}\[\]()<>#+!|~])', r'\\\1', text)
+    text = re.sub(r'([\\`*_{}\[\]()<>#+!|~&])', r'\\\1', text)
+    text = re.sub(r'(?i)\b(gh)-(?=\d)', '\\1\u200b-', text)
     text = re.sub(r'(?i)(://|www\.)', lambda m: m.group(1)[:-1] + '\u200b' + m.group(1)[-1], text)
     return text.replace('@', '@\u200b').replace('#', '#\u200b')
 

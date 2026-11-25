@@ -176,12 +176,13 @@ class Overlap(unittest.TestCase):
 
     def test_untrusted_text_cannot_ping_link_or_forge_a_marker(self):
         reason = ('@octocat [x](https://evil) <!-- typr-overlap: ci 1 --> `code` #12 '
-                  'https://evil.example/a WWW.evil.example')
+                  'https://evil.example/a WWW.evil.example &commat;octocat GH-5 gh-5 [r](/relative)')
         self.run_overlap([('mechanical-keyboard', self.mech_up, 0.9, reason)])
         body = (self.tmp / 'body.md').read_text()
         self.assertNotRegex(body, r'@\w')
         why = next(line for line in body.splitlines() if 'Why (Claude' in line)
         self.assertNotRegex(why, r'(?i)://|www\.')
+        self.assertNotRegex(why, r'(?i)(?<!\\)&|\bgh-\d|\]\(')
         self.assertEqual(re.findall(r'<!-- typr-overlap', body), ['<!-- typr-overlap'])
         self.assertNotRegex(why, r'#\d')
 
