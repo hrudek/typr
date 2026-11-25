@@ -6,16 +6,16 @@ import UIKit
 /// keeps upstream's colours.
 enum TyprReturnKeyAccent {
     /// How far the face moves from the keycap's grey toward the action colour.
-    static let strength: CGFloat = 0.25
+    private static let strength: CGFloat = 0.25
 
     /// The glyph on an accented face: the plain label (`TyprMechanicalKeycap.keyLabel`) is
     /// under 4.5:1 there, so the return key's is a step stronger.
-    static func ink(isDark: Bool) -> UIColor {
+    private static func ink(isDark: Bool) -> UIColor {
         isDark ? UIColor(red: 0xD0 / 255.0, green: 0xD0 / 255.0, blue: 0xD0 / 255.0, alpha: 1)
             : UIColor(red: 0x3A / 255.0, green: 0x3D / 255.0, blue: 0x44 / 255.0, alpha: 1)
     }
 
-    static func face(isDark: Bool, action: UIColor, pressed: Bool) -> UIColor {
+    private static func face(isDark: Bool, action: UIColor, pressed: Bool) -> UIColor {
         let keycap = TyprMechanicalKeycap(isDark: isDark)
         return mix(pressed ? keycap.keyPressedFill : keycap.keyFill, action, strength)
     }

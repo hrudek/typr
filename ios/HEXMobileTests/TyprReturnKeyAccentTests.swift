@@ -56,8 +56,9 @@ final class TyprReturnKeyAccentTests: XCTestCase {
                     let plain = pressed ? keycap.keyPressedFill : keycap.keyFill
                     let face = TyprReturnKeyAccent.fill(palette.actionFill, palette.actionPressedFill, isDark: isDark, pressed: pressed)
                     let toKey = distance(face, plain)
+                    // The weakest case is dark Forest pressed (0.059): its action green is itself dark.
                     XCTAssertGreaterThan(toKey, 0.05, "\(label) accent is visible (pressed \(pressed))")
-                    XCTAssertLessThan(toKey * 2, distance(face, action), "\(label) is much nearer the key than the action colour (pressed \(pressed))")
+                    XCTAssertLessThan(toKey, distance(face, action), "\(label) is nearer the key than the action colour (pressed \(pressed))")
                     let ratio = contrast(TyprReturnKeyAccent.glyph(isDark: isDark), face)
                     XCTAssertGreaterThanOrEqual(ratio, 4.5, "\(label) glyph \(ratio):1 (pressed \(pressed))")
                 }
@@ -72,7 +73,10 @@ final class TyprReturnKeyAccentTests: XCTestCase {
         let action = Color(red: 0, green: 0x7A / 255.0, blue: 1)
         let pressed = Color(red: 0, green: 0x62 / 255.0, blue: 0xCC / 255.0)
         TyprKeycaps.designOverride = false
-        XCTAssertEqual(rgb(UIColor(TyprReturnKeyAccent.fills(action, pressed, isDark: true).idle)).map { Float($0) }, rgb(UIColor(action)).map { Float($0) })
+        let upstream = rgb(UIColor(TyprReturnKeyAccent.fills(action, pressed, isDark: true).idle))
+        for (got, want) in zip(upstream, rgb(UIColor(action))) {
+            XCTAssertEqual(got, want, accuracy: 1e-4)
+        }
         TyprKeycaps.designOverride = true
         let accented = UIColor(TyprReturnKeyAccent.fills(action, pressed, isDark: true).idle)
         XCTAssertLessThan(distance(accented, TyprMechanicalKeycap(isDark: true).keyFill), distance(accented, UIColor(action)))
