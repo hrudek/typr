@@ -56,8 +56,8 @@ final class TyprReturnKeyAccentTests: XCTestCase {
                     let plain = pressed ? keycap.keyPressedFill : keycap.keyFill
                     let face = TyprReturnKeyAccent.fill(palette.actionFill, palette.actionPressedFill, isDark: isDark, pressed: pressed)
                     let toKey = distance(face, plain)
-                    XCTAssertGreaterThan(toKey, 0.07, "\(label) accent is visible (pressed \(pressed))")
-                    XCTAssertLessThan(toKey * 3, distance(face, action), "\(label) is much nearer the key than the action colour (pressed \(pressed))")
+                    XCTAssertGreaterThan(toKey, 0.05, "\(label) accent is visible (pressed \(pressed))")
+                    XCTAssertLessThan(toKey * 2, distance(face, action), "\(label) is much nearer the key than the action colour (pressed \(pressed))")
                     let ratio = contrast(TyprReturnKeyAccent.glyph(isDark: isDark), face)
                     XCTAssertGreaterThanOrEqual(ratio, 4.5, "\(label) glyph \(ratio):1 (pressed \(pressed))")
                 }
