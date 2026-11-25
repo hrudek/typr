@@ -32,6 +32,7 @@ class RoutingTests(unittest.TestCase):
         for path, tests, build in (
             ('ios/HEXMobileTests/Example.swift', True, False),
             ('tests/fixtures/vocabulary/audio/term-hex-1.wav', True, False),
+            ('tests/fixtures/hex-words/a.hexwords', True, False),
             ('ios/HEXMobile/App.swift', True, True),
             ('ios/project.yml', True, True),
             ('ios/unknown-config.xcconfig', True, True),

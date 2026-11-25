@@ -4,7 +4,7 @@ set -euo pipefail
 mode=$3
 case "$mode" in app|test) ;; *) echo "Unknown fingerprint mode: $mode" >&2; exit 1 ;; esac
 overlay=(.github/typr/app.json .github/typr/overlay.py .github/typr/prepare.sh .github/typr/AppIcon.icon)
-test_only=(tests/fixtures/vocabulary/audio)
+test_only=(tests/fixtures/vocabulary/audio tests/fixtures/hex-words)
 paths=(ios "${overlay[@]}" "${test_only[@]}")
 git -C "$1" ls-tree -rz "$2" -- "${paths[@]}" \
   | while IFS= read -r -d '' entry; do

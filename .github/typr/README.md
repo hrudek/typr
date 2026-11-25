@@ -26,9 +26,9 @@ Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commi
   sync drops it. A push whose old `dev` is gone builds and tests everything.
 
 - **Inputs** (`fingerprint.sh`): `ios/` minus docs, benchmark, Xcode Cloud and offline
-  scripts, plus `app.json`, `overlay.py`, `prepare.sh` and `AppIcon.icon`. Tests and
-  `tests/fixtures/vocabulary/audio` only start simulator tests. Rust, Android, site,
-  docs and other pipeline edits start no macOS job.
+  scripts, plus `app.json`, `overlay.py`, `prepare.sh` and `AppIcon.icon`. Tests,
+  `tests/fixtures/vocabulary/audio` and `tests/fixtures/hex-words` only start simulator
+  tests. Rust, Android, site, docs and other pipeline edits start no macOS job.
 - **Identity** (`app.json`): `dev.rudek.typr`, `.keyboard`, `.widgets`, `.tests`;
   App Group `group.dev.rudek.typr`; team `2ZNGF24932`; App Store Connect
   "Typr Keyboard" (`6832515139`), group "Typr Internal". Upstream's URL scheme stays.

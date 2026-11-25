@@ -73,6 +73,7 @@ jobs:
             ios
             .github/typr
             tests/fixtures/vocabulary
+            tests/fixtures/hex-words
           persist-credentials: false
       - name: Select and verify Xcode
         env:
