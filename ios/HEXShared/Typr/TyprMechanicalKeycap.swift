@@ -119,7 +119,7 @@ enum TyprKeycaps {
         scope = Scope(
             keycap: TyprMechanicalKeycap(isDark: palette.isDark),
             keyFill: palette.keyFill,
-            heldFills: [palette.keyPressedFill, palette.keyHeldFill, palette.functionHeldFill, palette.spaceHeldFill]
+            heldFills: [palette.keyPressedFill, palette.keyHeldFill, palette.systemHeldFill, palette.functionHeldFill, palette.spaceHeldFill]
         )
     }
 
