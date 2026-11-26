@@ -6,6 +6,9 @@ import subprocess
 import tempfile
 import unittest
 
+for name in [n for n in os.environ if n.startswith('TYPR_')]:
+    del os.environ[name]
+
 SCRIPT = Path(__file__).resolve().parents[1] / 'sync.sh'
 WORKFLOW = (SCRIPT.parents[2] / '.github/workflows/typr-sync.yml').read_text()
 
@@ -123,6 +126,13 @@ class WorkflowJobTests(unittest.TestCase):
         self.assertIn('fingerprint.sh . HEAD "$mode"', job('validate'))
         self.assertIn('[skip ci]', job('push'))
 
+
+    def test_regroup_reaches_only_the_plan_step_and_the_group_job(self):
+        self.assertNotIn('TYPR_REGROUP', WORKFLOW.split('\njobs:')[0])
+        plan = job('rebase')[job('rebase').index('- name: Plan'):job('rebase').index('- name: Rebase')]
+        self.assertIn('TYPR_REGROUP: ${{ inputs.regroup }}', plan)
+        self.assertIn('TYPR_REGROUP: ${{ inputs.regroup }}', job('group'))
+        self.assertEqual(WORKFLOW.count('TYPR_REGROUP'), 2)
 
 class WorkflowFilterTests(unittest.TestCase):
     def jq(self, name, document):

@@ -23,7 +23,6 @@ concurrency:
 
 env:
   UPSTREAM_URL: https://github.com/anomalyco/hex.git
-  TYPR_REGROUP: ${{ inputs.regroup }}
 
 jobs:
   rebase:
@@ -54,6 +53,8 @@ jobs:
       - name: Plan
         id: plan
         if: steps.when.outputs.run == 'true'
+        env:
+          TYPR_REGROUP: ${{ inputs.regroup }}
         run: |
           cp -R .github/typr "$RUNNER_TEMP/typr"
           git fetch -q --no-tags --filter=blob:none "$UPSTREAM_URL" +refs/heads/dev:refs/remotes/upstream/dev
@@ -149,6 +150,7 @@ jobs:
       contents: read
       pull-requests: read
     env:
+      TYPR_REGROUP: ${{ inputs.regroup }}
       START: ${{ needs.rebase.outputs.start }}
       UPSTREAM: ${{ needs.rebase.outputs.upstream }}
     steps:

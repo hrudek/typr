@@ -9,6 +9,9 @@ import tempfile
 import unittest
 from unittest import mock
 
+for name in [n for n in os.environ if n.startswith('TYPR_')]:
+    del os.environ[name]
+
 SCRIPT = Path(__file__).resolve().parents[1] / 'sync-group.py'
 spec = importlib.util.spec_from_file_location('sync_group', SCRIPT)
 sync_group = importlib.util.module_from_spec(spec)
