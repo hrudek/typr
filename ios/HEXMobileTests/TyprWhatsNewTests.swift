@@ -119,4 +119,24 @@ final class TyprWhatsNewTests: XCTestCase {
     func testUpdateFromABuildBeforeTheRecordShows() {
         XCTAssertNotNil(due(nil, build: "9.0.0 (1010)", changelog: changelog))
     }
+
+    func testBuildLabelPutsTheVersionBeforeTheBuild() {
+        XCTAssertEqual(TyprWhatsNew.buildLabel(version: "9.0.0", build: "1026"), "9.0.0 (1026)")
+        XCTAssertEqual(TyprWhatsNew.installedBuild, TyprWhatsNew.buildLabel(
+            version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
+            build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
+        ))
+    }
+
+    func testVersionBumpWithALowerBuildNumberStillShows() throws {
+        let seen = TyprWhatsNew.buildLabel(version: "9.0.0", build: "1042")
+        let bumped = TyprWhatsNew.buildLabel(version: "9.1.0", build: "3")
+        markSeen(WhatsNewRelease(version: TyprWhatsNew.buildOnlyVersion, items: []), build: seen)
+        XCTAssertNil(due(nil, build: seen, changelog: changelog))
+
+        let shown = try XCTUnwrap(due(nil, build: bumped, changelog: changelog))
+        markSeen(shown, build: bumped)
+        XCTAssertEqual(recordedBuild, "9.1.0 (3)")
+        XCTAssertNil(due(nil, build: bumped, changelog: changelog))
+    }
 }

@@ -44,8 +44,14 @@ enum TyprWhatsNew {
     /// Marketing version and build, e.g. "9.0.0 (1042)": build numbers restart with each version.
     static var installedBuild: String {
         let info = Bundle.main.infoDictionary ?? [:]
-        return "\(info["CFBundleShortVersionString"] as? String ?? "") (\(info["CFBundleVersion"] as? String ?? ""))"
+        return buildLabel(
+            version: info["CFBundleShortVersionString"] as? String ?? "",
+            build: info["CFBundleVersion"] as? String ?? ""
+        )
     }
+
+    /// "9.0.0 (1042)": shown in the sheet and the key of the show-once record.
+    static func buildLabel(version: String, build: String) -> String { "\(version) (\(build))" }
 
     /// Hex's list for this version, or one with only the changelog when Hex has none.
     static func current(_ list: WhatsNewRelease?, changelog: TyprChangelog? = TyprWhatsNew.changelog) -> WhatsNewRelease? {
@@ -88,6 +94,10 @@ struct TyprWhatsNewBuildSection: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(HexTheme.textBase)
                     .accessibilityAddTraits(.isHeader)
+                Text(verbatim: TyprWhatsNew.installedBuild)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(HexTheme.textMuted)
+                    .padding(.top, -12)
                 ForEach(changelog.sections, id: \.id) { section in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(verbatim: section.title)
