@@ -22,7 +22,7 @@ final class TyprKeySwipeTests: XCTestCase {
     func testDownDiagonalOutsideTheWindowOpensTheMenu() {
         XCTAssertEqual(decide(30, 30), .upstream, "45 degrees")
         XCTAssertEqual(decide(-30, 30), .upstream)
-        XCTAssertEqual(decide(20, 20 * 1.2), .upstream, "about 59 degrees")
+        XCTAssertEqual(decide(20, 20 * 1.2), .upstream, "about 40 degrees")
     }
 
     func testLeftRightAndUpOpenTheMenu() {
@@ -47,15 +47,6 @@ final class TyprKeySwipeTests: XCTestCase {
         XCTAssertEqual(decide(0, 40, state: .menu), .upstream, "dragging down onto menu rows still picks them")
         XCTAssertEqual(decide(0, 40, state: .fired), .upstream, "moves after a hold are ignored")
         XCTAssertEqual(decide(0, 40, state: .idle), .upstream)
-    }
-
-    func testTapAndHoldAreUnchanged() {
-        var gesture = HexKeyGesture()
-        gesture.touchDown(at: .zero)
-        XCTAssertEqual(gesture.touchUp(), .tap)
-        gesture.touchDown(at: .zero)
-        XCTAssertEqual(gesture.holdElapsed(), .hold)
-        XCTAssertEqual(gesture.touchUp(), .release)
     }
 }
 

@@ -40,6 +40,8 @@ final class HexKeyControl: UIControl {
     private var typrSwipe = TyprKeySwipe()
     /// Typr: a swipe down (`TyprKeySwipe`) took the press; set only on the full keyboard's key.
     var onTyprSwipeDown: (() -> Void)?
+    /// Typr: whether the swipe can switch now (Full Access); otherwise upstream's gesture gets the move.
+    var typrSwipeEnabled: () -> Bool = { false }
     private var holdWork: DispatchWorkItem?
 
     override init(frame: CGRect) {
@@ -91,7 +93,7 @@ final class HexKeyControl: UIControl {
 
     override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         let point = touch.location(in: self)
-        let typr: TyprKeySwipe.Decision = onTyprSwipeDown == nil ? .upstream : typrSwipe.decide(at: point, state: gesture.state)
+        let typr: TyprKeySwipe.Decision = typrSwipeEnabled() ? typrSwipe.decide(at: point, state: gesture.state) : .upstream
         switch typr {
         case .claim:
             stopTimer()

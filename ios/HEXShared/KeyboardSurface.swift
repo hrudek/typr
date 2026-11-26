@@ -1405,6 +1405,8 @@ struct KeyboardSurfaceView: View {
             utilityKeys(punctuation: 4)
             utilityKeys(punctuation: 3)
             utilityKeys(punctuation: 2)
+            utilityKeys(punctuation: 1)
+            utilityKeys(punctuation: 0)
         }
     }
 

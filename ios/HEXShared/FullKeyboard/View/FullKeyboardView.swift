@@ -238,6 +238,7 @@ final class FullKeyboardView: UIView {
             self.showStyleMenu()
             self.forwardMenuPoint(point, release: false)
         }
+        hexKey.typrSwipeEnabled = { [weak self] in self?.model.hasFullAccess == true }
         hexKey.onTyprSwipeDown = { TyprKeyboardModeToggle.shared.switchToMinimal() }
         hexKey.onMenuDrag = { [weak self] point in self?.forwardMenuPoint(point, release: false) }
         hexKey.onMenuRelease = { [weak self] point in self?.forwardMenuPoint(point, release: true) }
