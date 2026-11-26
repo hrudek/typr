@@ -31,7 +31,7 @@ struct TyprChangelog: Decodable, Equatable {
     }
 }
 
-/// Typr's part of Hex's What's new: the sheet ends with this build's changelog, and it also
+/// Typr's part of Hex's What's new: the sheet opens with this build's changelog, and it also
 /// shows once after each new build, even when Hex has no list for the version.
 @MainActor
 enum TyprWhatsNew {
