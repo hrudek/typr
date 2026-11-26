@@ -27,12 +27,15 @@ Upstream sync (typr-sync.yml): daily (first of three 03:17, 05:17, 07:17 UTC slo
   sync drops it. A push whose old `dev` is gone builds and tests everything.
 
 - **Feature commits** (`sync-group.py`): after the rebase, Typr commits without a
-  `Typr-Feature: <slug>` trailer are new. Claude (Haiku, JSON only) sorts them into existing
-  feature commits or new ones; existing ones are only extended, never regrouped. Each file lives
-  in one commit: `.github/**` and `AGENTS.md` in `ci`, features sharing a file are merged. The
-  body lists the folded subjects and `PRs: #a, #b`. Bad AI output, a timeout or no token group by
-  area (`ci` vs `typr`); a tree that differs from the plain rebase keeps the plain rebase. The
-  step summary shows what went where.
+  `Typr-Feature: <slug>` trailer are new. Claude (Sonnet, JSON only) sorts them by what they do
+  for the user into existing feature commits or new ones; shared files do not force features
+  together. `.github/**` and `AGENTS.md` always go to `ci`. Each feature commit replays its
+  changes 3-way on top of the one below, so features may share files. The body lists the folded
+  subjects and `PRs: #a, #b`. A manual run with `regroup` splits every existing feature back into
+  its PRs (merge commits via `gh`) and lets Claude group them afresh. Bad AI output, a timeout,
+  no token or a replay conflict group by area (`ci` vs `typr`, existing features kept); a tree
+  that differs from the plain rebase keeps the plain rebase. The step summary shows what went
+  where.
 
 - **Upstream overlap** (`sync-overlap.py`): after the push, Claude compares the upstream commits
   the sync pulled in with the Typr features (`ci` only by its feat/fix bullets: branding, build

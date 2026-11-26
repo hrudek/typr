@@ -107,6 +107,19 @@ class Overlap(unittest.TestCase):
         self.assertIn('label create upstream-overlap', (self.tmp / 'gh.log').read_text())
         self.assertIn('Opened: ', self.summary())
 
+    def test_an_overlap_names_the_feature_it_matches_even_when_features_share_a_file(self):
+        self.commit('feat(typr): show what is new after an update\n\nPRs: #19\n\n'
+                    'Typr-Feature: whats-new', {'ios/TyprMech.swift': 'm news\n', 'ios/TyprNews.swift': 'n\n'})
+        self.git('switch', '-q', 'upstream')
+        news_up = self.commit('iOS: what is new sheet (#2859)', {'ios/news.swift': 'n\n'})
+        self.git('switch', '-q', 'dev')
+        self.run_overlap([('whats-new', news_up, 0.9, 'Same sheet')])
+        [create] = self.created()
+        self.assertIn('Upstream overlap: show what is new after an update ↔ hex#2859', create)
+        body = (self.tmp / 'body.md').read_text()
+        self.assertIn('Typr-Feature: whats-new', body)
+        self.assertNotIn('mechanical', body)
+
     def test_low_confidence_opens_no_issue(self):
         self.run_overlap([('mechanical-keyboard', self.mech_up, 0.5, 'Maybe')])
         self.assertEqual(self.ai_calls(), 1)
