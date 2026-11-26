@@ -70,12 +70,23 @@ class SyncGuardTests(unittest.TestCase):
         self.commit('docs: mention chore(typr): upstream sync to x [skip ci]', '2026-11-26T04:18:00+01:00')
         self.assertTrue(self.decide('schedule', '2026-11-26T05:17:00'))
 
+    def test_marker_text_in_a_commit_body_does_not_count(self):
+        self.commit(f'fix(typr): unrelated\n\n{MARKER}', '2026-11-26T04:17:00+01:00')
+        self.assertTrue(self.decide('schedule', '2026-11-26T05:17:00'))
+
     def test_cli_prints_step_output_and_logs_the_reason(self):
-        self.commit(MARKER, '2026-11-26T04:17:00+01:00')
-        out = subprocess.run(['python3', str(TYPR / 'sync-guard.py'), 'schedule', self.repo, '2026-11-26T05:17:00+01:00'],
+        self.commit(MARKER, datetime.now(BERLIN).isoformat())
+        out = subprocess.run(['python3', str(TYPR / 'sync-guard.py'), 'schedule', self.repo],
                              check=True, capture_output=True, text=True)
         self.assertEqual(out.stdout, 'run=false\n')
         self.assertIn('Already synced today', out.stderr)
+
+    def test_cli_rejects_wrong_arguments_with_usage(self):
+        for args in ([], ['schedule', self.repo, 'extra']):
+            out = subprocess.run(['python3', str(TYPR / 'sync-guard.py'), *args], capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1)
+            self.assertIn('usage: sync-guard.py EVENT [REPO]', out.stderr)
+            self.assertNotIn('Traceback', out.stderr)
 
 
 class WorkflowTests(unittest.TestCase):
@@ -95,6 +106,10 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('sync-guard.py "$EVENT"', WORKFLOW)
         self.assertIn("if: steps.when.outputs.run == 'true'", WORKFLOW)
         self.assertIn('workflow_dispatch:', WORKFLOW)
+
+    def test_guard_and_plan_run_on_the_live_dev_tip(self):
+        rebase = WORKFLOW.split('\n  resolve:')[0]
+        self.assertRegex(rebase, r'checkout@\S+ # v4\n        with:\n          ref: dev\n')
 
 
 if __name__ == '__main__':
