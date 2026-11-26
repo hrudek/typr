@@ -10,7 +10,7 @@ import Foundation
 /// loads it with the repository's FluidAudio.
 nonisolated enum TyprOrukeetModel {
     static let repository = "oruk/orukeet"
-    static let revision = "419d7f79e290127e202a0f610509868d314743eb"
+    static let revision = TyprOrukeetStore.revision
     static let archiveFolder = "orukeet-r3-coreml-int8sym-encoder-only-experimental-20260920"
 
     static let archive = ParakeetUltraModel.File(
@@ -46,19 +46,17 @@ nonisolated enum TyprOrukeetModel {
     ]
 
     /// In the App Group beside upstream's models (`SpeechModelStore`), so the keyboard can read it.
-    static var directory: URL {
-        SpeechModelStore.root.appendingPathComponent("typr-orukeet-\(revision.prefix(7))", isDirectory: true)
-    }
+    static var directory: URL { TyprOrukeetStore.directory }
 
     static var archiveURL: URL { directory.appendingPathComponent(archive.path) }
-    static var compiledDirectory: URL { directory.appendingPathComponent("compiled", isDirectory: true) }
+    static var compiledDirectory: URL { TyprOrukeetStore.compiledDirectory }
 
     static func isArchiveDownloaded(in directory: URL = directory) -> Bool {
         ParakeetUltraModel.isDownloaded(in: directory, files: [archive])
     }
 
     static func isInstalled(in directory: URL = directory) -> Bool {
-        SpeechModelStore.isComplete(directory.appendingPathComponent("compiled", isDirectory: true))
+        TyprOrukeetStore.isInstalled(in: directory)
     }
 
     static var downloadSize: String {

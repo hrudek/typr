@@ -22,10 +22,11 @@ final class KeyboardParakeet {
         let multilingual: Bool
         /// BCP 47: the language the text goes through Hex's steps in.
         let language: String
+        var typrOrukeet = false
 
-        var directory: URL { multilingual ? SpeechModelStore.parakeetUltra : SpeechModelStore.parakeetV2 }
-        var engineName: String { multilingual ? "Parakeet Ultra (keyboard)" : "Parakeet V2 (keyboard)" }
-        var label: String { multilingual ? "parakeet-ultra" : "parakeet-v2" }
+        var directory: URL { typrOrukeet ? TyprOrukeetStore.compiledDirectory : multilingual ? SpeechModelStore.parakeetUltra : SpeechModelStore.parakeetV2 }
+        var engineName: String { typrOrukeet ? "Orukeet (keyboard)" : multilingual ? "Parakeet Ultra (keyboard)" : "Parakeet V2 (keyboard)" }
+        var label: String { typrOrukeet ? "typr-orukeet" : multilingual ? "parakeet-ultra" : "parakeet-v2" }
     }
 
     struct Transcript {
@@ -35,7 +36,7 @@ final class KeyboardParakeet {
     }
 
     private struct Loaded {
-        let multilingual: Bool
+        let label: String
         let manager: AsrManager
         let seconds: Double
         let cold: Bool
@@ -45,7 +46,7 @@ final class KeyboardParakeet {
     private var loaded: Loaded?
     private var loadTask: Task<Void, Never>?
     /// Models that didn't load or didn't run on the Neural Engine in this process.
-    private var setAside: Set<Bool> = []
+    private var setAside: Set<String> = []
     private var memoryWarnedAt: Date?
     private var isTranscribing = false
     private var releasesAfterTranscription = false
@@ -65,6 +66,7 @@ final class KeyboardParakeet {
     /// The model the keyboard would transcribe with, or nil for Apple's speech recognition,
     /// resolved from the shared `KeyboardParakeetPlan`.
     nonisolated static func choice() -> Choice? {
+        if let language = TyprOrukeetKeyboardPlan.current() { return Choice(multilingual: true, language: language, typrOrukeet: true) }
         guard let picked = KeyboardParakeetPlan.current().modelChoice else { return nil }
         return Choice(multilingual: picked.model.isMultilingual, language: picked.language)
     }
@@ -81,7 +83,7 @@ final class KeyboardParakeet {
         // why itself (a limit under 131 MB, another language, nothing downloaded).
         guard let choice = Self.choice() else { return }
         let settings = KeyboardParakeetSettings()
-        if loaded?.multilingual == choice.multilingual {
+        if loaded?.label == choice.label {
             // Still loaded: say so again if Hex cleared it (the switch turned off and on).
             if settings.keyboardState?.state != .ready {
                 settings.setKeyboardState(.ready, multilingual: choice.multilingual)
@@ -91,7 +93,7 @@ final class KeyboardParakeet {
         // Try again in Hex, or a model Hex removed: what didn't load in this process may load now.
         if settings.purgesCompiled { setAside.removeAll() }
         // A load in flight said `.preparing`; one set aside said why when it was.
-        guard loadTask == nil, !setAside.contains(choice.multilingual) else { return }
+        guard loadTask == nil, !setAside.contains(choice.label) else { return }
         // iOS warned this keyboard about memory (this view controller, or within
         // `reloadAfterWarning`): no load, and the page says so rather than what an older
         // keyboard last said.
@@ -111,7 +113,7 @@ final class KeyboardParakeet {
         }
         guard Self.hasNeuralEngine else {
             note("parakeet: no Neural Engine here")
-            setAside.insert(choice.multilingual)
+            setAside.insert(choice.label)
             settings.setKeyboardState(.unavailable, multilingual: choice.multilingual, reason: .noNeuralEngine)
             return
         }
@@ -141,22 +143,22 @@ final class KeyboardParakeet {
                 let seconds = Date().timeIntervalSince(started)
                 guard onEngine else {
                     await manager.cleanup()
-                    self.setAside.insert(choice.multilingual)
+                    self.setAside.insert(choice.label)
                     settings.setKeyboardState(.unavailable, multilingual: choice.multilingual, reason: .notOnNeuralEngine)
                     KeyboardProbeLog.shared.write("parakeet: \(choice.label) not on the Neural Engine, Apple's speech recognition \(Self.memory())")
                     return
                 }
                 let cold = seconds >= Self.compilingLoad
-                self.loaded = Loaded(multilingual: choice.multilingual, manager: manager, seconds: seconds, cold: cold, at: Date())
+                self.loaded = Loaded(label: choice.label, manager: manager, seconds: seconds, cold: cold, at: Date())
                 settings.setKeyboardState(.ready, multilingual: choice.multilingual)
-                settings.setLoadedOnce(true, multilingual: choice.multilingual)
+                if !choice.typrOrukeet { settings.setLoadedOnce(true, multilingual: choice.multilingual) }
                 KeyboardProbeLog.shared.write(
                     "parakeet: \(choice.label) loaded in \(String(format: "%.1f", seconds)) s (\(cold ? "cold" : "warm")) \(after)"
                 )
             } catch {
                 guard let self else { return }
                 self.loadTask = nil
-                self.setAside.insert(choice.multilingual)
+                self.setAside.insert(choice.label)
                 settings.setKeyboardState(.unavailable, multilingual: choice.multilingual, reason: .loadFailed)
                 KeyboardProbeLog.shared.write("parakeet: \(choice.label) didn't load: \(error) \(Self.memory())")
             }
@@ -182,7 +184,7 @@ final class KeyboardParakeet {
             KeyboardProbeLog.shared.write("parakeet: dictation engine=apple (\(reason)) audio=\(String(format: "%.1f", audioSeconds)) s \(before)")
             return nil
         }
-        guard let loaded, loaded.multilingual == choice.multilingual else {
+        guard let loaded, loaded.label == choice.label else {
             return fallback(loadTask != nil ? "\(choice.label) still loading" : "\(choice.label) not loaded")
         }
         guard !isTranscribing else { return fallback("another transcription running") }
