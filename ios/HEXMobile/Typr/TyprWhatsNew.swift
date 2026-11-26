@@ -83,7 +83,7 @@ enum TyprWhatsNew {
     }
 }
 
-/// "Dieser Build" at the bottom of Hex's What's new: the bundled changelog's sections.
+/// "Dieser Build" at the top of Hex's What's new, under the title: the bundled changelog's sections.
 struct TyprWhatsNewBuildSection: View {
     let release: WhatsNewRelease
 
@@ -121,7 +121,7 @@ struct TyprWhatsNewBuildSection: View {
                     }
                 }
             }
-            .padding(.top, release.items.isEmpty ? 0 : 36)
+            .padding(.bottom, release.items.isEmpty ? 0 : 36)
         }
     }
 }
