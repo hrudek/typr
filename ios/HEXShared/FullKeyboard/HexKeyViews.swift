@@ -37,6 +37,9 @@ final class HexKeyControl: UIControl {
     var onMenuRelease: ((CGPoint) -> Void)?
 
     private var gesture = HexKeyGesture()
+    private var typrSwipe = TyprKeySwipe()
+    /// Typr: a swipe down (`TyprKeySwipe`) took the press; set only on the full keyboard's key.
+    var onTyprSwipeDown: (() -> Void)?
     private var holdWork: DispatchWorkItem?
 
     override init(frame: CGRect) {
@@ -76,6 +79,7 @@ final class HexKeyControl: UIControl {
 
     override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         gesture.touchDown(at: touch.location(in: self))
+        typrSwipe.begin(at: touch.location(in: self))
         isHighlighted = true
         holdWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.holdElapsed() }
@@ -87,6 +91,20 @@ final class HexKeyControl: UIControl {
 
     override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         let point = touch.location(in: self)
+        let typr: TyprKeySwipe.Decision = onTyprSwipeDown == nil ? .upstream : typrSwipe.decide(at: point, state: gesture.state)
+        switch typr {
+        case .claim:
+            stopTimer()
+            isHighlighted = false
+            gesture.cancel()
+            onPressAbandoned?()
+            onTyprSwipeDown?()
+            return true
+        case .wait:
+            return true
+        case .upstream:
+            break
+        }
         switch gesture.touchMoved(to: point) {
         case .openMenu:
             stopTimer()

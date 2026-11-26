@@ -135,6 +135,7 @@ final class KeyboardViewController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         reportFullAccess(force: true)
+        TyprKeyboardModeToggle.shared.onChange = { [weak self] in DispatchQueue.main.async { self?.mountSurface() } }
         // Before any typing log starts: the keyboard may update before Hex is opened.
         TypingLogSettings().turnOffOnce()
         KeyboardLocalDictation.allowHapticsWhileRecording()
@@ -151,6 +152,7 @@ final class KeyboardViewController: UIInputViewController {
         coldStartJobID = UUID().uuidString
         // The keyboard may come back for another field: settle on where the dictation was last seen.
         dictationEdits.finish(nil)
+        TyprKeyboardModeToggle.shared.reset()
         mountSurface()
         fullKeyboard?.prepareForField()
         isShown = true
@@ -798,7 +800,7 @@ final class KeyboardViewController: UIInputViewController {
     /// Without Full Access always the full keyboard: the bar types nothing but spaces and line
     /// breaks, and its Dictate needs Full Access. Only switches while idle.
     private func mountSurface() {
-        let wantsFull = FullKeyboardSettings().isEnabled || !hasFullAccess
+        let wantsFull = TyprKeyboardModeToggle.shared.wantsFull(setting: FullKeyboardSettings().isEnabled, hasFullAccess: hasFullAccess)
         guard surface == nil || wantsFull != (fullKeyboard != nil) else { return }
         guard surface == nil || viewModel.stagePhase == .idle || viewModel.stagePhase == .failed else { return }
         closeBarEmojiPanel()

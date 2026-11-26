@@ -1439,6 +1439,10 @@ struct KeyboardSurfaceView: View {
                 .accessibilityLabel("Emoji")
             }
 
+            if TyprKeyboardModeToggle.shared.forcesMinimal {
+                TyprFullKeyboardKey(style: KeyboardKeyButtonStyle(palette: p), ink: p.textBase, glyphOpacity: glyphOpacity) { model.onKeyFeedback?() }
+            }
+
             ForEach(Self.punctuation.prefix(count), id: \.self) { mark in
                 Button {
                     model.onKeyFeedback?()
