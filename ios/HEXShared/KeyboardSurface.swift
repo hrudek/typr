@@ -1405,6 +1405,8 @@ struct KeyboardSurfaceView: View {
             utilityKeys(punctuation: 4)
             utilityKeys(punctuation: 3)
             utilityKeys(punctuation: 2)
+            utilityKeys(punctuation: 1)
+            utilityKeys(punctuation: 0)
         }
     }
 
@@ -1437,6 +1439,10 @@ struct KeyboardSurfaceView: View {
                 }
                 .buttonStyle(KeyboardKeyButtonStyle(palette: p))
                 .accessibilityLabel("Emoji")
+            }
+
+            if TyprKeyboardModeToggle.shared.forcesMinimal {
+                TyprFullKeyboardKey(style: KeyboardKeyButtonStyle(palette: p), ink: p.textBase, glyphOpacity: glyphOpacity) { model.onKeyFeedback?() }
             }
 
             ForEach(Self.punctuation.prefix(count), id: \.self) { mark in
