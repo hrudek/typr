@@ -282,6 +282,7 @@ struct ContentView: View {
                     turnOff: { dictation.turnOffMultilingualParakeet() },
                     useMobileData: { dictation.useMobileDataForMultilingualParakeet() }
                 )
+                TyprOrukeetStatus(turnOff: { TyprOrukeet.shared.turnOff() })
 
                 SpeechModelHomeCard(download: KeyboardParakeetDownload.shared, open: {
                     dictationOpensAtSpeechModel = true

@@ -13,6 +13,8 @@ nonisolated enum DictationEngine: Equatable, Sendable {
     case parakeetV2
     /// FluidAudio Parakeet Ultra (multilingual).
     case parakeetUltra
+    /// Settings › Typr › Orukeet (`TyprOrukeet`).
+    case typrOrukeet
 
     var displayName: String {
         switch self {
@@ -20,6 +22,7 @@ nonisolated enum DictationEngine: Equatable, Sendable {
         case .appleSpeech, .onDeviceRecognizer: "Apple Speech"
         case .parakeetV2: "Parakeet V2"
         case .parakeetUltra: "Parakeet Ultra"
+        case .typrOrukeet: "Orukeet"
         }
     }
 
@@ -42,7 +45,7 @@ nonisolated enum DictationEngine: Equatable, Sendable {
         switch self {
         case .appleSpeech, .onDeviceRecognizer:
             !keyboardNeedsHex
-        case .undecided, .parakeetV2, .parakeetUltra:
+        case .undecided, .parakeetV2, .parakeetUltra, .typrOrukeet:
             false
         }
     }

@@ -33,6 +33,11 @@ International (CC BY-SA 4.0). Hex downloads `orukeet-Q8_0.gguf` from
 https://huggingface.co/handy-computer/orukeet-gguf/tree/c5511a3850fce1cbbfa5d94ef815966e1d99275f
 and does not ship the weights.
 
+Typr's iPhone app (Settings › Typr › Orukeet) downloads Oruk AI's iOS Core ML
+archive `coreml/orukeet-r3-coreml-int8sym-encoder-only-experimental-20260920-deflated.zip`
+from https://huggingface.co/oruk/orukeet/tree/419d7f79e290127e202a0f610509868d314743eb
+under the same licence and does not ship the weights.
+
 License: https://creativecommons.org/licenses/by-sa/4.0/legalcode.en
 
 Notice supplied with the files:

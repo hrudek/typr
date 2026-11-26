@@ -131,7 +131,7 @@ struct AcknowledgementsView: View {
 
     /// The entries the app shows: Polish's once the keyboard bundles its model (`pl.hextm`).
     static var shown: [Entry] {
-        entries + (keyboardBundles("pl.hextm") ? polishEntries : [])
+        entries + TyprAcknowledgements.entries + (keyboardBundles("pl.hextm") ? polishEntries : [])
     }
 
     private static func keyboardBundles(_ file: String) -> Bool {
