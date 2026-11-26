@@ -107,6 +107,7 @@ extension DictationController {
     /// loads it beside the engine that dictates, when the experiment wants it and it isn't the
     /// one dictating already.
     func syncMultilingualParakeet() {
+        if syncTyprOrukeet() { return }
         guard MultilingualParakeetSettings().isEnabled else {
             multilingualDownload.settle()
             return
@@ -153,7 +154,7 @@ extension DictationController {
         let hexModel: KeyboardParakeetPlan.Model? = switch engine {
         case .parakeetV2: .parakeetV2
         case .parakeetUltra: .parakeetUltra
-        case .undecided, .appleSpeech, .onDeviceRecognizer: nil
+        case .undecided, .appleSpeech, .onDeviceRecognizer, .typrOrukeet: nil
         }
         guard let removed = SpeechModelChoice.unpicked(
             picked: .current,
@@ -248,6 +249,7 @@ extension DictationController {
     }
 
     static func defaultTranscriber() async -> any LocalTranscribing {
+        if let orukeet = TyprOrukeetChoice.transcriber() { return orukeet }
         // Settings › Dictation › Model: Multilingual, for its languages once it's downloaded and
         // compiled; until then (and off) the engine Hex uses without it.
         if let language = ParakeetUltraTranscriber.chosenLanguage(),
@@ -326,6 +328,7 @@ extension DictationController {
     /// set a language aside, or Parakeet found too little memory to load (it set itself aside,
     /// so the next pick is Apple's).
     nonisolated static func switchNotice(for error: Error) -> String? {
+        if let notice = TyprOrukeetChoice.switchNotice(for: error) { return notice }
         if let unavailable = error as? SpeechModelUnavailable, unavailable.switchedAutomatically {
             return UserFacingError.message(for: unavailable, context: .model)
         }
