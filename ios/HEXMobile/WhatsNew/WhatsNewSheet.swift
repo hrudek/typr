@@ -30,6 +30,7 @@ struct WhatsNewSheet: View {
                         WhatsNewItemView(item: item, pictureHeight: pictureHeight)
                     }
                 }
+                TyprWhatsNewBuildSection(release: release)
             }
             .frame(maxWidth: 500, alignment: .leading)
             .padding(.horizontal, 20)

@@ -81,7 +81,6 @@ struct ContentView: View {
                     .transition(.opacity)
             } else {
                 standaloneView
-                    .typrWhatsNew()
                     .transition(.opacity)
             }
         }

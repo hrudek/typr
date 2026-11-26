@@ -31,55 +31,63 @@ struct TyprChangelog: Decodable, Equatable {
     }
 }
 
-/// Which build's changelog was last shown, in the app's own UserDefaults.
-struct TyprWhatsNew {
+/// Typr's part of Hex's What's new: the sheet ends with this build's changelog, and it also
+/// shows once after each new build, even when Hex has no list for the version.
+@MainActor
+enum TyprWhatsNew {
     static let lastSeenBuildKey = "typr.whatsNew.lastSeenBuild"
+    /// The version of a What's new that has only this build's changelog.
+    static let buildOnlyVersion = "typr-build"
 
-    let defaults: UserDefaults
+    static let changelog = TyprChangelog.bundled()
 
-    /// The changelog to show at launch until `markSeen` records its build. Any build other than
-    /// the recorded one is new: build numbers restart with each marketing version. A build with
-    /// nothing to show is recorded right away: a first launch records it silently, unless
-    /// onboarding was already done before it, which means an update from a build that predates
-    /// the record.
-    func changelogToShow(build: String, changelog: TyprChangelog?, onboardedBeforeLaunch: Bool) -> TyprChangelog? {
-        let lastSeen = defaults.string(forKey: Self.lastSeenBuildKey)
-        if build == lastSeen { return nil }
-        guard let changelog, lastSeen != nil || onboardedBeforeLaunch else {
-            markSeen(build: build)
-            return nil
-        }
-        return changelog
-    }
-
-    func markSeen(build: String) {
-        defaults.set(build, forKey: Self.lastSeenBuildKey)
-    }
-
-    static var currentBuild: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
-    }
-
-    /// Marketing version and build, e.g. "9.0.0 (1042)".
+    /// Marketing version and build, e.g. "9.0.0 (1042)": build numbers restart with each version.
     static var installedBuild: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        return "\(version) (\(currentBuild))"
+        let info = Bundle.main.infoDictionary ?? [:]
+        return "\(info["CFBundleShortVersionString"] as? String ?? "") (\(info["CFBundleVersion"] as? String ?? ""))"
+    }
+
+    /// Hex's list for this version, or one with only the changelog when Hex has none.
+    static func current(_ list: WhatsNewRelease?, changelog: TyprChangelog? = TyprWhatsNew.changelog) -> WhatsNewRelease? {
+        list ?? changelog.map { _ in WhatsNewRelease(version: buildOnlyVersion, items: []) }
+    }
+
+    /// Hex's decision, and otherwise this build's changelog alone, once per build. A first run
+    /// and a build without a changelog record the build silently; so does nothing else, so an
+    /// update from a build before the record shows.
+    static func decideAtLaunch(
+        _ current: WhatsNewRelease?,
+        changelog: TyprChangelog? = TyprWhatsNew.changelog,
+        build: String = TyprWhatsNew.installedBuild,
+        defaults: UserDefaults,
+        firstRun: Bool
+    ) -> WhatsNewRelease? {
+        let list = current?.version == buildOnlyVersion ? nil : current
+        let due = WhatsNew.decideAtLaunch(list, defaults: defaults, firstRun: firstRun)
+        if firstRun || changelog == nil {
+            markSeen(build: build, defaults: defaults)
+            return due
+        }
+        if defaults.string(forKey: lastSeenBuildKey) == build { return due }
+        return due ?? WhatsNewRelease(version: list?.version ?? buildOnlyVersion, items: [])
+    }
+
+    static func markSeen(build: String = TyprWhatsNew.installedBuild, defaults: UserDefaults) {
+        defaults.set(build, forKey: lastSeenBuildKey)
     }
 }
 
-extension TyprChangelog: Identifiable {
-    var id: String { "changelog" }
-}
-
-struct TyprWhatsNewSheet: View {
-    let changelog: TyprChangelog
+/// "Dieser Build" at the bottom of Hex's What's new: the bundled changelog's sections.
+struct TyprWhatsNewBuildSection: View {
+    let release: WhatsNewRelease
 
     var body: some View {
-        ScrollView {
+        if let changelog = TyprWhatsNew.changelog {
             VStack(alignment: .leading, spacing: 20) {
-                Text(verbatim: "Neu in Build \(TyprWhatsNew.currentBuild)")
+                Text(verbatim: "Dieser Build")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(HexTheme.textBase)
+                    .accessibilityAddTraits(.isHeader)
                 ForEach(changelog.sections, id: \.id) { section in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(verbatim: section.title)
@@ -89,6 +97,7 @@ struct TyprWhatsNewSheet: View {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(verbatim: "•")
                                 Text(verbatim: item.text)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 Spacer(minLength: 0)
                                 if let ref = item.ref {
                                     Text(verbatim: ref)
@@ -102,44 +111,7 @@ struct TyprWhatsNewSheet: View {
                     }
                 }
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, release.items.isEmpty ? 0 : 36)
         }
-        .background(HexTheme.bgBase)
-        .presentationDragIndicator(.visible)
-        .presentationDetents([.medium, .large])
-    }
-}
-
-private struct TyprWhatsNewAtLaunch: ViewModifier {
-    @State private var changelog: TyprChangelog?
-    @State private var isOnScreen = false
-    private let whatsNew = TyprWhatsNew(defaults: .standard)
-    private let build = TyprWhatsNew.installedBuild
-
-    func body(content: Content) -> some View {
-        content
-            .onAppear {
-                isOnScreen = true
-                guard !OnboardingFixture.isSnapshot else { return }
-                changelog = whatsNew.changelogToShow(
-                    build: build,
-                    changelog: .bundled(),
-                    onboardedBeforeLaunch: OnboardingProgress.launchPage == nil
-                )
-            }
-            .onDisappear { isOnScreen = false }
-            .sheet(item: $changelog, onDismiss: {
-                // Home going away (a keyboard opening Typr) also dismisses the sheet; only a
-                // dismissal while Home stays counts as seen.
-                if isOnScreen { whatsNew.markSeen(build: build) }
-            }) { TyprWhatsNewSheet(changelog: $0) }
-    }
-}
-
-extension View {
-    /// Shows the bundled changelog once after an update (`TyprWhatsNew`).
-    func typrWhatsNew() -> some View {
-        modifier(TyprWhatsNewAtLaunch())
     }
 }
