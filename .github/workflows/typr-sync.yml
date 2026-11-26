@@ -32,8 +32,11 @@ jobs:
       upstream: ${{ steps.plan.outputs.upstream }}
       conflicts: ${{ steps.rebase.outputs.conflicts }}
     steps:
+      # `ref: dev` is the live tip, not the commit that triggered the run: a run that waited on
+      # the concurrency group must see the sync that finished meanwhile, and plan from it.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: dev
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
