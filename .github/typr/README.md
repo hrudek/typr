@@ -12,7 +12,7 @@ TestFlight (typr-ci.yml): push to dev with changed app inputs → changelog → 
   manual: upload=true (dev only) or upload=false (archive + sign, any branch*)
 Runner retry (typr-retry.yml): re-runs macOS jobs that never got a runner (5/10/20 min)
 Review (typr-review.yml): Claude reviews each PR commit; skipped while CLAUDE_CODE_OAUTH_TOKEN is unset
-Upstream sync (typr-sync.yml): daily 04:00 Berlin + manual → rebase Typr commits onto upstream dev
+Upstream sync (typr-sync.yml): daily (first of three 03:17, 05:17, 07:17 UTC slots) + manual → rebase Typr commits onto upstream dev
   → squash them by feature → Linux checks + overlay check → push dev [skip ci] → disable upstream workflows → start TestFlight /
   Simulator tests when their inputs changed → open upstream-overlap issues
 ```

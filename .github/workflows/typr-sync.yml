@@ -1,11 +1,12 @@
 name: Upstream sync
 run-name: "Upstream sync · ${{ github.event_name }}"
 
-# Daily at 04:00 Europe/Berlin: 02:00 UTC in summer (CEST), 03:00 UTC in winter (CET).
+# Daily, early morning Europe/Berlin. GitHub delivers schedules late or not at all, so there are
+# three off-the-hour slots (03:17, 05:17, 07:17 UTC); sync-guard.py lets only the first run of a
+# Berlin day sync and the others skip.
 on:
   schedule:
-    - cron: "0 2 * * *"
-    - cron: "0 3 * * *"
+    - cron: "17 3,5,7 * * *"
   workflow_dispatch:
 
 permissions:
@@ -31,25 +32,16 @@ jobs:
       upstream: ${{ steps.plan.outputs.upstream }}
       conflicts: ${{ steps.rebase.outputs.conflicts }}
     steps:
-      - name: Is it 04:00 in Berlin?
-        id: when
-        env:
-          EVENT: ${{ github.event_name }}
-          CRON: ${{ github.event.schedule }}
-        run: |
-          want=+0100
-          [[ "$CRON" != '0 2 * * *' ]] || want=+0200
-          if [[ "$EVENT" == schedule && "$(TZ=Europe/Berlin date +%z)" != "$want" ]]; then
-            echo "Not 04:00 in Berlin for cron '$CRON'; the other schedule runs today."
-          else
-            echo run=true >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        if: steps.when.outputs.run == 'true'
         with:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Already synced today?
+        id: when
+        env:
+          EVENT: ${{ github.event_name }}
+        run: python3 .github/typr/sync-guard.py "$EVENT" >> "$GITHUB_OUTPUT"
       - name: Plan
         id: plan
         if: steps.when.outputs.run == 'true'
