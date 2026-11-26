@@ -6,6 +6,7 @@ final class TyprOrukeetKeyboardTests: XCTestCase {
     private func resolve(
         orukeetEnabled: Bool = true,
         installed: Bool = true,
+        setAside: Bool = false,
         keyboardModelEnabled: Bool = true,
         physicalMemory: UInt64 = 8 << 30,
         twoLanguageEnabled: Bool = false,
@@ -15,6 +16,7 @@ final class TyprOrukeetKeyboardTests: XCTestCase {
         TyprOrukeetKeyboardPlan.resolve(
             orukeetEnabled: orukeetEnabled,
             installed: installed,
+            setAside: setAside,
             keyboardModelEnabled: keyboardModelEnabled,
             physicalMemory: physicalMemory,
             twoLanguageEnabled: twoLanguageEnabled,
@@ -35,6 +37,7 @@ final class TyprOrukeetKeyboardTests: XCTestCase {
 
     func testFallsBackWhereUpstreamWouldNotRunUltra() {
         XCTAssertNil(resolve(installed: false), "not installed")
+        XCTAssertNil(resolve(setAside: true), "didn't load in this keyboard process")
         XCTAssertNil(resolve(keyboardModelEnabled: false), "Speech model in keyboard off")
         XCTAssertNil(resolve(physicalMemory: 4 << 30), "4 GB iPhone")
         XCTAssertNil(resolve(twoLanguageEnabled: true), "two-language dictation")
@@ -48,14 +51,15 @@ final class TyprOrukeetKeyboardTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         LanguageSettings(defaults: defaults).dictationLanguage = "fr-FR"
-        func current(installed: Bool = true) -> String? {
+        func current(installed: Bool = true, setAside: Bool = false) -> String? {
             TyprOrukeetKeyboardPlan.current(
-                defaults: defaults, preferred: ["en-US"], physicalMemory: 8 << 30, installed: installed
+                defaults: defaults, preferred: ["en-US"], physicalMemory: 8 << 30, installed: installed, setAside: setAside
             )
         }
 
         XCTAssertEqual(current(), "fr-FR", "on by default")
         XCTAssertNil(current(installed: false))
+        XCTAssertNil(current(setAside: true))
         TyprSettings(defaults: defaults).orukeet = false
         XCTAssertNil(current())
         TyprSettings(defaults: defaults).orukeet = true
@@ -63,6 +67,23 @@ final class TyprOrukeetKeyboardTests: XCTestCase {
         XCTAssertNil(current())
         KeyboardParakeetSettings(defaults: defaults).isEnabled = true
         TwoLanguageDictationSettings(defaults: defaults).isEnabled = true
+        XCTAssertNil(current())
+    }
+
+    func testSetAsideInTheKeyboardProcessLeavesUpstreamsPlan() throws {
+        let suite = "TyprOrukeetKeyboardTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            TyprOrukeetKeyboardPlan.isSetAside = false
+        }
+        LanguageSettings(defaults: defaults).dictationLanguage = "de-DE"
+        func current() -> String? {
+            TyprOrukeetKeyboardPlan.current(defaults: defaults, physicalMemory: 8 << 30, installed: true)
+        }
+
+        XCTAssertEqual(current(), "de-DE")
+        TyprOrukeetKeyboardPlan.isSetAside = true
         XCTAssertNil(current())
     }
 

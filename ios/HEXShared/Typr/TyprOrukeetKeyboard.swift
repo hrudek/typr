@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Where Orukeet lives in the App Group, for Hex (`TyprOrukeetModel`) and the keyboard.
 nonisolated enum TyprOrukeetStore {
@@ -23,17 +24,29 @@ nonisolated enum TyprOrukeetStore {
 /// Ultra's keyboard budget (`KeyboardParakeetBudget`) holds for it. Anywhere else, or with
 /// the setting off, the keyboard follows `KeyboardParakeetPlan` unchanged.
 nonisolated enum TyprOrukeetKeyboardPlan {
+    static let label = "typr-orukeet"
+
+    private static let setAsideLock = OSAllocatedUnfairLock(initialState: false)
+
+    /// Orukeet didn't load or didn't run on the Neural Engine in this keyboard process
+    /// (`KeyboardParakeet`'s set-aside models): upstream's plan picks instead.
+    static var isSetAside: Bool {
+        get { setAsideLock.withLock { $0 } }
+        set { setAsideLock.withLock { $0 = newValue } }
+    }
+
     /// The language the keyboard dictates in with Orukeet, or nil for upstream's plan.
     static func resolve(
         orukeetEnabled: Bool,
         installed: Bool,
+        setAside: Bool,
         keyboardModelEnabled: Bool,
         physicalMemory: UInt64,
         twoLanguageEnabled: Bool,
         language: String?,
         keyboardLimit: Int?
     ) -> String? {
-        guard orukeetEnabled, installed, keyboardModelEnabled,
+        guard orukeetEnabled, installed, !setAside, keyboardModelEnabled,
               KeyboardParakeetSettings.fits(physicalMemory: physicalMemory),
               MultilingualParakeetSettings.fits(physicalMemory: physicalMemory),
               !twoLanguageEnabled,
@@ -46,13 +59,15 @@ nonisolated enum TyprOrukeetKeyboardPlan {
         defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup),
         preferred: [String] = Locale.preferredLanguages,
         physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory,
-        installed: Bool = TyprOrukeetStore.isInstalled()
+        installed: Bool = TyprOrukeetStore.isInstalled(),
+        setAside: Bool = isSetAside
     ) -> String? {
         let languages = LanguageSettings(defaults: defaults)
         let keyboard = KeyboardParakeetSettings(defaults: defaults)
         return resolve(
             orukeetEnabled: TyprSettings(defaults: defaults).orukeet,
             installed: installed,
+            setAside: setAside,
             keyboardModelEnabled: keyboard.isEnabled,
             physicalMemory: physicalMemory,
             twoLanguageEnabled: TwoLanguageDictationSettings(defaults: defaults).isEnabled,

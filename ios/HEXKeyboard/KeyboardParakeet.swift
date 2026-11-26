@@ -26,7 +26,7 @@ final class KeyboardParakeet {
 
         var directory: URL { typrOrukeet ? TyprOrukeetStore.compiledDirectory : multilingual ? SpeechModelStore.parakeetUltra : SpeechModelStore.parakeetV2 }
         var engineName: String { typrOrukeet ? "Orukeet (keyboard)" : multilingual ? "Parakeet Ultra (keyboard)" : "Parakeet V2 (keyboard)" }
-        var label: String { typrOrukeet ? "typr-orukeet" : multilingual ? "parakeet-ultra" : "parakeet-v2" }
+        var label: String { typrOrukeet ? TyprOrukeetKeyboardPlan.label : multilingual ? "parakeet-ultra" : "parakeet-v2" }
     }
 
     struct Transcript {
@@ -46,7 +46,7 @@ final class KeyboardParakeet {
     private var loaded: Loaded?
     private var loadTask: Task<Void, Never>?
     /// Models that didn't load or didn't run on the Neural Engine in this process.
-    private var setAside: Set<String> = []
+    private var setAside: Set<String> = [] { didSet { TyprOrukeetKeyboardPlan.isSetAside = setAside.contains(TyprOrukeetKeyboardPlan.label) } }
     private var memoryWarnedAt: Date?
     private var isTranscribing = false
     private var releasesAfterTranscription = false
