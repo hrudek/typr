@@ -15,8 +15,6 @@ struct TyprSettingsLink: View {
 struct TyprSettingsPage: View {
     private let settings = TyprSettings()
     @State private var mechanicalKeyboard = TyprSettings().mechanicalKeyboard
-    @State private var shownChangelog: TyprChangelog?
-    private let changelog = TyprChangelog.bundled()
 
     var body: some View {
         SettingsPageScaffold(title: "Typr") {
@@ -27,18 +25,7 @@ struct TyprSettingsPage: View {
                     isOn: $mechanicalKeyboard
                 )
             }
-            if let changelog {
-                SettingsCard {
-                    Button {
-                        shownChangelog = changelog
-                    } label: {
-                        SettingsLinkLabel(title: "Was ist neu", icon: "sparkles")
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
         }
-        .sheet(item: $shownChangelog) { TyprWhatsNewSheet(changelog: $0) }
         .onChange(of: mechanicalKeyboard) { _, on in settings.mechanicalKeyboard = on }
     }
 }

@@ -1,28 +1,41 @@
 import XCTest
 @testable import HEX
 
+@MainActor
 final class TyprWhatsNewTests: XCTestCase {
     private var suiteName: String!
     private var defaults: UserDefaults!
 
     private let changelog = TyprChangelog(sections: [
         .init(id: "typr", title: "Typr", items: [.init(text: "Tastatur heißt jetzt Typr", ref: "#17")]),
+        .init(id: "hex", title: "Von Hex", items: [.init(text: "Schnelleres Diktat", ref: nil)]),
     ])
+    private let list = WhatsNewRelease(version: "1.0.5", items: [])
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         suiteName = "TyprWhatsNewTests-\(UUID().uuidString)"
         defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
-    private func show(build: String, changelog: TyprChangelog?, onboarded: Bool = true) -> TyprChangelog? {
-        TyprWhatsNew(defaults: defaults).changelogToShow(build: build, changelog: changelog, onboardedBeforeLaunch: onboarded)
+    private func due(
+        _ list: WhatsNewRelease?, build: String, changelog: TyprChangelog?, firstRun: Bool = false
+    ) -> WhatsNewRelease? {
+        TyprWhatsNew.decideAtLaunch(
+            TyprWhatsNew.current(list, changelog: changelog),
+            changelog: changelog, build: build, defaults: defaults, firstRun: firstRun
+        )
     }
 
-    private var recorded: String? { defaults.string(forKey: TyprWhatsNew.lastSeenBuildKey) }
+    private func markSeen(_ release: WhatsNewRelease, build: String) {
+        WhatsNew.markSeen(release, defaults: defaults)
+        TyprWhatsNew.markSeen(build: build, defaults: defaults)
+    }
+
+    private var recordedBuild: String? { defaults.string(forKey: TyprWhatsNew.lastSeenBuildKey) }
 
     func testDecodesContractAndIgnoresUnknownKeys() throws {
         let json = """
@@ -33,7 +46,7 @@ final class TyprWhatsNewTests: XCTestCase {
          ]}
         """
         let decoded = try XCTUnwrap(TyprChangelog.decode(Data(json.utf8)))
-        XCTAssertEqual(decoded.sections.map(\.id), ["typr", "hex"])
+        XCTAssertEqual(decoded.sections.map(\.title), ["Typr", "Von Hex"])
         XCTAssertEqual(decoded.sections[0].items, [.init(text: "Neue Tastenfarbe", ref: "#17")])
         XCTAssertEqual(decoded.sections[1].items, [.init(text: "Schnelleres Diktat", ref: nil)])
     }
@@ -51,37 +64,59 @@ final class TyprWhatsNewTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(TyprChangelog.decode(Data(json.utf8))).sections.map(\.id), ["hex"])
     }
 
-    func testFirstInstallRecordsBuildSilently() {
-        XCTAssertNil(show(build: "9.0.0 (1010)", changelog: changelog, onboarded: false))
-        XCTAssertEqual(recorded, "9.0.0 (1010)")
-        XCTAssertNil(show(build: "9.0.0 (1010)", changelog: changelog))
-        XCTAssertEqual(show(build: "9.0.0 (1011)", changelog: changelog), changelog)
+    func testCurrentFallsBackToTheBuildAlone() {
+        XCTAssertEqual(TyprWhatsNew.current(list, changelog: changelog), list)
+        XCTAssertEqual(TyprWhatsNew.current(nil, changelog: changelog)?.version, TyprWhatsNew.buildOnlyVersion)
+        XCTAssertEqual(TyprWhatsNew.current(nil, changelog: changelog)?.items, [])
+        XCTAssertNil(TyprWhatsNew.current(nil, changelog: nil))
     }
 
-    func testUpdateFromBuildBeforeTheRecordShowsUntilSeen() {
-        XCTAssertEqual(show(build: "9.0.0 (1010)", changelog: changelog), changelog)
-        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1010)")
-        XCTAssertNil(show(build: "9.0.0 (1010)", changelog: changelog))
+    func testBuildAloneShowsOncePerBuildWhenHexHasNoList() throws {
+        markSeen(WhatsNewRelease(version: TyprWhatsNew.buildOnlyVersion, items: []), build: "9.0.0 (1050)")
+        XCTAssertNil(due(nil, build: "9.0.0 (1050)", changelog: changelog))
+
+        let shown = try XCTUnwrap(due(nil, build: "9.0.0 (1051)", changelog: changelog))
+        XCTAssertEqual(shown.items, [])
+        XCTAssertNotNil(due(nil, build: "9.0.0 (1051)", changelog: changelog), "not shown yet")
+        markSeen(shown, build: "9.0.0 (1051)")
+        XCTAssertNil(due(nil, build: "9.0.0 (1051)", changelog: changelog))
+        XCTAssertEqual(recordedBuild, "9.0.0 (1051)")
+
+        XCTAssertNotNil(due(nil, build: "9.1.0 (60)", changelog: changelog), "build numbers restart with a version")
     }
 
-    func testShowsEachNewBuildUntilSeen() {
-        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1050)")
-        XCTAssertNil(show(build: "9.0.0 (1050)", changelog: changelog))
-        XCTAssertEqual(show(build: "9.0.0 (1051)", changelog: changelog), changelog)
-        XCTAssertEqual(show(build: "9.0.0 (1051)", changelog: changelog), changelog, "not dismissed yet")
-        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1051)")
-        XCTAssertNil(show(build: "9.0.0 (1051)", changelog: changelog))
-        XCTAssertEqual(recorded, "9.0.0 (1051)")
+    func testNewListShowsWithTheBuildOnceThenTheNextBuildAlone() throws {
+        markSeen(WhatsNewRelease(version: TyprWhatsNew.buildOnlyVersion, items: []), build: "9.0.0 (1050)")
+        let combined = try XCTUnwrap(due(list, build: "9.0.0 (1051)", changelog: changelog))
+        XCTAssertEqual(combined, list)
+        markSeen(combined, build: "9.0.0 (1051)")
+        XCTAssertNil(due(list, build: "9.0.0 (1051)", changelog: changelog))
+
+        let next = try XCTUnwrap(due(list, build: "9.0.0 (1052)", changelog: changelog))
+        XCTAssertEqual(next.version, "1.0.5", "keeps Hex's list seen")
+        XCTAssertEqual(next.items, [], "Hex's list was seen: only the build")
+        markSeen(next, build: "9.0.0 (1052)")
+        XCTAssertEqual(defaults.string(forKey: WhatsNew.seenKey), "1.0.5")
+        XCTAssertNil(due(list, build: "9.0.0 (1052)", changelog: changelog))
     }
 
-    func testBuildNumberRestartingWithNextVersionShows() {
-        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1050)")
-        XCTAssertEqual(show(build: "9.1.0 (60)", changelog: changelog), changelog)
+    func testHexListStillShowsOnceWithoutAChangelog() {
+        XCTAssertEqual(due(list, build: "9.0.0 (1)", changelog: nil), list)
+        markSeen(list, build: "9.0.0 (1)")
+        XCTAssertNil(due(list, build: "9.0.0 (2)", changelog: nil))
+        XCTAssertEqual(recordedBuild, "9.0.0 (2)", "a build without a changelog is recorded silently")
     }
 
-    func testNoChangelogShowsNothingButRecordsBuild() {
-        TyprWhatsNew(defaults: defaults).markSeen(build: "9.0.0 (1010)")
-        XCTAssertNil(show(build: "9.0.0 (1011)", changelog: nil))
-        XCTAssertEqual(recorded, "9.0.0 (1011)")
+    func testFirstRunRecordsListAndBuildSilently() {
+        XCTAssertNil(due(list, build: "9.0.0 (1010)", changelog: changelog, firstRun: true))
+        XCTAssertEqual(recordedBuild, "9.0.0 (1010)")
+        XCTAssertEqual(defaults.string(forKey: WhatsNew.seenKey), "1.0.5")
+        XCTAssertNil(due(list, build: "9.0.0 (1010)", changelog: changelog))
+        XCTAssertNil(due(nil, build: "9.0.0 (1011)", changelog: changelog, firstRun: true))
+        XCTAssertEqual(recordedBuild, "9.0.0 (1011)")
+    }
+
+    func testUpdateFromABuildBeforeTheRecordShows() {
+        XCTAssertNotNil(due(nil, build: "9.0.0 (1010)", changelog: changelog))
     }
 }

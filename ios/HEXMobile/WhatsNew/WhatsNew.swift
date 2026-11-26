@@ -101,7 +101,7 @@ enum WhatsNew {
 
     static var current: WhatsNewRelease? {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        return release(forAppVersion: version)
+        return TyprWhatsNew.current(release(forAppVersion: version))
     }
 
     /// The list due at this launch, decided once per process as Home first shows. A first run
@@ -109,7 +109,7 @@ enum WhatsNew {
     static let dueAtLaunch: WhatsNewRelease? = {
         if snapshotShows { return current }
         guard !OnboardingFixture.isSnapshot else { return nil }
-        return decideAtLaunch(current, defaults: .standard, firstRun: OnboardingProgress.launchPage != nil)
+        return TyprWhatsNew.decideAtLaunch(current, defaults: .standard, firstRun: OnboardingProgress.launchPage != nil)
     }()
 
     static func decideAtLaunch(_ release: WhatsNewRelease?, defaults: UserDefaults, firstRun: Bool) -> WhatsNewRelease? {
@@ -131,6 +131,7 @@ enum WhatsNew {
     /// Seen as it shows, so a lock or a quit part-way never brings it back.
     static func markSeen(_ release: WhatsNewRelease, defaults: UserDefaults = .standard) {
         defaults.set(release.version, forKey: seenKey)
+        TyprWhatsNew.markSeen(defaults: defaults)
     }
 
     /// `--snap-state settings-whats-new`: Home with the sheet open.
