@@ -1,12 +1,9 @@
 name: Upstream sync
 run-name: "Upstream sync · ${{ github.event_name }}"
 
-# Daily, early morning Europe/Berlin. GitHub delivers schedules late or not at all, so there are
-# three off-the-hour slots (03:17, 05:17, 07:17 UTC); sync-guard.py lets only the first run of a
-# Berlin day sync and the others skip.
+# Dispatched daily at 04:00 Europe/Berlin by a T3 Code scheduled task
+# (`gh workflow run typr-sync.yml -R hrudek/typr --ref dev`); GitHub's own cron ran hours late.
 on:
-  schedule:
-    - cron: "17 3,5,7 * * *"
   workflow_dispatch:
     inputs:
       regroup:
@@ -45,14 +42,8 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
-      - name: Already synced today?
-        id: when
-        env:
-          EVENT: ${{ github.event_name }}
-        run: python3 .github/typr/sync-guard.py "$EVENT" >> "$GITHUB_OUTPUT"
       - name: Plan
         id: plan
-        if: steps.when.outputs.run == 'true'
         env:
           TYPR_REGROUP: ${{ inputs.regroup }}
         run: |

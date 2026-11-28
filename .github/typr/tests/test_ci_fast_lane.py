@@ -41,8 +41,6 @@ class FastLaneContracts(unittest.TestCase):
 
     def test_nothing_is_scheduled_and_manual_preview_has_no_device_archive(self):
         for path in (ROOT / '.github/workflows').glob('typr-*.yml'):
-            if path.name == 'typr-sync.yml':
-                continue
             self.assertNotRegex(path.read_text(), re.compile(r'^  schedule:', re.M), path.name)
         self.assertFalse(condition('test', only_testing='none'))
         self.assertIn('DISTRIBUTION: simulator', SIMULATOR)
