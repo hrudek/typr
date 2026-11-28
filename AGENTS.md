@@ -15,6 +15,7 @@ Behaviour is upstream's; Typr adds only what this file lists.
   Never commit identity changes to upstream files; extend the overlay.
 - Typr features: new files in Typr-named folders (`ios/**/Typr*`), hooked into
   upstream files with as few lines as possible.
+- `t3.json`: points T3 Code's project icon at the Typr app icon.
 - This `AGENTS.md`.
 
 ## Rules
